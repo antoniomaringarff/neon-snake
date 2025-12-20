@@ -6,6 +6,11 @@
 .env.production.local
 .env*.local
 
+# API environment variables
+api/.env
+api/.env.local
+api/.env.production
+
 # macOS
 .DS_Store
 .AppleDouble

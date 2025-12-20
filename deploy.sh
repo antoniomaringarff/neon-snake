@@ -7,15 +7,15 @@ set -e
 
 echo "🚀 Iniciando despliegue a producción..."
 
-# Verificar que existe .env
-if [ ! -f .env ]; then
-    echo "❌ Error: Archivo .env no encontrado"
-    echo "📝 Crea un archivo .env basado en .env.example"
+# Verificar que existe .env en api/
+if [ ! -f api/.env ]; then
+    echo "❌ Error: Archivo api/.env no encontrado"
+    echo "📝 Crea un archivo api/.env basado en api/.env.example"
     exit 1
 fi
 
 # Verificar que JWT_SECRET no sea el valor por defecto
-if grep -q "your_jwt_secret_here_change_this" .env || grep -q "cambiar_en_produccion" .env; then
+if grep -q "your_jwt_secret_here_change_this" api/.env || grep -q "cambiar_en_produccion" api/.env; then
     echo "⚠️  ADVERTENCIA: JWT_SECRET parece ser el valor por defecto"
     echo "   Por favor, cambia JWT_SECRET en .env a un valor seguro"
     read -p "¿Continuar de todas formas? (y/N): " -n 1 -r

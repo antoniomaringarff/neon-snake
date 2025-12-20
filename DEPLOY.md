@@ -14,16 +14,20 @@
 
 ### 1. Variables de Entorno
 
-Crea un archivo `.env` en la raíz del proyecto basado en `.env.example`:
+**El `.env` va en la carpeta `api/`** (solo la API necesita variables de entorno).
+
+Crea un archivo `api/.env` basado en `api/.env.example`:
 
 ```bash
-cp .env.example .env
+cp api/.env.example api/.env
 ```
 
-Edita `.env` y configura:
+Edita `api/.env` y configura:
 - `JWT_SECRET`: Genera un secreto fuerte y aleatorio
 - `DB_PASSWORD`: Contraseña segura para PostgreSQL
 - `CORS_ORIGIN`: `https://neon.snake.sally.ar`
+
+**Nota**: El frontend es estático y no necesita `.env`.
 
 ### 2. Generar JWT Secret
 
@@ -174,8 +178,8 @@ docker-compose run api npm run migrate
 - Verifica que el puerto 3000 esté accesible
 
 ### CORS errors
-- Verifica que `CORS_ORIGIN` en `.env` coincida con la URL del frontend
-- Reinicia el contenedor de la API después de cambiar `.env`
+- Verifica que `CORS_ORIGIN` en `api/.env` coincida con la URL del frontend
+- Reinicia el contenedor de la API después de cambiar `api/.env`
 
 ### Base de datos no conecta
 - Verifica que el contenedor de DB esté corriendo: `docker-compose ps db`
