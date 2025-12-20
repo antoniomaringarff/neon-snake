@@ -49,6 +49,10 @@ fastify.register(sessionsRoutes, { prefix: '/api/sessions' });
 fastify.setErrorHandler((error, request, reply) => {
   fastify.log.error(error);
   
+  // Asegurar que siempre devolvemos JSON
+  const statusCode = error.statusCode || 500;
+  const message = error.message || 'Internal Server Error';
+  
   if (error.validation) {
     return reply.code(400).send({
       error: 'Validation error',
@@ -56,8 +60,15 @@ fastify.setErrorHandler((error, request, reply) => {
     });
   }
   
-  reply.code(error.statusCode || 500).send({
-    error: error.message || 'Internal Server Error'
+  // Manejar errores de base de datos
+  if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+    return reply.code(500).send({
+      error: 'Database connection error. Please check if PostgreSQL is running.'
+    });
+  }
+  
+  reply.code(statusCode).send({
+    error: message
   });
 });
 

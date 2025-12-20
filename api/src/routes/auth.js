@@ -95,7 +95,13 @@ export default async function authRoutes(fastify, options) {
         token
       };
     } catch (error) {
-      throw error;
+      console.error('Login error:', error);
+      // Asegurar que siempre devolvemos JSON
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        return reply.code(500).send({ error: 'Database connection error' });
+      }
+      // Re-lanzar el error para que el error handler de Fastify lo maneje
+      reply.code(500).send({ error: error.message || 'Internal server error' });
     }
   });
 

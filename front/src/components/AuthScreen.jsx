@@ -25,15 +25,31 @@ export default function AuthScreen({ onLogin }) {
         body: JSON.stringify(body)
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          // Si falla el parseo JSON, leer como texto
+          const text = await response.text();
+          throw new Error(text || `Error ${response.status}: ${response.statusText}`);
+        }
+      } else {
+        // Si no es JSON, leer como texto
+        const text = await response.text();
+        throw new Error(text || `Error ${response.status}: ${response.statusText}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error en la autenticación');
+        throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
       }
 
       onLogin(data.user, data.token);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Error en la autenticación');
+      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
