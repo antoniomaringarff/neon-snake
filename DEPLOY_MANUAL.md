@@ -64,7 +64,7 @@ Edita `api/.env` con:
 
 ```env
 NODE_ENV=production
-PORT=3000
+PORT=3003
 
 DB_HOST=localhost
 DB_PORT=5432
@@ -95,8 +95,8 @@ npm run migrate
 # En modo desarrollo (para probar)
 npm run dev
 
-# Debería estar corriendo en http://localhost:3000
-# Verifica: curl http://localhost:3000/health
+# Debería estar corriendo en http://localhost:3003
+# Verifica: curl http://localhost:3003/health
 ```
 
 ### 4. Ejecutar en producción con PM2
@@ -214,7 +214,7 @@ server {
 
     # API Backend (reverse proxy)
     location /api {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3003;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -227,7 +227,7 @@ server {
 
     # Health check
     location /health {
-        proxy_pass http://localhost:3000/health;
+        proxy_pass http://localhost:3003/health;
         proxy_set_header Host $host;
     }
 
@@ -322,7 +322,7 @@ npm run build
 
 ```bash
 # Verificar que la API está corriendo
-curl http://localhost:3000/health
+curl http://localhost:3003/health
 
 # Verificar PM2
 pm2 list
@@ -365,7 +365,7 @@ pm2 list
 pm2 logs viborita-api
 
 # Verificar puerto
-sudo netstat -tlnp | grep 3000
+sudo netstat -tlnp | grep 3003
 ```
 
 ### Frontend no carga
@@ -408,7 +408,7 @@ pm2 logs viborita-api
 
 # Frontend
 cd front
-npm run dev          # Desarrollo (localhost:5173)
+npm run dev          # Desarrollo (localhost:8008)
 npm run build        # Build para producción
 
 # Base de datos
@@ -428,5 +428,5 @@ sudo tail -f /var/log/nginx/error.log
 - ✅ Configura firewall (solo puertos 80, 443)
 - ✅ Mantén Node.js y dependencias actualizadas
 - ✅ Revisa logs regularmente
-- ✅ No expongas el puerto 3000 públicamente (solo vía Nginx)
+- ✅ No expongas el puerto 3003 públicamente (solo vía Nginx)
 

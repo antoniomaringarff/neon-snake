@@ -55,7 +55,7 @@ sleep 5
 
 # Verificar salud
 echo "🏥 Verificando salud de los servicios..."
-if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+if curl -f http://localhost:3003/health > /dev/null 2>&1; then
     echo "✅ API está respondiendo correctamente"
 else
     echo "⚠️  API no está respondiendo, revisa los logs: $DOCKER_COMPOSE logs api"

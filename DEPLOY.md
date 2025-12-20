@@ -73,7 +73,7 @@ server {
 
     # API Backend
     location /api {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3003;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -82,7 +82,7 @@ server {
 
     # Health check
     location /health {
-        proxy_pass http://localhost:3000/health;
+        proxy_pass http://localhost:3003/health;
     }
 }
 ```
@@ -179,7 +179,7 @@ docker compose run --rm api npm run migrate
 ### La API no responde
 - Verifica que el contenedor esté corriendo: `docker compose ps`
 - Revisa logs: `docker compose logs api`
-- Verifica que el puerto 3000 esté accesible
+- Verifica que el puerto 3003 esté accesible
 
 ### CORS errors
 - Verifica que `CORS_ORIGIN` en `api/.env` coincida con la URL del frontend

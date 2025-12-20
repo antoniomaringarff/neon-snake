@@ -10,7 +10,7 @@ services:
       CORS_ORIGIN: https://neon.snake.sally.ar
     # Remove port mapping in production if using reverse proxy
     # ports:
-    #   - "3000:3000"
+    #   - "3003:3003"
 
   db:
     # In production, consider not exposing the database port publicly

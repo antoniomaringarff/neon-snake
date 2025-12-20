@@ -17,7 +17,7 @@ const fastify = Fastify({
 
 // Register plugins
 await fastify.register(cors, {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:8008',
   credentials: true
 });
 
@@ -64,7 +64,7 @@ fastify.setErrorHandler((error, request, reply) => {
 // Start server
 const start = async () => {
   try {
-    const port = process.env.PORT || 3000;
+    const port = process.env.PORT || 3003;
     await fastify.listen({ port, host: '0.0.0.0' });
     console.log(`🚀 Server running on http://localhost:${port}`);
   } catch (err) {

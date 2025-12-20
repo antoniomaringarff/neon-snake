@@ -28,7 +28,7 @@ services:
       - ./api/.env
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: 3003
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-viborita}
@@ -37,7 +37,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-cambiar_en_produccion}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://neon.snake.sally.ar}
     ports:
-      - "3000:3000"
+      - "3003:3003"
     depends_on:
       db:
         condition: service_healthy
