@@ -26,4 +26,34 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Prevenir selección de texto en mobile */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Prevenir touch callout en iOS */
+  -webkit-touch-callout: none;
+  /* Prevenir highlight en tap */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Responsive para mobile */
+@media (max-width: 768px) {
+  html, body {
+    /* Prevenir zoom en mobile */
+    touch-action: manipulation;
+  }
+  
+  #root {
+    /* Asegurar altura completa en mobile */
+    height: 100vh;
+    height: -webkit-fill-available;
+  }
+}
+
+/* Ajustes para pantallas muy pequeñas */
+@media (max-width: 480px) {
+  body {
+    font-size: 14px;
+  }
 }

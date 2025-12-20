@@ -3,6 +3,7 @@ import { Sparkles, Shield, Zap } from 'lucide-react';
 
 const SnakeGame = ({ user, onLogout }) => {
   const canvasRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -47,6 +48,15 @@ const SnakeGame = ({ user, onLogout }) => {
       'Authorization': `Bearer ${token}`
     };
   };
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Load user progress from API
   const loadUserProgress = async () => {
@@ -249,7 +259,7 @@ const SnakeGame = ({ user, onLogout }) => {
       setCurrentLevelStars(0);
     };
 
-    const handleMouseMove = (e) => {
+    const updateMousePos = (clientX, clientY) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       
@@ -258,14 +268,34 @@ const SnakeGame = ({ user, onLogout }) => {
       const scaleX = CANVAS_WIDTH / rect.width;
       const scaleY = CANVAS_HEIGHT / rect.height;
       
-      // Get mouse position relative to canvas
-      const mouseX = (e.clientX - rect.left) * scaleX;
-      const mouseY = (e.clientY - rect.top) * scaleY;
+      // Get position relative to canvas
+      const mouseX = (clientX - rect.left) * scaleX;
+      const mouseY = (clientY - rect.top) * scaleY;
       
       gameRef.current.mousePos = {
         x: mouseX,
         y: mouseY
       };
+    };
+
+    const handleMouseMove = (e) => {
+      updateMousePos(e.clientX, e.clientY);
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault(); // Prevent scrolling
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        updateMousePos(touch.clientX, touch.clientY);
+      }
+    };
+
+    const handleTouchStart = (e) => {
+      e.preventDefault(); // Prevent scrolling
+      if (e.touches.length > 0) {
+        const touch = e.touches[0];
+        updateMousePos(touch.clientX, touch.clientY);
+      }
     };
 
     const handleKeyPress = (e) => {
@@ -1438,6 +1468,8 @@ const SnakeGame = ({ user, onLogout }) => {
     if (gameState === 'playing') {
       const canvas = canvasRef.current;
       canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
       window.addEventListener('keydown', handleKeyPress);
       gameLoop();
     }
@@ -1446,6 +1478,8 @@ const SnakeGame = ({ user, onLogout }) => {
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('touchmove', handleTouchMove);
+        canvas.removeEventListener('touchstart', handleTouchStart);
       }
       window.removeEventListener('keydown', handleKeyPress);
       if (animationId) cancelAnimationFrame(animationId);
@@ -1664,46 +1698,184 @@ const SnakeGame = ({ user, onLogout }) => {
     const game = gameRef.current;
     const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
+    // Mobile styles
+    const headerPadding = isMobile ? '8px 10px' : '15px 20px';
+    const labelFontSize = isMobile ? '8px' : '11px';
+    const valueFontSize = isMobile ? '12px' : '16px';
+    const gap = isMobile ? '8px' : '30px';
+    const iconSize = isMobile ? 14 : 18;
+    const iconTextSize = isMobile ? '10px' : '12px';
+    
+    if (isMobile) {
+      // Mobile layout: column
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '2px solid #33ffff',
+          padding: headerPadding,
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
+          zIndex: 1000,
+          gap: '8px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: gap, 
+            alignItems: 'center', 
+            flexWrap: 'wrap',
+            width: '100%'
+          }}>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {user?.username || 'Usuario'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {totalXP}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+                {totalStars}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {level}
+              </div>
+            </div>
+          </div>
+          {gameState === 'playing' && (
+            <div style={{ width: '100%' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
+                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255, 215, 0, 0.2)',
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
+                  height: '100%',
+                  background: '#FFD700',
+                  boxShadow: '0 0 10px #FFD700',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+            </div>
+          )}
+          <div style={{ 
+            display: 'flex', 
+            gap: '8px', 
+            alignItems: 'center', 
+            flexWrap: 'wrap',
+            width: '100%'
+          }}>
+            {shieldLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+              </div>
+            )}
+            {headLevel > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                  {headLevel === 2 ? 'Doble' : 'Triple'}
+                </span>
+              </div>
+            )}
+            {cannonLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
+                  Cañón {cannonLevel === 2 ? 'x2' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+              padding: '6px 12px',
+              fontSize: '11px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              transition: 'all 0.3s',
+              width: '100%'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      );
+    }
+    
+    // Desktop layout: original horizontal design
     return (
       <div style={{
         width: '100%',
         background: 'rgba(0, 0, 0, 0.95)',
         borderBottom: '2px solid #33ffff',
-        padding: '15px 20px',
+        padding: headerPadding,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
         zIndex: 1000
       }}>
-        <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flex: 1 }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: gap, 
+          alignItems: 'center', 
+          flex: 1
+        }}>
           <div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>Usuario</div>
-            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {user?.username || 'Usuario'}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>XP Total</div>
-            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {totalXP}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#FFD700' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
               {totalStars}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {level}
             </div>
           </div>
           {gameState === 'playing' && (
             <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
-              <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
                 Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
               </div>
               <div style={{
@@ -1723,25 +1895,30 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginLeft: 'auto' }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: '15px', 
+            alignItems: 'center', 
+            marginLeft: 'auto'
+          }}>
             {shieldLevel > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Shield size={18} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: '12px', color: '#6495ed' }}>Escudo {shieldLevel}</span>
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
               </div>
             )}
             {headLevel > 1 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Zap size={18} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: '12px', color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
                   {headLevel === 2 ? 'Doble' : 'Triple'}
                 </span>
               </div>
             )}
             {cannonLevel > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Sparkles size={18} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: '12px', color: '#ffff00' }}>
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
                   Cañón {cannonLevel === 2 ? 'x2' : ''}
                 </span>
               </div>
@@ -2190,11 +2367,15 @@ const SnakeGame = ({ user, onLogout }) => {
             style={{
               width: '100%',
               height: '100%',
-              border: '3px solid #33ffff',
-              boxShadow: '0 0 40px rgba(51, 255, 255, 0.4)',
+              border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
+              boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
               display: 'block',
-              imageRendering: 'pixelated'
+              imageRendering: 'pixelated',
+              touchAction: 'none', // Prevent default touch behaviors
+              WebkitTouchCallout: 'none', // Prevent iOS callout
+              WebkitUserSelect: 'none', // Prevent text selection
+              userSelect: 'none'
             }}
           />
           
