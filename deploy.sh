@@ -5,7 +5,19 @@
 
 set -e
 
+# Detectar si usar docker-compose (antiguo) o docker compose (nuevo)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+elif docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+else
+    echo "❌ Error: docker-compose o 'docker compose' no encontrado"
+    echo "   Instala Docker Compose o actualiza Docker a la versión más reciente"
+    exit 1
+fi
+
 echo "🚀 Iniciando despliegue a producción..."
+echo "📦 Usando: $DOCKER_COMPOSE"
 
 # Verificar que existe .env en api/
 if [ ! -f api/.env ]; then
@@ -27,15 +39,15 @@ fi
 
 # Construir imágenes
 echo "🔨 Construyendo imágenes Docker..."
-docker-compose build
+$DOCKER_COMPOSE build
 
 # Ejecutar migraciones
 echo "📊 Ejecutando migraciones de base de datos..."
-docker-compose run --rm api npm run migrate
+$DOCKER_COMPOSE run --rm api npm run migrate
 
 # Iniciar servicios
 echo "▶️  Iniciando servicios..."
-docker-compose up -d
+$DOCKER_COMPOSE up -d
 
 # Esperar a que los servicios estén listos
 echo "⏳ Esperando a que los servicios estén listos..."
@@ -46,15 +58,15 @@ echo "🏥 Verificando salud de los servicios..."
 if curl -f http://localhost:3000/health > /dev/null 2>&1; then
     echo "✅ API está respondiendo correctamente"
 else
-    echo "⚠️  API no está respondiendo, revisa los logs: docker-compose logs api"
+    echo "⚠️  API no está respondiendo, revisa los logs: $DOCKER_COMPOSE logs api"
 fi
 
 echo ""
 echo "✅ Despliegue completado!"
 echo ""
 echo "📋 Servicios:"
-docker-compose ps
+$DOCKER_COMPOSE ps
 echo ""
-echo "📝 Para ver logs: docker-compose logs -f"
-echo "🛑 Para detener: docker-compose down"
+echo "📝 Para ver logs: $DOCKER_COMPOSE logs -f"
+echo "🛑 Para detener: $DOCKER_COMPOSE down"
 

@@ -99,22 +99,23 @@ server {
 
 ```bash
 # 1. Construir las imágenes Docker
-docker-compose build
+docker compose build
+# O: docker-compose build
 
 # 2. Ejecutar migraciones de base de datos
-docker-compose run --rm api npm run migrate
+docker compose run --rm api npm run migrate
 
 # 3. Iniciar los servicios
-docker-compose up -d
+docker compose up -d
 
 # 4. Ver logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 **Opción C: Con override para producción**
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ### 5. Verificar el Despliegue
@@ -125,25 +126,28 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 ## Comandos Útiles
 
+**Nota**: En Docker moderno, usa `docker compose` (sin guión). Si tienes la versión antigua, usa `docker-compose`.
+
 ```bash
 # Ver estado de los contenedores
-docker-compose ps
+docker compose ps
+# O: docker-compose ps
 
 # Ver logs
-docker-compose logs -f api
-docker-compose logs -f front
+docker compose logs -f api
+docker compose logs -f front
 
 # Reiniciar servicios
-docker-compose restart
+docker compose restart
 
 # Detener servicios
-docker-compose down
+docker compose down
 
 # Detener y eliminar volúmenes (¡CUIDADO! Esto borra la base de datos)
-docker-compose down -v
+docker compose down -v
 
 # Reconstruir después de cambios
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ## Actualizaciones
@@ -155,10 +159,10 @@ Para actualizar el código en producción:
 git pull
 
 # 2. Reconstruir y reiniciar
-docker-compose up -d --build
+docker compose up -d --build
 
 # 3. Si hay cambios en la base de datos, ejecutar migraciones
-docker-compose run api npm run migrate
+docker compose run --rm api npm run migrate
 ```
 
 ## Seguridad
@@ -173,8 +177,8 @@ docker-compose run api npm run migrate
 ## Troubleshooting
 
 ### La API no responde
-- Verifica que el contenedor esté corriendo: `docker-compose ps`
-- Revisa logs: `docker-compose logs api`
+- Verifica que el contenedor esté corriendo: `docker compose ps`
+- Revisa logs: `docker compose logs api`
 - Verifica que el puerto 3000 esté accesible
 
 ### CORS errors
@@ -182,7 +186,7 @@ docker-compose run api npm run migrate
 - Reinicia el contenedor de la API después de cambiar `api/.env`
 
 ### Base de datos no conecta
-- Verifica que el contenedor de DB esté corriendo: `docker-compose ps db`
+- Verifica que el contenedor de DB esté corriendo: `docker compose ps db`
 - Revisa las variables de entorno de conexión
-- Verifica logs: `docker-compose logs db`
+- Verifica logs: `docker compose logs db`
 
