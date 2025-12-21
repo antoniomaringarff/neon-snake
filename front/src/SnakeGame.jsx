@@ -16,6 +16,8 @@ const SnakeGame = ({ user, onLogout }) => {
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1 = single, 2 = double
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
@@ -58,6 +60,22 @@ const SnakeGame = ({ user, onLogout }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Load leaderboard
+  const loadLeaderboard = async () => {
+    setLoadingLeaderboard(true);
+    try {
+      const response = await fetch('/api/leaderboard?type=score&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboard(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard:', error);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
   // Load user progress from API
   const loadUserProgress = async () => {
     if (!user?.id) return;
@@ -88,6 +106,13 @@ const SnakeGame = ({ user, onLogout }) => {
       setLoading(false);
     }
   };
+
+  // Load leaderboard when game over
+  useEffect(() => {
+    if (gameState === 'gameOver') {
+      loadLeaderboard();
+    }
+  }, [gameState]);
 
   // Save user progress to API
   const saveUserProgress = async () => {
@@ -223,6 +248,29 @@ const SnakeGame = ({ user, onLogout }) => {
     };
   };
 
+  // Shoot bullet function - must be outside useEffect to be accessible from button
+  const shootBullet = () => {
+    const game = gameRef.current;
+    if (!game.snake || game.snake.length === 0) return;
+    const head = game.snake[0];
+    const bulletCount = cannonLevel === 2 ? 2 : 1;
+    
+    for (let i = 0; i < bulletCount; i++) {
+      const offset = bulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
+      const angle = Math.atan2(game.direction.y, game.direction.x);
+      const perpAngle = angle + Math.PI / 2;
+      
+      game.bullets.push({
+        x: head.x + Math.cos(perpAngle) * offset,
+        y: head.y + Math.sin(perpAngle) * offset,
+        vx: game.direction.x * 8,
+        vy: game.direction.y * 8,
+        life: 100,
+        owner: 'player'
+      });
+    }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -304,27 +352,6 @@ const SnakeGame = ({ user, onLogout }) => {
       } else if (e.key === ' ' && cannonLevel > 0) {
         e.preventDefault();
         shootBullet();
-      }
-    };
-
-    const shootBullet = () => {
-      const game = gameRef.current;
-      const head = game.snake[0];
-      const bulletCount = cannonLevel === 2 ? 2 : 1;
-      
-      for (let i = 0; i < bulletCount; i++) {
-        const offset = bulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-        const angle = Math.atan2(game.direction.y, game.direction.x);
-        const perpAngle = angle + Math.PI / 2;
-        
-        game.bullets.push({
-          x: head.x + Math.cos(perpAngle) * offset,
-          y: head.y + Math.sin(perpAngle) * offset,
-          vx: game.direction.x * 8,
-          vy: game.direction.y * 8,
-          life: 100,
-          owner: 'player'
-        });
       }
     };
 
@@ -1609,9 +1636,11 @@ const SnakeGame = ({ user, onLogout }) => {
   };
 
   const nextLevel = () => {
-    setLevel(prev => prev + 1);
-    gameRef.current.level = level + 1;
-    gameRef.current.starsNeeded = level + 1; // Update stars needed for next level
+    // Incrementar nivel global del usuario
+    const newLevel = level + 1;
+    setLevel(newLevel);
+    gameRef.current.level = newLevel;
+    gameRef.current.starsNeeded = newLevel; // Update stars needed for next level
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
     gameRef.current.currentStars = 0; // Reset stars for new level
@@ -1620,6 +1649,9 @@ const SnakeGame = ({ user, onLogout }) => {
     initGame();
     setShopOpen(false);
     setGameState('playing');
+    
+    // Guardar el nuevo nivel global en la base de datos
+    saveUserProgress();
   };
 
   const buyItem = (item) => {
@@ -2319,13 +2351,86 @@ const SnakeGame = ({ user, onLogout }) => {
           padding: '40px',
           borderRadius: '10px',
           border: '2px solid #ff3366',
-          boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)'
+          boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)',
+          maxWidth: '600px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto'
         }}>
-          <h2 style={{ color: '#ff3366', textShadow: '0 0 20px #ff3366' }}>
+          <h2 style={{ color: '#ff3366', textShadow: '0 0 20px #ff3366', marginBottom: '20px' }}>
             GAME OVER
           </h2>
-          <p style={{ fontSize: '20px' }}>Nivel alcanzado: {level}</p>
-          <p style={{ fontSize: '20px' }}>XP Total: {totalXP}</p>
+          <p style={{ fontSize: '20px', marginBottom: '10px' }}>Nivel alcanzado: {level}</p>
+          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Total: {totalXP}</p>
+          
+          {/* Leaderboard */}
+          <div style={{
+            background: 'rgba(51, 255, 255, 0.1)',
+            border: '1px solid #33ffff',
+            borderRadius: '5px',
+            padding: '20px',
+            marginBottom: '20px',
+            textAlign: 'left'
+          }}>
+            <h3 style={{ 
+              color: '#33ffff', 
+              textAlign: 'center', 
+              marginBottom: '15px',
+              fontSize: '18px',
+              textShadow: '0 0 10px #33ffff'
+            }}>
+              🏆 TOP 10 MEJORES PARTIDAS
+            </h3>
+            {loadingLeaderboard ? (
+              <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
+            ) : leaderboard.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#888' }}>No hay rankings disponibles</p>
+            ) : (
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {leaderboard.map((player, index) => (
+                  <div 
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      marginBottom: '5px',
+                      background: index < 3 ? 'rgba(255, 215, 0, 0.1)' : 'rgba(51, 255, 255, 0.05)',
+                      borderRadius: '3px',
+                      border: index < 3 ? '1px solid #FFD700' : '1px solid rgba(51, 255, 255, 0.3)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                      <span style={{ 
+                        color: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : '#33ffff',
+                        fontWeight: 'bold',
+                        minWidth: '30px',
+                        fontSize: index < 3 ? '18px' : '14px'
+                      }}>
+                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                      </span>
+                      <span style={{ 
+                        color: '#fff',
+                        fontSize: isMobile ? '12px' : '14px',
+                        fontWeight: index < 3 ? 'bold' : 'normal'
+                      }}>
+                        {player.username}
+                      </span>
+                    </div>
+                    <span style={{ 
+                      color: '#33ffff',
+                      fontSize: isMobile ? '12px' : '14px',
+                      fontWeight: 'bold'
+                    }}>
+                      {player.bestScore} XP
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button 
             onClick={() => {
               // Save progress before returning to menu
@@ -2338,11 +2443,12 @@ const SnakeGame = ({ user, onLogout }) => {
               border: '2px solid #ff3366',
               color: '#ff3366',
               padding: '15px 40px',
-              fontSize: '24px',
+              fontSize: isMobile ? '18px' : '24px',
               cursor: 'pointer',
               borderRadius: '5px',
               textShadow: '0 0 10px #ff3366',
-              marginTop: '20px'
+              marginTop: '20px',
+              width: isMobile ? '100%' : 'auto'
             }}
           >
             VOLVER AL MENÚ
@@ -2378,6 +2484,62 @@ const SnakeGame = ({ user, onLogout }) => {
               userSelect: 'none'
             }}
           />
+          
+          {/* Botón de disparo para mobile */}
+          {isMobile && cannonLevel > 0 && (
+            <button
+              onClick={() => {
+                const game = gameRef.current;
+                if (game.snake.length > 0) {
+                  shootBullet();
+                }
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                const game = gameRef.current;
+                if (game.snake.length > 0) {
+                  shootBullet();
+                }
+              }}
+              style={{
+                position: 'absolute',
+                bottom: '20px',
+                right: '20px',
+                width: '70px',
+                height: '70px',
+                borderRadius: '50%',
+                background: 'rgba(255, 255, 0, 0.2)',
+                border: '3px solid #ffff00',
+                color: '#ffff00',
+                fontSize: '24px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(255, 255, 0, 0.5)',
+                zIndex: 100,
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                touchAction: 'manipulation',
+                transition: 'all 0.1s'
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'scale(0.9)';
+                e.currentTarget.style.background = 'rgba(255, 255, 0, 0.4)';
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.background = 'rgba(255, 255, 0, 0.2)';
+              }}
+              onTouchEnd={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.background = 'rgba(255, 255, 0, 0.2)';
+              }}
+            >
+              💥
+            </button>
+          )}
           
           {shopOpen && (
             <div style={{
