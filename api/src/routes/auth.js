@@ -62,7 +62,7 @@ export default async function authRoutes(fastify, options) {
     try {
       // Find user by username or email
       const result = await query(
-        'SELECT id, username, email, password_hash, total_xp FROM users WHERE username = $1 OR email = $1',
+        'SELECT id, username, email, password_hash, COALESCE(total_xp, 0) as total_xp, COALESCE(total_stars, 0) as total_stars FROM users WHERE username = $1 OR email = $1',
         [username]
       );
 
@@ -90,7 +90,8 @@ export default async function authRoutes(fastify, options) {
           id: user.id,
           username: user.username,
           email: user.email,
-          totalXp: user.total_xp
+          totalXp: user.total_xp || 0,
+          totalStars: user.total_stars || 0
         },
         token
       };
@@ -100,8 +101,8 @@ export default async function authRoutes(fastify, options) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
         return reply.code(500).send({ error: 'Database connection error' });
       }
-      // Re-lanzar el error para que el error handler de Fastify lo maneje
-      reply.code(500).send({ error: error.message || 'Internal server error' });
+      // Devolver error con mensaje descriptivo
+      return reply.code(500).send({ error: error.message || 'Internal server error' });
     }
   });
 
