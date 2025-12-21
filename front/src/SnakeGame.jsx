@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Shield, Zap } from 'lucide-react';
+import { Sparkles, Shield, Zap, Magnet, Gauge } from 'lucide-react';
 
 // Configuración de niveles - cada nivel tiene características particulares
 const getLevelConfig = (level) => {
@@ -112,11 +112,14 @@ const SnakeGame = ({ user, onLogout }) => {
   const [totalStars, setTotalStars] = useState(0);
   const [currentLevelStars, setCurrentLevelStars] = useState(0);
   const [currentLevelXP, setCurrentLevelXP] = useState(0);
-  const [shieldLevel, setShieldLevel] = useState(0); // 0 = none, 1 = basic, 2 = advanced
+  const [shieldLevel, setShieldLevel] = useState(0); // 0 = none, 1 = cabeza, 2 = atras/adelante, 3 = todo cuerpo, 4 = x2, 5 = x3
+  const [magnetLevel, setMagnetLevel] = useState(0); // 0 = none, 1-5 = 10%, 20%, 30%, 40%, 50%
+  const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
+  const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
-  const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1 = single, 2 = double
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [shopConfigs, setShopConfigs] = useState(null); // Configuraciones de la tienda desde la DB
   
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
@@ -159,6 +162,56 @@ const SnakeGame = ({ user, onLogout }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Load shop configurations from API
+  const loadShopConfigs = async () => {
+    try {
+      const response = await fetch('/api/shop/upgrades');
+      if (!response.ok) {
+        throw new Error('Failed to load shop configurations');
+      }
+      const data = await response.json();
+      setShopConfigs(data);
+    } catch (error) {
+      console.error('Error loading shop configs:', error);
+      // Fallback to default configs if API fails
+      setShopConfigs({
+        shield: [
+          { level: 1, xpCost: 0, starsCost: 5, description: 'Escudo en la cabeza' },
+          { level: 2, xpCost: 0, starsCost: 5, description: 'Escudo atrás y adelante' },
+          { level: 3, xpCost: 0, starsCost: 5, description: 'Escudo todo el cuerpo' },
+          { level: 4, xpCost: 0, starsCost: 10, description: 'Protección x 2 todo el cuerpo' },
+          { level: 5, xpCost: 0, starsCost: 10, description: 'Protección x 3 todo el cuerpo' }
+        ],
+        magnet: [
+          { level: 1, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 10% extra' },
+          { level: 2, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 20% extra' },
+          { level: 3, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 30% extra' },
+          { level: 4, xpCost: 0, starsCost: 10, description: 'Mayor recolección en una área en un 40% extra' },
+          { level: 5, xpCost: 0, starsCost: 10, description: 'Mayor recolección en una área en un 50% extra' }
+        ],
+        cannon: [
+          { level: 1, xpCost: 250, starsCost: 10, description: 'Cañón en la cabeza que tira de a 1 bala. Un disparo x segundo' },
+          { level: 2, xpCost: 500, starsCost: 10, description: 'Doble Cañón en la cabeza que tira de a 2 balas en total. Una bala por cañón. Un disparo x segundo' },
+          { level: 3, xpCost: 750, starsCost: 10, description: 'Doble Cañón en la cabeza que tira de a 2 balas en total. Se suma un cañon en la cola. Una bala por cañón. Un disparo x segundo' },
+          { level: 4, xpCost: 750, starsCost: 10, description: 'Doble Cañón en la cabeza que tira de a 2 balas en total. Se suma un cañon doble en la cola. Una bala por cañón. Un disparo x segundo' },
+          { level: 5, xpCost: 1000, starsCost: 10, description: 'Lo mismo que el anterior, se aceleran los disparos de uno x segundo a dos por segundo' }
+        ],
+        speed: [
+          { level: 1, xpCost: 100, starsCost: 0, description: 'Extra velocidad x 10%' },
+          { level: 2, xpCost: 200, starsCost: 0, description: 'Extra velocidad x 20%' },
+          { level: 3, xpCost: 300, starsCost: 0, description: 'Extra velocidad x 30%' },
+          { level: 4, xpCost: 400, starsCost: 0, description: 'Extra velocidad x 40%' },
+          { level: 5, xpCost: 500, starsCost: 0, description: 'Extra velocidad x 50%' },
+          { level: 6, xpCost: 600, starsCost: 0, description: 'Extra velocidad x 60%' },
+          { level: 7, xpCost: 700, starsCost: 0, description: 'Extra velocidad x 70%' },
+          { level: 8, xpCost: 800, starsCost: 0, description: 'Extra velocidad x 80%' },
+          { level: 9, xpCost: 900, starsCost: 0, description: 'Extra velocidad x 90%' },
+          { level: 10, xpCost: 1000, starsCost: 0, description: 'Extra velocidad x 100%' }
+        ]
+      });
+    }
+  };
+
   // Load user progress from API
   const loadUserProgress = async () => {
     if (!user?.id) return;
@@ -179,8 +232,10 @@ const SnakeGame = ({ user, onLogout }) => {
       setTotalStars(data.totalStars || 0);
       setLevel(data.currentLevel || 1);
       setShieldLevel(data.shieldLevel || 0);
-      setHeadLevel(data.headLevel || 1);
+      setMagnetLevel(data.magnetLevel || 0);
       setCannonLevel(data.cannonLevel || 0);
+      setSpeedLevel(data.speedLevel || 0);
+      setHeadLevel(data.headLevel || 1);
       gameRef.current.level = data.currentLevel || 1;
       
     } catch (error) {
@@ -201,7 +256,9 @@ const SnakeGame = ({ user, onLogout }) => {
         body: JSON.stringify({
           shieldLevel,
           headLevel,
+          magnetLevel,
           cannonLevel,
+          speedLevel,
           currentLevel: level,
           totalXp: totalXP,
           totalStars: totalStars
@@ -232,6 +289,11 @@ const SnakeGame = ({ user, onLogout }) => {
     }
   };
 
+  // Load shop configs on mount
+  useEffect(() => {
+    loadShopConfigs();
+  }, []);
+
   // Load progress on mount
   useEffect(() => {
     loadUserProgress();
@@ -246,7 +308,7 @@ const SnakeGame = ({ user, onLogout }) => {
     }, 2000); // Save 2 seconds after last change
 
     return () => clearTimeout(timeoutId);
-  }, [totalXP, totalStars, level, shieldLevel, headLevel, cannonLevel]);
+  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel]);
 
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 600;
@@ -1769,31 +1831,41 @@ const SnakeGame = ({ user, onLogout }) => {
   };
 
   const buyItem = (item) => {
-    // Escalated costs - more expensive
-    const costs = {
-      shield1: { xp: 300, stars: 0 },      // Escudo nivel 1: solo XP
-      shield2: { xp: 600, stars: 0 },      // Escudo nivel 2: solo XP
-      head1: { xp: 200, stars: 2 },        // Cabeza nivel 1 (base): XP + estrellas
-      head2: { xp: 400, stars: 4 },        // Cabeza nivel 2: XP + estrellas
-      head3: { xp: 800, stars: 8 },        // Cabeza nivel 3: XP + estrellas
-      cannon1: { xp: 250, stars: 3 },      // Cañón nivel 1: XP + estrellas
-      cannon2: { xp: 500, stars: 6 }       // Cañón nivel 2: XP + estrellas
-    };
+    if (!shopConfigs) return;
     
-    const cost = costs[item];
-    if (!cost) return;
+    // Parse item type and level from item string (e.g., "shield1" -> type: "shield", level: 1)
+    const match = item.match(/^(\w+)(\d+)$/);
+    if (!match) return;
     
+    const [, type, levelStr] = match;
+    const level = parseInt(levelStr);
+    
+    // Find the upgrade configuration
+    const upgrades = shopConfigs[type];
+    if (!upgrades) return;
+    
+    const upgrade = upgrades.find(u => u.level === level);
+    if (!upgrade) return;
+    
+    const cost = { xp: upgrade.xpCost, stars: upgrade.starsCost };
+    
+    // Check if user has enough resources
     if (totalXP >= cost.xp && totalStars >= cost.stars) {
       setTotalXP(prev => prev - cost.xp);
       setTotalStars(prev => prev - cost.stars);
       
-      if (item === 'shield1') setShieldLevel(1);
-      if (item === 'shield2') setShieldLevel(2);
-      if (item === 'head1') setHeadLevel(1); // Base level
-      if (item === 'head2') setHeadLevel(2);
-      if (item === 'head3') setHeadLevel(3);
-      if (item === 'cannon1') setCannonLevel(1);
-      if (item === 'cannon2') setCannonLevel(2);
+      // Update the appropriate level state
+      if (type === 'shield') {
+        setShieldLevel(level);
+      } else if (type === 'magnet') {
+        setMagnetLevel(level);
+      } else if (type === 'cannon') {
+        setCannonLevel(level);
+      } else if (type === 'speed') {
+        setSpeedLevel(level);
+      } else if (type === 'head') {
+        setHeadLevel(level);
+      }
       
       setShopOpen(false);
       
@@ -1804,22 +1876,38 @@ const SnakeGame = ({ user, onLogout }) => {
   
   // Helper to get next upgrade level and cost for each type
   const getNextUpgrade = (type) => {
+    if (!shopConfigs || !shopConfigs[type]) {
+      return null;
+    }
+
+    const upgrades = shopConfigs[type];
+    let currentLevel = 0;
+
     if (type === 'shield') {
-      if (shieldLevel === 0) return { level: 1, item: 'shield1', cost: { xp: 300, stars: 0 }, desc: 'Doble resistencia a balas' };
-      if (shieldLevel === 1) return { level: 2, item: 'shield2', cost: { xp: 600, stars: 0 }, desc: 'Triple resistencia a balas' };
-      return null; // Max level
+      currentLevel = shieldLevel;
+    } else if (type === 'magnet') {
+      currentLevel = magnetLevel;
+    } else if (type === 'cannon') {
+      currentLevel = cannonLevel;
+    } else if (type === 'speed') {
+      currentLevel = speedLevel;
+    } else if (type === 'head') {
+      currentLevel = headLevel;
     }
-    if (type === 'head') {
-      if (headLevel === 1) return { level: 2, item: 'head2', cost: { xp: 400, stars: 4 }, desc: 'Come 2x XP, Roba 5 XP' };
-      if (headLevel === 2) return { level: 3, item: 'head3', cost: { xp: 800, stars: 8 }, desc: 'Come 3x XP, Roba 10 XP' };
-      return null; // Max level
+
+    // Find the next upgrade level
+    const nextUpgrade = upgrades.find(upgrade => upgrade.level === currentLevel + 1);
+    
+    if (!nextUpgrade) {
+      return null; // Max level reached
     }
-    if (type === 'cannon') {
-      if (cannonLevel === 0) return { level: 1, item: 'cannon1', cost: { xp: 250, stars: 3 }, desc: 'Dispara balas [ESPACIO]' };
-      if (cannonLevel === 1) return { level: 2, item: 'cannon2', cost: { xp: 500, stars: 6 }, desc: '2 balas por disparo' };
-      return null; // Max level
-    }
-    return null;
+
+    return {
+      level: nextUpgrade.level,
+      item: `${type}${nextUpgrade.level}`,
+      cost: { xp: nextUpgrade.xpCost, stars: nextUpgrade.starsCost },
+      desc: nextUpgrade.description
+    };
   };
 
   if (loading) {
@@ -2190,16 +2278,16 @@ const SnakeGame = ({ user, onLogout }) => {
             XP Total: {totalXP} | ⭐ Total: {totalStars}
           </p>
           
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {/* Shield - Progressive upgrade */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+            {/* Escudo */}
             {(() => {
               const next = getNextUpgrade('shield');
               const currentLevel = shieldLevel;
               return (
-            <div style={{ 
-              border: '2px solid #6495ed', 
-              padding: '20px', 
-              borderRadius: '10px',
+                <div style={{ 
+                  border: '2px solid #6495ed', 
+                  padding: '20px', 
+                  borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
                   minWidth: '220px'
                 }}>
@@ -2207,50 +2295,25 @@ const SnakeGame = ({ user, onLogout }) => {
                   <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
                     ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {currentLevel === 0 && next && (
+                  {next ? (
                     <>
                       <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                       <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp} XP
-                      </p>
-              <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={totalXP < next.cost.xp}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #6495ed',
-                  color: '#6495ed',
-                  padding: '10px 20px',
-                  fontSize: '16px',
-                          cursor: totalXP < next.cost.xp ? 'not-allowed' : 'pointer',
-                  borderRadius: '5px',
-                          opacity: totalXP < next.cost.xp ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                }}
-              >
-                        COMPRAR NIVEL {next.level}
-              </button>
-                    </>
-                  )}
-                  {currentLevel === 1 && next && (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp} XP
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
-                        disabled={totalXP < next.cost.xp}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
                         style={{
                           background: 'transparent',
                           border: '2px solid #6495ed',
                           color: '#6495ed',
                           padding: '10px 20px',
                           fontSize: '16px',
-                          cursor: totalXP < next.cost.xp ? 'not-allowed' : 'pointer',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
-                          opacity: totalXP < next.cost.xp ? 0.5 : 1,
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
                           marginTop: '10px'
                         }}
@@ -2258,68 +2321,67 @@ const SnakeGame = ({ user, onLogout }) => {
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
-                  )}
-                  {currentLevel === 2 && (
+                  ) : (
                     <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
-            </div>
+                </div>
               );
             })()}
 
-            {/* Head - Progressive upgrade */}
+            {/* Imán XP */}
             {(() => {
-              const next = getNextUpgrade('head');
-              const currentLevel = headLevel;
+              const next = getNextUpgrade('magnet');
+              const currentLevel = magnetLevel;
               return (
-            <div style={{ 
-              border: '2px solid #ff00ff', 
-              padding: '20px', 
-              borderRadius: '10px',
-                  background: currentLevel > 1 ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
+                <div style={{ 
+                  border: '2px solid #00ff88', 
+                  padding: '20px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
                   minWidth: '220px'
                 }}>
-                  <Zap size={48} style={{ color: currentLevel === 2 ? '#ff00ff' : currentLevel === 3 ? '#9400D3' : '#33ffff', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: currentLevel === 2 ? '#ff00ff' : currentLevel === 3 ? '#9400D3' : '#33ffff', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                    CABEZA {currentLevel > 1 ? `Nivel ${currentLevel}` : 'Base'}
+                  <Magnet size={48} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                    IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next && (
+                  {next ? (
                     <>
                       <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                       <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp} XP + {next.cost.stars}⭐
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
-              <button 
+                      <button 
                         onClick={() => buyItem(next.item)}
-                        disabled={totalXP < next.cost.xp || totalStars < next.cost.stars}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #ff00ff',
-                  color: '#ff00ff',
-                  padding: '10px 20px',
-                  fontSize: '16px',
-                          cursor: totalXP < next.cost.xp || totalStars < next.cost.stars ? 'not-allowed' : 'pointer',
-                  borderRadius: '5px',
-                          opacity: totalXP < next.cost.xp || totalStars < next.cost.stars ? 0.5 : 1,
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #00ff88',
+                          color: '#00ff88',
+                          padding: '10px 20px',
+                          fontSize: '16px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
                           marginTop: '10px'
-                }}
-              >
+                        }}
+                      >
                         COMPRAR NIVEL {next.level}
-              </button>
+                      </button>
                     </>
-                  )}
-                  {!next && (
+                  ) : (
                     <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
-            </div>
+                </div>
               );
             })()}
 
-            {/* Cannon - Progressive upgrade */}
+            {/* Cañón */}
             {(() => {
               const next = getNextUpgrade('cannon');
               const currentLevel = cannonLevel;
@@ -2335,24 +2397,25 @@ const SnakeGame = ({ user, onLogout }) => {
                   <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
                     CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next && (
+                  {next ? (
                     <>
                       <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                       <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp} XP + {next.cost.stars}⭐
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
-                        disabled={totalXP < next.cost.xp || totalStars < next.cost.stars}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
                         style={{
                           background: 'transparent',
                           border: '2px solid #ffff00',
                           color: '#ffff00',
                           padding: '10px 20px',
                           fontSize: '16px',
-                          cursor: totalXP < next.cost.xp || totalStars < next.cost.stars ? 'not-allowed' : 'pointer',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
-                          opacity: totalXP < next.cost.xp || totalStars < next.cost.stars ? 0.5 : 1,
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
                           marginTop: '10px'
                         }}
@@ -2360,8 +2423,58 @@ const SnakeGame = ({ user, onLogout }) => {
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
+                  ) : (
+                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
                   )}
-                  {!next && (
+                </div>
+              );
+            })()}
+
+            {/* Velocidad */}
+            {(() => {
+              const next = getNextUpgrade('speed');
+              const currentLevel = speedLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #ff3366', 
+                  padding: '20px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
+                  minWidth: '220px'
+                }}>
+                  <Gauge size={48} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                    VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  {next ? (
+                    <>
+                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #ff3366',
+                          color: '#ff3366',
+                          padding: '10px 20px',
+                          fontSize: '16px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                          marginTop: '10px'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
                     <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                       Nivel Máximo
                     </p>

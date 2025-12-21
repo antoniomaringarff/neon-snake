@@ -18,6 +18,8 @@ export default async function usersRoutes(fastify, options) {
           up.shield_level,
           up.head_level,
           up.cannon_level,
+          up.magnet_level,
+          up.speed_level,
           up.current_level,
           u.total_xp,
           COALESCE(u.total_stars, 0) as total_stars,
@@ -38,6 +40,8 @@ export default async function usersRoutes(fastify, options) {
         shieldLevel: progress.shield_level,
         headLevel: progress.head_level,
         cannonLevel: progress.cannon_level,
+        magnetLevel: progress.magnet_level || 0,
+        speedLevel: progress.speed_level || 0,
         currentLevel: progress.current_level,
         totalXp: progress.total_xp || 0,
         totalStars: progress.total_stars || 0,
@@ -53,7 +57,7 @@ export default async function usersRoutes(fastify, options) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const { shieldLevel, headLevel, cannonLevel, currentLevel, totalXp, totalStars } = request.body;
+    const { shieldLevel, headLevel, cannonLevel, magnetLevel, speedLevel, currentLevel, totalXp, totalStars } = request.body;
 
     // Check if user is updating their own data
     if (parseInt(id) !== request.user.id) {
@@ -66,11 +70,13 @@ export default async function usersRoutes(fastify, options) {
         `UPDATE user_progress 
          SET shield_level = $1, 
              head_level = $2, 
-             cannon_level = $3, 
-             current_level = $4,
+             cannon_level = $3,
+             magnet_level = $4,
+             speed_level = $5,
+             current_level = $6,
              updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $5`,
-        [shieldLevel, headLevel, cannonLevel, currentLevel, id]
+         WHERE user_id = $7`,
+        [shieldLevel, headLevel, cannonLevel, magnetLevel || 0, speedLevel || 0, currentLevel, id]
       );
 
       // Update total XP (this will trigger the function to update users table)

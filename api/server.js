@@ -6,6 +6,7 @@ import authRoutes from './src/routes/auth.js';
 import usersRoutes from './src/routes/users.js';
 import leaderboardRoutes from './src/routes/leaderboard.js';
 import sessionsRoutes from './src/routes/sessions.js';
+import shopRoutes from './src/routes/shop.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ fastify.register(authRoutes, { prefix: '/api/auth' });
 fastify.register(usersRoutes, { prefix: '/api/users' });
 fastify.register(leaderboardRoutes, { prefix: '/api/leaderboard' });
 fastify.register(sessionsRoutes, { prefix: '/api/sessions' });
+fastify.register(shopRoutes, { prefix: '/api/shop' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

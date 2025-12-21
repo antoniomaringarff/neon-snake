@@ -1,8 +1,12 @@
 import { pool } from '../config/database.js';
 import * as migration001 from './001_initial_schema.js';
+import * as migration002 from './002_shop_upgrades.js';
+import * as migration003 from './003_add_magnet_speed.js';
 
 const migrations = [
-  { name: '001_initial_schema', up: migration001.up, down: migration001.down }
+  { name: '001_initial_schema', up: migration001.up, down: migration001.down },
+  { name: '002_shop_upgrades', up: migration002.up, down: migration002.down },
+  { name: '003_add_magnet_speed', up: migration003.up, down: migration003.down }
 ];
 
 async function runMigrations() {
