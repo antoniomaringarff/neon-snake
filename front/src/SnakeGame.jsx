@@ -1,6 +1,107 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, Shield, Zap } from 'lucide-react';
 
+// Configuración de niveles - cada nivel tiene características particulares
+const getLevelConfig = (level) => {
+  // Configuración base escalonada
+  const baseConfig = {
+    // Estrellas necesarias para completar el nivel
+    starsNeeded: Math.max(1, Math.floor(level * 0.5) + 1),
+    // Velocidad base del jugador
+    playerSpeed: 2 + (level * 0.1),
+    // Velocidad base de los enemigos
+    enemySpeed: 2 + (level * 0.15),
+    // Número de enemigos
+    enemyCount: 5 + Math.floor(level * 1.5),
+    // Densidad de enemigos (para spawn)
+    enemyDensity: 15 + (level * 2),
+    // Porcentaje de enemigos que pueden disparar (0-100)
+    enemyShootPercentage: Math.min(30 + (level * 5), 80),
+    // Porcentaje de enemigos que tienen escudo (0-100)
+    enemyShieldPercentage: Math.min(0 + (level * 3), 50),
+    // Cooldown de disparo de enemigos (ms)
+    enemyShootCooldown: Math.max(2000, 5000 - (level * 100)),
+    // Densidad de comida/XP (número de items en el mapa)
+    xpDensity: 100 + (level * 5),
+    // Si tiene celda del medio (rectángulo central)
+    hasCentralCell: level >= 2,
+    // Velocidad de movimiento de las aberturas en la celda del medio
+    centralCellOpeningSpeed: 0.002 + (level * 0.0005),
+  };
+
+  // Configuraciones específicas por nivel (puedes personalizar cada uno)
+  const levelSpecificConfigs = {
+    1: {
+      starsNeeded: 1,
+      playerSpeed: 2,
+      enemySpeed: 2,
+      enemyCount: 3,
+      enemyDensity: 15,
+      enemyShootPercentage: 0,
+      enemyShieldPercentage: 0,
+      enemyShootCooldown: 5000,
+      xpDensity: 100,
+      hasCentralCell: false,
+      centralCellOpeningSpeed: 0.002,
+    },
+    2: {
+      starsNeeded: 2,
+      playerSpeed: 2.2,
+      enemySpeed: 2.3,
+      enemyCount: 5,
+      enemyDensity: 18,
+      enemyShootPercentage: 10,
+      enemyShieldPercentage: 0,
+      enemyShootCooldown: 4500,
+      xpDensity: 110,
+      hasCentralCell: true,
+      centralCellOpeningSpeed: 0.0025,
+    },
+    3: {
+      starsNeeded: 2,
+      playerSpeed: 2.4,
+      enemySpeed: 2.6,
+      enemyCount: 7,
+      enemyDensity: 21,
+      enemyShootPercentage: 20,
+      enemyShieldPercentage: 5,
+      enemyShootCooldown: 4000,
+      xpDensity: 120,
+      hasCentralCell: true,
+      centralCellOpeningSpeed: 0.003,
+    },
+    4: {
+      starsNeeded: 3,
+      playerSpeed: 2.6,
+      enemySpeed: 2.9,
+      enemyCount: 9,
+      enemyDensity: 24,
+      enemyShootPercentage: 30,
+      enemyShieldPercentage: 10,
+      enemyShootCooldown: 3500,
+      xpDensity: 130,
+      hasCentralCell: true,
+      centralCellOpeningSpeed: 0.0035,
+    },
+    5: {
+      starsNeeded: 3,
+      playerSpeed: 2.8,
+      enemySpeed: 3.2,
+      enemyCount: 11,
+      enemyDensity: 27,
+      enemyShootPercentage: 40,
+      enemyShieldPercentage: 15,
+      enemyShootCooldown: 3000,
+      xpDensity: 140,
+      hasCentralCell: true,
+      centralCellOpeningSpeed: 0.004,
+    },
+  };
+
+  // Si hay configuración específica para este nivel, úsala, sino usa la base
+  return levelSpecificConfigs[level] || baseConfig;
+};
+
 const SnakeGame = ({ user, onLogout }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -198,7 +299,7 @@ const SnakeGame = ({ user, onLogout }) => {
     };
 
   // Helper function to create enemies - must be outside useEffect to be accessible
-    const createEnemy = () => {
+    const createEnemy = (levelConfig) => {
       const x = Math.random() * WORLD_WIDTH;
       const y = Math.random() * WORLD_HEIGHT;
       const angle = Math.random() * Math.PI * 2;
@@ -206,20 +307,23 @@ const SnakeGame = ({ user, onLogout }) => {
     const initialXP = Math.floor(baseLength * 2); // Initial XP based on length
     // Health based on XP: 1 bullet per 10 XP
     const health = Math.max(1, Math.ceil(initialXP / 10));
-    // Some enemies can shoot (30% chance)
-    const canShoot = Math.random() < 0.3;
+    // Usar porcentaje de disparo del nivel
+    const canShoot = Math.random() < (levelConfig.enemyShootPercentage / 100);
+    // Determinar si tiene escudo según el porcentaje del nivel
+    const hasShield = Math.random() < (levelConfig.enemyShieldPercentage / 100);
       return {
         segments: [{ x, y }],
         direction: { x: Math.cos(angle), y: Math.sin(angle) },
-        speed: 2 + Math.random(),
+        speed: levelConfig.enemySpeed + (Math.random() * 0.5),
       length: baseLength,
       hue: Math.random() * 360,
       totalXP: initialXP, // Track XP accumulated by this enemy
       health: health, // Health points (1 bullet per 10 XP)
       maxHealth: health,
       canShoot: canShoot, // Can this enemy shoot?
+      hasShield: hasShield, // Does this enemy have shield?
       lastShotTime: 0, // Track when enemy last shot
-      shootCooldown: 2000 + Math.random() * 3000 // 2-5 seconds between shots
+      shootCooldown: levelConfig.enemyShootCooldown + (Math.random() * 1000) // Cooldown basado en nivel
     };
   };
 
@@ -245,16 +349,21 @@ const SnakeGame = ({ user, onLogout }) => {
 
     const initGame = () => {
       const game = gameRef.current;
+      const levelConfig = getLevelConfig(game.level);
+      
       game.snake = [{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }];
       game.direction = { x: 1, y: 0 };
       game.nextDirection = { x: 1, y: 0 };
-      game.food = Array.from({ length: 15 }, createFood);
+      game.food = Array.from({ length: levelConfig.xpDensity }, createFood);
       game.stars = []; // Reset stars
-      game.enemies = Array.from({ length: 2 + game.level }, createEnemy);
+      game.enemies = Array.from({ length: levelConfig.enemyCount }, () => createEnemy(levelConfig));
       game.particles = [];
       game.currentXP = 0;
       game.currentStars = 0;
-      game.starsNeeded = game.level; // Need N stars for level N
+      game.starsNeeded = levelConfig.starsNeeded;
+      // Aplicar velocidad del nivel
+      game.speed = levelConfig.playerSpeed;
+      game.baseSpeed = levelConfig.playerSpeed;
       setCurrentLevelXP(0);
       setCurrentLevelStars(0);
     };
@@ -613,9 +722,16 @@ const SnakeGame = ({ user, onLogout }) => {
               // Check collision with enemy head (most important)
               const enemyHead = enemy.segments[0];
               if (checkCollision(bullet, enemyHead, 15)) {
-                // Reduce health
-                enemy.health -= 1;
-                createParticle(bullet.x, bullet.y, '#ffff00', 8);
+                // Calcular daño: enemigos con escudo requieren 2 disparos
+                const damage = enemy.hasShield ? 0.5 : 1;
+                enemy.health -= damage;
+                
+                // Efecto visual diferente según si tiene escudo
+                if (enemy.hasShield) {
+                  createParticle(bullet.x, bullet.y, '#6495ed', 8); // Azul para escudo
+                } else {
+                  createParticle(bullet.x, bullet.y, '#ffff00', 8); // Amarillo normal
+                }
                 hit = true;
                 
                 // If health reaches 0, mark enemy for death
@@ -1000,8 +1116,9 @@ const SnakeGame = ({ user, onLogout }) => {
         game.snake.pop();
       }
 
-      // Add new food if needed
-      while (game.food.length < 100) { // Much more food in the big world!
+      // Add new food if needed - usar densidad del nivel
+      const levelConfig = getLevelConfig(game.level);
+      while (game.food.length < levelConfig.xpDensity) {
         game.food.push(createFood());
       }
 
@@ -1306,6 +1423,17 @@ const SnakeGame = ({ user, onLogout }) => {
           if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
               screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
             const alpha = 1 - (i / enemy.segments.length) * 0.5;
+            
+            // Dibujar escudo si el enemigo lo tiene (solo en la cabeza)
+            if (enemy.hasShield && i === 0) {
+              const shieldAlpha = alpha * 0.4;
+              ctx.strokeStyle = `rgba(100, 149, 237, ${shieldAlpha})`;
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, SNAKE_SIZE + 4, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            
             ctx.fillStyle = `hsla(${enemy.hue}, 100%, 50%, ${alpha})`;
             ctx.shadowBlur = 10;
             ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
@@ -1488,6 +1616,8 @@ const SnakeGame = ({ user, onLogout }) => {
 
   const startGame = () => {
     gameRef.current.level = level;
+    const levelConfig = getLevelConfig(level);
+    gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
     setScore(0);
@@ -1498,53 +1628,58 @@ const SnakeGame = ({ user, onLogout }) => {
 
   const initGame = () => {
     const game = gameRef.current;
+    const levelConfig = getLevelConfig(game.level);
     
-    // Central rectangle (1 screen size = 800x600)
-    const centralRect = {
-      x: WORLD_WIDTH / 2 - CANVAS_WIDTH / 2,
-      y: WORLD_HEIGHT / 2 - CANVAS_HEIGHT / 2,
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
-      openings: [
-        { 
-          side: 'top', 
-          position: 0, // Position along the side (0 to 1)
-          direction: 1, // Always moving forward (will wrap)
-          speed: 0.002, // Slower, continuous speed
-          width: 60, 
-          height: 20,
-          paused: false // Pause when player is passing through
-        },
-        { 
-          side: 'bottom', 
-          position: 0.5,
-          direction: 1,
-          speed: 0.002,
-          width: 60, 
-          height: 20,
-          paused: false
-        },
-        { 
-          side: 'left', 
-          position: 0.3,
-          direction: 1,
-          speed: 0.002,
-          width: 20, 
-          height: 60,
-          paused: false
-        },
-        { 
-          side: 'right', 
-          position: 0.7,
-          direction: 1,
-          speed: 0.002,
-          width: 20, 
-          height: 60,
-          paused: false
-        }
-      ]
-    };
-    game.centralRect = centralRect;
+    // Central rectangle (1 screen size = 800x600) - solo si el nivel lo requiere
+    if (levelConfig.hasCentralCell) {
+      const centralRect = {
+        x: WORLD_WIDTH / 2 - CANVAS_WIDTH / 2,
+        y: WORLD_HEIGHT / 2 - CANVAS_HEIGHT / 2,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        openings: [
+          { 
+            side: 'top', 
+            position: 0, // Position along the side (0 to 1)
+            direction: 1, // Always moving forward (will wrap)
+            speed: levelConfig.centralCellOpeningSpeed, // Velocidad basada en nivel
+            width: 60, 
+            height: 20,
+            paused: false // Pause when player is passing through
+          },
+          { 
+            side: 'bottom', 
+            position: 0.5,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 60, 
+            height: 20,
+            paused: false
+          },
+          { 
+            side: 'left', 
+            position: 0.3,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 20, 
+            height: 60,
+            paused: false
+          },
+          { 
+            side: 'right', 
+            position: 0.7,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 20, 
+            height: 60,
+            paused: false
+          }
+        ]
+      };
+      game.centralRect = centralRect;
+    } else {
+      game.centralRect = null; // Sin celda del medio en niveles bajos
+    }
     
     // Spawn player outside the central rectangle, in a random location
     let spawnX, spawnY;
@@ -1554,14 +1689,19 @@ const SnakeGame = ({ user, onLogout }) => {
       spawnX = BORDER_WIDTH + Math.random() * (WORLD_WIDTH - BORDER_WIDTH * 2);
       spawnY = BORDER_WIDTH + Math.random() * (WORLD_HEIGHT - BORDER_WIDTH * 2);
       
-      // Check if it's outside the central rectangle (with margin for safety)
-      const margin = 50;
-      const isOutside = spawnX < centralRect.x - margin || 
-                       spawnX > centralRect.x + centralRect.width + margin ||
-                       spawnY < centralRect.y - margin || 
-                       spawnY > centralRect.y + centralRect.height + margin;
-      
-      if (isOutside) break;
+      // Check if it's outside the central rectangle (with margin for safety) - solo si existe
+      if (game.centralRect) {
+        const margin = 50;
+        const isOutside = spawnX < game.centralRect.x - margin || 
+                         spawnX > game.centralRect.x + game.centralRect.width + margin ||
+                         spawnY < game.centralRect.y - margin || 
+                         spawnY > game.centralRect.y + game.centralRect.height + margin;
+        
+        if (isOutside) break;
+      } else {
+        // Si no hay centralRect, cualquier posición es válida
+        break;
+      }
       attempts++;
     } while (attempts < 50); // Safety limit
     
@@ -1574,32 +1714,36 @@ const SnakeGame = ({ user, onLogout }) => {
     game.snake = [{ x: spawnX, y: spawnY }];
     game.direction = { x: 1, y: 0 };
     game.nextDirection = { x: 1, y: 0 };
-    game.speed = 2;
-    game.baseSpeed = 2;
+    // Aplicar velocidad del nivel
+    game.speed = levelConfig.playerSpeed;
+    game.baseSpeed = levelConfig.playerSpeed;
     game.snakeSize = SNAKE_SIZE;
     game.bullets = [];
     
-    // Create regular food across the map
-    game.food = Array.from({ length: 100 }, () => createFood());
+    // Create regular food across the map - usar densidad del nivel
+    game.food = Array.from({ length: levelConfig.xpDensity }, () => createFood());
     
-    // Add 50 yellow/orange orbs inside central rectangle
-    for (let i = 0; i < 50; i++) {
-      const color = Math.random() < 0.5 ? 'yellow' : 'orange';
-      const food = createFood(color);
-      food.x = centralRect.x + 50 + Math.random() * (centralRect.width - 100);
-      food.y = centralRect.y + 50 + Math.random() * (centralRect.height - 100);
-      game.food.push(food);
+    // Add yellow/orange orbs inside central rectangle (solo si existe)
+    if (game.centralRect) {
+      const centralFoodCount = Math.floor(levelConfig.xpDensity * 0.3); // 30% de la comida en el centro
+      for (let i = 0; i < centralFoodCount; i++) {
+        const color = Math.random() < 0.5 ? 'yellow' : 'orange';
+        const food = createFood(color);
+        food.x = game.centralRect.x + 50 + Math.random() * (game.centralRect.width - 100);
+        food.y = game.centralRect.y + 50 + Math.random() * (game.centralRect.height - 100);
+        game.food.push(food);
+      }
     }
     
-    // More enemies based on enemyDensity (default 15)
-    game.enemies = Array.from({ length: game.enemyDensity + game.level }, () => {
-      return createEnemy();
+    // Crear enemigos con configuración del nivel
+    game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
+      return createEnemy(levelConfig);
     });
     game.particles = [];
     game.stars = []; // Reset stars
     game.currentXP = 0;
     game.currentStars = 0;
-    game.starsNeeded = game.level; // Need N stars for level N
+    game.starsNeeded = levelConfig.starsNeeded;
     game.camera = { 
       x: WORLD_WIDTH / 2 - CANVAS_WIDTH / 2, 
       y: WORLD_HEIGHT / 2 - CANVAS_HEIGHT / 2 
@@ -1609,9 +1753,11 @@ const SnakeGame = ({ user, onLogout }) => {
   };
 
   const nextLevel = () => {
-    setLevel(prev => prev + 1);
-    gameRef.current.level = level + 1;
-    gameRef.current.starsNeeded = level + 1; // Update stars needed for next level
+    const newLevel = level + 1;
+    setLevel(newLevel);
+    gameRef.current.level = newLevel;
+    const levelConfig = getLevelConfig(newLevel);
+    gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
     gameRef.current.currentStars = 0; // Reset stars for new level
@@ -2329,8 +2475,8 @@ const SnakeGame = ({ user, onLogout }) => {
           <button 
             onClick={() => {
               // Save progress before returning to menu
+              // NO resetear el nivel - mantener el nivel alcanzado
               saveUserProgress();
-              setLevel(1);
               setGameState('menu');
             }}
             style={{
