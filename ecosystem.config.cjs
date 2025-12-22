@@ -63,9 +63,9 @@ module.exports = {
         'echo "🔗 Linking .env file..."',
         'ln -sf ../../shared/.env api/.env',
         
-        // Frontend: install dependencies and build
+        // Frontend: install dependencies and build (limpiar dist primero)
         'echo "📦 Building frontend..."',
-        'cd front && npm install --production=false && npm run build',
+        'cd front && rm -rf dist && npm install --production=false && npm run build',
         
         // API: install dependencies
         'echo "📦 Installing API dependencies..."',

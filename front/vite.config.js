@@ -19,9 +19,17 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     minify: 'terser',
+    // Agregar hash a los archivos para evitar caché
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
+      }
+    },
     terserOptions: {
       compress: {
-        drop_console: true,
+        drop_console: false, // Mantener console.logs para debug en producción
         drop_debugger: true
       }
     }
