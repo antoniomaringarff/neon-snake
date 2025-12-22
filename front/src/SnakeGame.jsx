@@ -118,6 +118,10 @@ const SnakeGame = ({ user, onLogout }) => {
     direction: { x: 0, y: 0 } // Store direction synchronously
   });
   const shootBulletRef = useRef(null);
+  const isShootingRef = useRef(false);
+  const shootingIntervalRef = useRef(null);
+  const startAutoFireRef = useRef(null);
+  const stopAutoFireRef = useRef(null);
   const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -607,22 +611,92 @@ const SnakeGame = ({ user, onLogout }) => {
       }
     };
 
-    const handleKeyPress = (e) => {
+    // Función para iniciar auto-fire (usa setTimeout recursivo para ajustarse a cambios)
+    const startAutoFire = () => {
+      if (shootingIntervalRef.current) return; // Ya está activo
+      
+      const scheduleNextShot = () => {
+        if (!isShootingRef.current || cannonLevel === 0) {
+          shootingIntervalRef.current = null;
+          return;
+        }
+        
+        // Calcular cooldown basado en valores actuales (se actualiza automáticamente)
+        const baseCooldown = cannonLevel === 5 ? 500 : 1000;
+        const cooldownReduction = bulletSpeedLevel * 0.1;
+        const cooldown = Math.max(50, baseCooldown * (1 - cooldownReduction));
+        
+        // Disparar
+        if (shootBulletRef.current) {
+          shootBulletRef.current();
+        }
+        
+        // Programar siguiente disparo
+        shootingIntervalRef.current = setTimeout(scheduleNextShot, cooldown);
+      };
+      
+      // Iniciar el ciclo
+      scheduleNextShot();
+    };
+
+    // Función para detener auto-fire
+    const stopAutoFire = () => {
+      isShootingRef.current = false;
+      if (shootingIntervalRef.current) {
+        clearTimeout(shootingIntervalRef.current);
+        shootingIntervalRef.current = null;
+      }
+    };
+
+    // Guardar en refs para acceder desde JSX
+    startAutoFireRef.current = startAutoFire;
+    stopAutoFireRef.current = stopAutoFire;
+
+    const handleKeyDown = (e) => {
       if (e.key.toLowerCase() === 'j') {
         setShopOpen(prev => !prev);
       } else if (e.key === ' ' && cannonLevel > 0) {
         e.preventDefault();
-        shootBullet();
+        if (!isShootingRef.current) {
+          isShootingRef.current = true;
+          shootBullet(); // Disparo inmediato
+          startAutoFire(); // Iniciar auto-fire
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        stopAutoFire();
       }
     };
 
     const shootBullet = () => {
       const game = gameRef.current;
-      if (!game.snake || game.snake.length === 0) return;
+      if (!game.snake || game.snake.length === 0) {
+        console.log('❌ No se puede disparar: no hay snake');
+        return;
+      }
+      
+      if (cannonLevel === 0) {
+        console.log('❌ No se puede disparar: cannonLevel es 0');
+        return;
+      }
+      
+      // Initialize lastPlayerShot if not exists
+      if (game.lastPlayerShot === undefined) {
+        game.lastPlayerShot = 0;
+      }
       
       const currentTime = Date.now();
-      // Cannon level 5: 2 shots/sec (500ms cooldown), others: 1 shot/sec (1000ms cooldown)
-      const cooldown = cannonLevel === 5 ? 500 : 1000;
+      
+      // Calcular cooldown: base según cannonLevel, reducido por bulletSpeedLevel
+      // Base: cannon level 5 = 500ms, otros = 1000ms
+      const baseCooldown = cannonLevel === 5 ? 500 : 1000;
+      // bulletSpeedLevel reduce el cooldown: nivel 1 = 10% menos, nivel 10 = 90% menos
+      const cooldownReduction = bulletSpeedLevel * 0.1; // 10% por nivel
+      const cooldown = Math.max(50, baseCooldown * (1 - cooldownReduction)); // Mínimo 50ms
       
       if (currentTime - game.lastPlayerShot < cooldown) {
         return; // Still on cooldown
@@ -657,25 +731,23 @@ const SnakeGame = ({ user, onLogout }) => {
       // Level 4: 2 bullets from head + 2 from tail (double cannon tail)
       // Level 5: Same as 4 but faster (2 shots/sec)
       
-      // Calculate bullet speed multiplier (2^bulletSpeedLevel)
-      const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
-      const baseBulletSpeed = 8;
-      const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+      // Velocidad de bala siempre constante (no cambia con bulletSpeedLevel)
+      const bulletSpeed = 8;
       
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
         const headBulletCount = cannonLevel >= 2 ? 2 : 1;
         for (let i = 0; i < headBulletCount; i++) {
           const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-          game.bullets.push({
+        game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
             vx: game.direction.x * bulletSpeed,
             vy: game.direction.y * bulletSpeed,
-            life: 100,
-            owner: 'player'
-          });
-        }
+          life: 100,
+          owner: 'player'
+        });
+      }
       }
       
       if (cannonLevel >= 3 && tail) {
@@ -1036,7 +1108,7 @@ const SnakeGame = ({ user, onLogout }) => {
                 break;
               }
             }
-          } else if (shieldLevel === 2) {
+            } else if (shieldLevel === 2) {
             // Head and tail protected
             const headHit = checkCollision(bullet, playerHead, 15);
             const tailHit = game.snake.length > 1 && checkCollision(bullet, game.snake[game.snake.length - 1], 15);
@@ -1061,8 +1133,8 @@ const SnakeGame = ({ user, onLogout }) => {
               return false; // Remove bullet
             } else {
               // No shield - take damage
-              createParticle(bullet.x, bullet.y, '#ff0000', 8);
-              return false; // Remove bullet
+            createParticle(bullet.x, bullet.y, '#ff0000', 8);
+            return false; // Remove bullet
             }
           }
         }
@@ -1118,8 +1190,9 @@ const SnakeGame = ({ user, onLogout }) => {
 
       const game = gameRef.current;
       
-      // Normalize deltaTime to target FPS (60 FPS = 1.0, 120 FPS = 0.5, 30 FPS = 2.0)
-      const normalizedDelta = deltaTime / FRAME_TIME;
+      // Sistema de velocidad fija: siempre usar exactamente 1 frame de movimiento
+      // Esto garantiza velocidad constante independiente del framerate
+      const normalizedDelta = 1;
       
       // Check if player is passing through any opening
       if (game.centralRect && game.snake.length > 0) {
@@ -1225,18 +1298,18 @@ const SnakeGame = ({ user, onLogout }) => {
         distance = 1; // Normalized direction, so distance is always 1
       } else if (!isMobile) {
         // Desktop: use mouse position
-        const worldMouseX = game.mousePos.x + game.camera.x;
-        const worldMouseY = game.mousePos.y + game.camera.y;
-        
-        const dx = worldMouseX - head.x;
-        const dy = worldMouseY - head.y;
+      const worldMouseX = game.mousePos.x + game.camera.x;
+      const worldMouseY = game.mousePos.y + game.camera.y;
+      
+      const dx = worldMouseX - head.x;
+      const dy = worldMouseY - head.y;
         distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance > 5) {
+      
+      if (distance > 5) {
           targetDir = {
-            x: dx / distance,
-            y: dy / distance
-          };
+          x: dx / distance,
+          y: dy / distance
+        };
         }
       }
       
@@ -1259,8 +1332,8 @@ const SnakeGame = ({ user, onLogout }) => {
         // Normalize to maintain constant speed
         const dirLength = Math.sqrt(game.direction.x * game.direction.x + game.direction.y * game.direction.y);
         if (dirLength > 0.01) {
-          game.direction.x /= dirLength;
-          game.direction.y /= dirLength;
+        game.direction.x /= dirLength;
+        game.direction.y /= dirLength;
         }
       }
 
@@ -1436,10 +1509,10 @@ const SnakeGame = ({ user, onLogout }) => {
           setTotalXP(prev => prev + xpGain);
           setScore(prev => prev + xpGain); // Update score
           
-          // Increase size slightly when eating (speed is handled by speedLevel improvement)
-          game.snakeSize = Math.min(SNAKE_SIZE + game.snake.length * 0.05, SNAKE_SIZE + 4);
+          // El tamaño NO cambia al comer - solo crece la cola
+          // game.snakeSize se mantiene constante
           
-          createParticle(food.x, food.y, food.color, 10);
+          createParticle(food.x, food.y, food.color, 5);
           foodEaten = true;
           return false;
         }
@@ -1454,7 +1527,7 @@ const SnakeGame = ({ user, onLogout }) => {
           game.currentStars += 1;
           setCurrentLevelStars(prev => prev + 1);
           setTotalStars(prev => prev + 1);
-          createParticle(star.x, star.y, '#FFD700', 20);
+          createParticle(star.x, star.y, '#FFD700', 8);
           starCollected = true;
           return false; // Remove star
         }
@@ -1949,7 +2022,7 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-      
+
       // Draw enemy positions on minimap as colored dots
       game.enemies.forEach(enemy => {
         if (enemy.segments && enemy.segments.length > 0) {
@@ -1964,33 +2037,32 @@ const SnakeGame = ({ user, onLogout }) => {
           ctx.beginPath();
           ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
           ctx.fill();
-          ctx.shadowBlur = 0;
+      ctx.shadowBlur = 0;
         }
       });
       
       // Shop hint (only on desktop, not mobile)
       if (!isMobile) {
-        ctx.fillStyle = '#ff00ff';
-        ctx.font = 'bold 14px monospace';
-        ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
-        
-        // Cannon hint (if cannon is equipped)
-        if (cannonLevel > 0) {
-          ctx.fillStyle = '#ffff00';
-          ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
+      ctx.fillStyle = '#ff00ff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+      
+      // Cannon hint (if cannon is equipped)
+      if (cannonLevel > 0) {
+        ctx.fillStyle = '#ffff00';
+        ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
         }
       }
     };
 
     const gameLoop = (currentTime) => {
-      // Calculate delta time
-      const deltaTime = currentTime - lastTime;
-      lastTime = currentTime;
+      // IMPORTANTE: No continuar si el juego no está en estado 'playing'
+      if (gameState !== 'playing') {
+        return; // Detener el loop
+      }
       
-      // Cap delta time to prevent large jumps (e.g., when tab is inactive)
-      const cappedDeltaTime = Math.min(deltaTime, FRAME_TIME * 3); // Max 3 frames worth
-      
-      update(cappedDeltaTime);
+      // Usamos un timestep fijo para velocidad consistente
+      update(FRAME_TIME);
       draw();
       animationId = requestAnimationFrame(gameLoop);
     };
@@ -2002,12 +2074,20 @@ const SnakeGame = ({ user, onLogout }) => {
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
       canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
       canvas.addEventListener('touchcancel', handleJoystickEnd, { passive: false });
-      window.addEventListener('keydown', handleKeyPress);
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
       lastTime = performance.now(); // Initialize time tracking
       gameLoop(performance.now());
     }
 
+    // Un solo cleanup que maneja todo
     return () => {
+      // CRÍTICO: Cancelar el animationFrame para evitar múltiples loops
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      
+      // Limpiar event listeners
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.removeEventListener('mousemove', handleMouseMove);
@@ -2016,10 +2096,17 @@ const SnakeGame = ({ user, onLogout }) => {
         canvas.removeEventListener('touchend', handleJoystickEnd);
         canvas.removeEventListener('touchcancel', handleJoystickEnd);
       }
-      window.removeEventListener('keydown', handleKeyPress);
-      if (animationId) cancelAnimationFrame(animationId);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      
+      // Limpiar auto-fire
+      isShootingRef.current = false;
+      if (shootingIntervalRef.current) {
+        clearTimeout(shootingIntervalRef.current);
+        shootingIntervalRef.current = null;
+      }
     };
-  }, [gameState, shieldLevel, headLevel, cannonLevel, totalXP, shopOpen]);
+  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen]); // Quitado totalXP de las dependencias
 
   const startGame = () => {
     gameRef.current.level = level;
@@ -2419,7 +2506,7 @@ const SnakeGame = ({ user, onLogout }) => {
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between',
-            alignItems: 'center',
+            alignItems: 'center', 
             width: '100%'
           }}>
             <div style={{ 
@@ -2427,51 +2514,51 @@ const SnakeGame = ({ user, onLogout }) => {
               gap: '8px', 
               alignItems: 'center', 
               flexWrap: 'wrap'
-            }}>
-              {shieldLevel > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                  <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
-                </div>
-              )}
-              {headLevel > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                  <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                    {headLevel === 2 ? 'Doble' : 'Triple'}
-                  </span>
-                </div>
-              )}
-              {cannonLevel > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                  <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                    Cañón {cannonLevel === 2 ? 'x2' : ''}
-                  </span>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ff3366',
-                color: '#ff3366',
+          }}>
+            {shieldLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+              </div>
+            )}
+            {headLevel > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                  {headLevel === 2 ? 'Doble' : 'Triple'}
+                </span>
+              </div>
+            )}
+            {cannonLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
+                  Cañón {cannonLevel === 2 ? 'x2' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
                 padding: '4px 8px',
                 fontSize: '10px',
-                cursor: 'pointer',
+              cursor: 'pointer',
                 borderRadius: '3px',
                 transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
               Salir
-            </button>
+          </button>
           </div>
         </div>
       );
@@ -2543,11 +2630,11 @@ const SnakeGame = ({ user, onLogout }) => {
             </div>
           )}
         </div>
-        <div style={{ 
-          display: 'flex', 
+          <div style={{ 
+            display: 'flex', 
           gap: '12px', 
           alignItems: 'center'
-        }}>
+          }}>
             {shieldLevel > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
@@ -2570,28 +2657,28 @@ const SnakeGame = ({ user, onLogout }) => {
                 </span>
               </div>
             )}
-            <button
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ff3366',
-                color: '#ff3366',
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'transparent',
+            border: '1px solid #ff3366',
+            color: '#ff3366',
                 padding: '5px 10px',
                 fontSize: '11px',
-                cursor: 'pointer',
+            cursor: 'pointer',
                 borderRadius: '3px',
-                transition: 'all 0.3s',
+            transition: 'all 0.3s',
                 marginLeft: '10px'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'transparent';
+          }}
+        >
               Salir
-            </button>
+        </button>
           </div>
       </div>
     );
@@ -2636,12 +2723,12 @@ const SnakeGame = ({ user, onLogout }) => {
           justifyContent: 'center'
         }}>
           {/* Left side: Main action buttons */}
-          <div style={{ 
-            textAlign: 'center',
-            background: 'rgba(0, 0, 0, 0.7)',
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.7)',
             padding: '30px',
-            borderRadius: '10px',
-            border: '2px solid #33ffff',
+          borderRadius: '10px',
+          border: '2px solid #33ffff',
             boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
             width: isMobile ? '100%' : 'auto',
             minWidth: isMobile ? 'auto' : '400px',
@@ -2656,23 +2743,23 @@ const SnakeGame = ({ user, onLogout }) => {
               🐍 VIBORITA
             </h1>
             <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
-              Mueve el mouse/trackpad para controlar tu víbora<br/>
-              Come puntos brillantes para ganar XP<br/>
-              Evita chocar con otras serpientes
-            </p>
+            Mueve el mouse/trackpad para controlar tu víbora<br/>
+            Come puntos brillantes para ganar XP<br/>
+            Evita chocar con otras serpientes
+          </p>
             <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
-              <button 
-                onClick={startGame}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #33ffff',
-                  color: '#33ffff',
-                  padding: '15px 40px',
+          <button 
+            onClick={startGame}
+            style={{
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '15px 40px',
                   fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #33ffff',
-                  boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #33ffff',
+              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
                   flex: 1,
                   transition: 'all 0.3s'
                 }}
@@ -2681,21 +2768,21 @@ const SnakeGame = ({ user, onLogout }) => {
                 }}
                 onMouseLeave={(e) => {
                   e.target.style.background = 'transparent';
-                }}
-              >
-                JUGAR
-              </button>
-              <button 
-                onClick={() => setGameState('shop')}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #ff00ff',
-                  color: '#ff00ff',
-                  padding: '15px 40px',
+            }}
+          >
+            JUGAR
+          </button>
+          <button 
+            onClick={() => setGameState('shop')}
+            style={{
+              background: 'transparent',
+              border: '2px solid #ff00ff',
+              color: '#ff00ff',
+              padding: '15px 40px',
                   fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #ff00ff',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #ff00ff',
                   boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
                   flex: 1,
                   transition: 'all 0.3s'
@@ -2705,10 +2792,10 @@ const SnakeGame = ({ user, onLogout }) => {
                 }}
                 onMouseLeave={(e) => {
                   e.target.style.background = 'transparent';
-                }}
-              >
-                TIENDA
-              </button>
+            }}
+          >
+            TIENDA
+          </button>
             </div>
           </div>
 
@@ -2843,37 +2930,37 @@ const SnakeGame = ({ user, onLogout }) => {
                     ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
+                  {next ? (
+                    <>
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-                        <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
-                            border: '2px solid #6495ed',
-                            color: '#6495ed',
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #6495ed',
+                          color: '#6495ed',
                             padding: '8px 16px',
                             fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
                             marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-                        </button>
-                      </>
-                    ) : (
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
                       <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
+                      Nivel Máximo
+                    </p>
+                  )}
                   </div>
                 </div>
               );
@@ -2899,37 +2986,37 @@ const SnakeGame = ({ user, onLogout }) => {
                     IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
+                  {next ? (
+                    <>
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-                        <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
-                            border: '2px solid #00ff88',
-                            color: '#00ff88',
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #00ff88',
+                          color: '#00ff88',
                             padding: '8px 16px',
                             fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
                             marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-                        </button>
-                      </>
-                    ) : (
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
                       <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
+                      Nivel Máximo
+                    </p>
+                  )}
                   </div>
                 </div>
               );
@@ -2955,37 +3042,37 @@ const SnakeGame = ({ user, onLogout }) => {
                     CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
+                  {next ? (
+                    <>
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-                        <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
-                            border: '2px solid #ffff00',
-                            color: '#ffff00',
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #ffff00',
+                          color: '#ffff00',
                             padding: '8px 16px',
                             fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
                             marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-                        </button>
-                      </>
-                    ) : (
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
                       <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
+                      Nivel Máximo
+                    </p>
+                  )}
                   </div>
                 </div>
               );
@@ -3011,37 +3098,37 @@ const SnakeGame = ({ user, onLogout }) => {
                     VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
+                  {next ? (
+                    <>
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-                        <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
-                            border: '2px solid #ff3366',
-                            color: '#ff3366',
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #ff3366',
+                          color: '#ff3366',
                             padding: '8px 16px',
                             fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
                             marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-                        </button>
-                      </>
-                    ) : (
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
                       <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
+                      Nivel Máximo
+                    </p>
+                  )}
                   </div>
                 </div>
               );
@@ -3074,11 +3161,11 @@ const SnakeGame = ({ user, onLogout }) => {
                           {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                           {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                         </p>
-                        <button 
+          <button 
                           onClick={() => buyItem(next.item)}
                           disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
+            style={{
+              background: 'transparent',
                             border: '2px solid #00ff00',
                             color: '#00ff00',
                             padding: '8px 16px',
@@ -3091,7 +3178,7 @@ const SnakeGame = ({ user, onLogout }) => {
                           }}
                         >
                           COMPRAR NIVEL {next.level}
-                        </button>
+          </button>
                       </>
                     ) : (
                       <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
@@ -3116,74 +3203,74 @@ const SnakeGame = ({ user, onLogout }) => {
           alignItems: 'flex-start'
         }}>
           {/* Left side: Level complete info */}
-          <div style={{ 
-            textAlign: 'center',
-            background: 'rgba(0, 0, 0, 0.9)',
-            padding: '40px',
-            borderRadius: '10px',
-            border: '2px solid #00ff88',
-            boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.9)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #00ff88',
+          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
             zIndex: 100,
             flex: '0 0 400px'
-          }}>
-            <Sparkles size={64} style={{ color: '#00ff88' }} />
-            <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
-              ¡NIVEL COMPLETADO!
-            </h2>
-            <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
-            <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
+        }}>
+          <Sparkles size={64} style={{ color: '#00ff88' }} />
+          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
+            ¡NIVEL COMPLETADO!
+          </h2>
+          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
+          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <button 
-                onClick={nextLevel}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #00ff88',
-                  color: '#00ff88',
-                  padding: '15px 40px',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #00ff88',
-                  boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
+          <button 
+            onClick={nextLevel}
+            style={{
+              background: 'transparent',
+              border: '2px solid #00ff88',
+              color: '#00ff88',
+              padding: '15px 40px',
+                fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #00ff88',
+                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
                   transition: 'all 0.3s',
                   width: '100%'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(0, 255, 136, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                }}
-              >
-                SIGUIENTE NIVEL
-              </button>
-              <button 
-                onClick={() => {
-                  setGameState('playing');
-                  setShopOpen(true);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #ff00ff',
-                  color: '#ff00ff',
-                  padding: '15px 40px',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #ff00ff',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+            }}
+          >
+            SIGUIENTE NIVEL
+          </button>
+            <button 
+              onClick={() => {
+                setGameState('playing');
+                setShopOpen(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #ff00ff',
+                color: '#ff00ff',
+                padding: '15px 40px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #ff00ff',
+                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
                   transition: 'all 0.3s',
                   width: '100%'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 0, 255, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                }}
-              >
-                IR A LA TIENDA
-              </button>
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              IR A LA TIENDA
+          </button>
             </div>
           </div>
 
@@ -3378,15 +3465,20 @@ const SnakeGame = ({ user, onLogout }) => {
               {cannonLevel > 0 && (
                 <button
                   onTouchStart={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
-                    if (shootBulletRef.current) {
-                      shootBulletRef.current();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
                     }
                   }}
                   onTouchEnd={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onTouchCancel={(e) => {
+                    e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
                   }}
                   style={{
                     position: 'absolute',
@@ -3404,7 +3496,7 @@ const SnakeGame = ({ user, onLogout }) => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    touchAction: 'manipulation',
+                    touchAction: 'none',
                     WebkitTapHighlightColor: 'transparent',
                     userSelect: 'none',
                     transition: 'all 0.1s ease',
@@ -3413,11 +3505,20 @@ const SnakeGame = ({ user, onLogout }) => {
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    if (shootBulletRef.current) {
-                      shootBulletRef.current();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
                     }
                   }}
-                  title="Disparar"
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onMouseLeave={(e) => {
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  title="Disparar (mantener para auto-fire)"
                 />
               )}
             </>
@@ -3452,10 +3553,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('shield');
                   const currentLevel = shieldLevel;
                   return (
-                    <div style={{ 
-                      border: '2px solid #6495ed', 
+                <div style={{ 
+                  border: '2px solid #6495ed', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3470,24 +3571,24 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
-                              border: '2px solid #6495ed',
-                              color: '#6495ed',
+                    style={{
+                      background: 'transparent',
+                      border: '2px solid #6495ed',
+                      color: '#6495ed',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
@@ -3521,31 +3622,31 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #00ff88',
                               color: '#00ff88',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -3554,10 +3655,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('cannon');
                   const currentLevel = cannonLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #ffff00', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3572,31 +3673,31 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #ffff00',
                               color: '#ffff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -3605,10 +3706,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('speed');
                   const currentLevel = speedLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #ff3366', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3623,24 +3724,24 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #ff3366',
                               color: '#ff3366',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
@@ -3698,7 +3799,7 @@ const SnakeGame = ({ user, onLogout }) => {
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
               </div>
