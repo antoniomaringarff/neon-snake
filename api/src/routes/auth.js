@@ -62,7 +62,7 @@ export default async function authRoutes(fastify, options) {
     try {
       // Find user by username or email
       const result = await query(
-        'SELECT id, username, email, password_hash, COALESCE(total_xp, 0) as total_xp, COALESCE(total_stars, 0) as total_stars, COALESCE(is_banned, false) as is_banned FROM users WHERE username = $1 OR email = $1',
+        'SELECT id, username, email, password_hash, COALESCE(total_xp, 0) as total_xp, COALESCE(total_stars, 0) as total_stars, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin FROM users WHERE username = $1 OR email = $1',
         [username]
       );
 
@@ -87,11 +87,6 @@ export default async function authRoutes(fastify, options) {
         return reply.code(401).send({ error: 'Invalid credentials' });
       }
 
-      // Check if user is admin
-      const adminList = process.env.ADMIN_USER_LIST || '';
-      const admins = adminList.split(',').map(u => u.trim().toLowerCase());
-      const isAdmin = admins.includes(user.username.toLowerCase());
-
       // Generate JWT
       const token = fastify.jwt.sign({ 
         id: user.id, 
@@ -107,7 +102,7 @@ export default async function authRoutes(fastify, options) {
           totalStars: user.total_stars || 0
         },
         token,
-        isAdmin,
+        isAdmin: user.is_admin || false,
         isBanned: false
       };
     } catch (error) {
@@ -127,7 +122,7 @@ export default async function authRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const result = await query(
-        'SELECT id, username, email, total_xp, created_at, COALESCE(is_banned, false) as is_banned FROM users WHERE id = $1',
+        'SELECT id, username, email, total_xp, created_at, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin FROM users WHERE id = $1',
         [request.user.id]
       );
 
@@ -137,11 +132,6 @@ export default async function authRoutes(fastify, options) {
 
       const user = result.rows[0];
 
-      // Check if user is admin
-      const adminList = process.env.ADMIN_USER_LIST || '';
-      const admins = adminList.split(',').map(u => u.trim().toLowerCase());
-      const isAdmin = admins.includes(user.username.toLowerCase());
-
       return {
         id: user.id,
         username: user.username,
@@ -149,7 +139,7 @@ export default async function authRoutes(fastify, options) {
         totalXp: user.total_xp,
         createdAt: user.created_at,
         isBanned: user.is_banned || false,
-        isAdmin
+        isAdmin: user.is_admin || false
       };
     } catch (error) {
       throw error;

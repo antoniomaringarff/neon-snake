@@ -323,6 +323,7 @@ const AdminPanel = ({ onClose }) => {
                       <th style={{ padding: '10px', textAlign: 'left' }}>Mejor Score</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Nivel</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Estado</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Admin</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Acciones</th>
                     </tr>
                   </thead>
@@ -337,6 +338,11 @@ const AdminPanel = ({ onClose }) => {
                         <td style={{ padding: '10px' }}>
                           <span style={{ color: user.isBanned ? '#ff3366' : '#00ff00' }}>
                             {user.isBanned ? 'Baneado' : 'Activo'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          <span style={{ color: user.isAdmin ? '#33ffff' : '#888' }}>
+                            {user.isAdmin ? 'Sí' : 'No'}
                           </span>
                         </td>
                         <td style={{ padding: '10px' }}>
@@ -444,7 +450,7 @@ const AdminPanel = ({ onClose }) => {
                         max={10}
                       />
                     </div>
-                    <div style={{ marginTop: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ marginTop: '20px', display: 'flex', gap: '20px', alignItems: 'center' }}>
                       <label style={{ color: '#33ffff', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <input
                           type="checkbox"
@@ -453,6 +459,15 @@ const AdminPanel = ({ onClose }) => {
                           style={{ width: '20px', height: '20px' }}
                         />
                         Baneado
+                      </label>
+                      <label style={{ color: '#33ffff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={editingUser.isAdmin}
+                          onChange={(e) => setEditingUser({ ...editingUser, isAdmin: e.target.checked })}
+                          style={{ width: '20px', height: '20px' }}
+                        />
+                        Administrador
                       </label>
                     </div>
                     <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>

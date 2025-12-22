@@ -1,22 +1,21 @@
 import { query } from '../config/database.js';
 
-// Helper function to check if user is admin
-const isAdmin = (username) => {
-  const adminList = process.env.ADMIN_USER_LIST || '';
-  const admins = adminList.split(',').map(u => u.trim().toLowerCase());
-  return admins.includes(username.toLowerCase());
-};
-
 // Middleware to verify admin access
 const verifyAdmin = async (request, reply) => {
   try {
     await request.jwtVerify();
     
-    if (!request.user || !request.user.username) {
+    if (!request.user || !request.user.id) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }
 
-    if (!isAdmin(request.user.username)) {
+    // Check if user is admin from database
+    const result = await query(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [request.user.id]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].is_admin) {
       return reply.code(403).send({ error: 'Forbidden: Admin access required' });
     }
   } catch (err) {
@@ -29,8 +28,21 @@ export default async function adminRoutes(fastify, options) {
   fastify.get('/check', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const username = request.user?.username || '';
-    return { isAdmin: isAdmin(username) };
+    try {
+      const result = await query(
+        'SELECT is_admin FROM users WHERE id = $1',
+        [request.user.id]
+      );
+
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+
+      return { isAdmin: result.rows[0].is_admin || false };
+    } catch (error) {
+      fastify.log.error(error);
+      throw error;
+    }
   });
 
   // Get all users with their stats
@@ -46,6 +58,7 @@ export default async function adminRoutes(fastify, options) {
           u.total_xp,
           COALESCE(u.total_stars, 0) as total_stars,
           u.is_banned,
+          u.is_admin,
           u.created_at,
           l.best_score,
           l.highest_level,
@@ -93,7 +106,7 @@ export default async function adminRoutes(fastify, options) {
     onRequest: [verifyAdmin]
   }, async (request, reply) => {
     const { id } = request.params;
-    const {
+      const {
       totalXp,
       totalStars,
       bestScore,
@@ -104,7 +117,8 @@ export default async function adminRoutes(fastify, options) {
       speedLevel,
       bulletSpeedLevel,
       currentLevel,
-      isBanned
+      isBanned,
+      isAdmin
     } = request.body;
 
     try {
@@ -114,9 +128,10 @@ export default async function adminRoutes(fastify, options) {
          SET total_xp = COALESCE($1, total_xp),
              total_stars = COALESCE($2, total_stars),
              is_banned = COALESCE($3, is_banned),
+             is_admin = COALESCE($4, is_admin),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4`,
-        [totalXp, totalStars, isBanned, id]
+         WHERE id = $5`,
+        [totalXp, totalStars, isBanned, isAdmin, id]
       );
 
       // Update user_progress
