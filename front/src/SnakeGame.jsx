@@ -11,8 +11,8 @@ const getLevelConfig = (level) => {
     playerSpeed: 2 + (level * 0.1),
     // Velocidad base de los enemigos
     enemySpeed: 2 + (level * 0.15),
-    // Número de enemigos
-    enemyCount: 5 + Math.floor(level * 1.5),
+    // Número de enemigos (aumentado 25%)
+    enemyCount: Math.floor((5 + Math.floor(level * 1.5)) * 1.25),
     // Densidad de enemigos (para spawn)
     enemyDensity: 15 + (level * 2),
     // Porcentaje de enemigos que pueden disparar (0-100)
@@ -35,7 +35,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 1,
       playerSpeed: 2,
       enemySpeed: 2,
-      enemyCount: 3,
+      enemyCount: Math.floor(3 * 1.25), // 4
       enemyDensity: 15,
       enemyShootPercentage: 0,
       enemyShieldPercentage: 0,
@@ -48,7 +48,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.2,
       enemySpeed: 2.3,
-      enemyCount: 5,
+      enemyCount: Math.floor(5 * 1.25), // 6
       enemyDensity: 18,
       enemyShootPercentage: 10,
       enemyShieldPercentage: 0,
@@ -61,7 +61,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.4,
       enemySpeed: 2.6,
-      enemyCount: 7,
+      enemyCount: Math.floor(7 * 1.25), // 9
       enemyDensity: 21,
       enemyShootPercentage: 20,
       enemyShieldPercentage: 5,
@@ -74,7 +74,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.6,
       enemySpeed: 2.9,
-      enemyCount: 9,
+      enemyCount: Math.floor(9 * 1.25), // 11
       enemyDensity: 24,
       enemyShootPercentage: 30,
       enemyShieldPercentage: 10,
@@ -87,7 +87,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.8,
       enemySpeed: 3.2,
-      enemyCount: 11,
+      enemyCount: Math.floor(11 * 1.25), // 14
       enemyDensity: 27,
       enemyShootPercentage: 40,
       enemyShieldPercentage: 15,
@@ -129,6 +129,7 @@ const SnakeGame = ({ user, onLogout }) => {
   const [magnetLevel, setMagnetLevel] = useState(0); // 0 = none, 1-5 = 10%, 20%, 30%, 40%, 50%
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
   const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
+  const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0 = none, 1-10 = x2, x4, x8, x16, x32, x64, x128, x256, x512, x1024
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -250,6 +251,7 @@ const SnakeGame = ({ user, onLogout }) => {
       setMagnetLevel(data.magnetLevel || 0);
       setCannonLevel(data.cannonLevel || 0);
       setSpeedLevel(data.speedLevel || 0);
+      setBulletSpeedLevel(data.bulletSpeedLevel || 0);
       setHeadLevel(data.headLevel || 1);
       gameRef.current.level = data.currentLevel || 1;
       
@@ -274,6 +276,7 @@ const SnakeGame = ({ user, onLogout }) => {
           magnetLevel,
           cannonLevel,
           speedLevel,
+          bulletSpeedLevel,
           currentLevel: level,
           totalXp: totalXP,
           totalStars: totalStars
@@ -343,7 +346,7 @@ const SnakeGame = ({ user, onLogout }) => {
     }, 2000); // Save 2 seconds after last change
 
     return () => clearTimeout(timeoutId);
-  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel]);
+  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel]);
 
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 600;
@@ -653,6 +656,11 @@ const SnakeGame = ({ user, onLogout }) => {
       // Level 4: 2 bullets from head + 2 from tail (double cannon tail)
       // Level 5: Same as 4 but faster (2 shots/sec)
       
+      // Calculate bullet speed multiplier (2^bulletSpeedLevel)
+      const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
+      const baseBulletSpeed = 8;
+      const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+      
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
         const headBulletCount = cannonLevel >= 2 ? 2 : 1;
@@ -661,8 +669,8 @@ const SnakeGame = ({ user, onLogout }) => {
           game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
-            vx: game.direction.x * 8,
-            vy: game.direction.y * 8,
+            vx: game.direction.x * bulletSpeed,
+            vy: game.direction.y * bulletSpeed,
             life: 100,
             owner: 'player'
           });
@@ -682,8 +690,8 @@ const SnakeGame = ({ user, onLogout }) => {
           game.bullets.push({
             x: tail.x + Math.cos(tailPerpAngle) * offset,
             y: tail.y + Math.sin(tailPerpAngle) * offset,
-            vx: tailDir.x * 8,
-            vy: tailDir.y * 8,
+            vx: tailDir.x * bulletSpeed,
+            vy: tailDir.y * bulletSpeed,
             life: 100,
             owner: 'player'
           });
@@ -2158,6 +2166,8 @@ const SnakeGame = ({ user, onLogout }) => {
         setCannonLevel(level);
       } else if (type === 'speed') {
         setSpeedLevel(level);
+      } else if (type === 'bullet_speed') {
+        setBulletSpeedLevel(level);
       } else if (type === 'head') {
         setHeadLevel(level);
       }
@@ -2186,6 +2196,8 @@ const SnakeGame = ({ user, onLogout }) => {
       currentLevel = cannonLevel;
     } else if (type === 'speed') {
       currentLevel = speedLevel;
+    } else if (type === 'bullet_speed') {
+      currentLevel = bulletSpeedLevel;
     } else if (type === 'head') {
       currentLevel = headLevel;
     }
@@ -2854,6 +2866,57 @@ const SnakeGame = ({ user, onLogout }) => {
                 </div>
               );
             })()}
+
+            {/* Velocidad de Bala */}
+            {(() => {
+              const next = getNextUpgrade('bullet_speed');
+              const currentLevel = bulletSpeedLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #00ff00', 
+                  padding: '20px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                  minWidth: '220px'
+                }}>
+                  <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                    VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  {next ? (
+                    <>
+                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #00ff00',
+                          color: '#00ff00',
+                          padding: '10px 20px',
+                          fontSize: '16px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                          marginTop: '10px'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <button 
@@ -3084,131 +3147,136 @@ const SnakeGame = ({ user, onLogout }) => {
             }}
           />
           
-          {/* Mobile Controls */}
+          {/* Botones móviles */}
           {isMobile && gameState === 'playing' && (
             <>
-              {/* Joystick - Bottom Right */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: '20px',
-                  right: '20px',
-                  width: '120px',
-                  height: '120px',
-                  pointerEvents: 'none',
-                  zIndex: 100
-                }}
-              >
-                {/* Joystick Base */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '120px',
-                    height: '120px',
-                    borderRadius: '50%',
-                    background: 'rgba(51, 255, 255, 0.2)',
-                    border: '2px solid rgba(51, 255, 255, 0.5)',
-                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.3)',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                />
-                {/* Joystick Handle */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '50px',
-                    height: '50px',
-                    borderRadius: '50%',
-                    background: joystickActive 
-                      ? 'rgba(51, 255, 255, 0.9)' 
-                      : 'rgba(51, 255, 255, 0.4)',
-                    border: '2px solid #33ffff',
-                    boxShadow: joystickActive 
-                      ? '0 0 20px rgba(51, 255, 255, 0.8)' 
-                      : '0 0 10px rgba(51, 255, 255, 0.4)',
-                    left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.x * 35}px`
-                      : '50%',
-                    top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.y * 35}px`
-                      : '50%',
-                    transform: 'translate(-50%, -50%)',
-                    transition: joystickActive ? 'none' : 'all 0.2s ease-out',
-                    pointerEvents: 'none'
-                  }}
-                />
-              </div>
-
-              {/* Shoot Button - Bottom Left */}
+              {/* Botón de disparo - Abajo a la derecha */}
               {cannonLevel > 0 && (
                 <button
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (shootBulletRef.current) {
-                      shootBulletRef.current();
+                  onClick={() => {
+                    const game = gameRef.current;
+                    if (!game.snake || game.snake.length === 0) return;
+                    
+                    const currentTime = Date.now();
+                    const cooldown = cannonLevel === 5 ? 500 : 1000;
+                    
+                    if (currentTime - game.lastPlayerShot < cooldown) {
+                      return;
                     }
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    
+                    game.lastPlayerShot = currentTime;
+                    
+                    const head = game.snake[0];
+                    const tail = game.snake.length > 1 ? game.snake[game.snake.length - 1] : null;
+                    
+                    const headAngle = Math.atan2(game.direction.y, game.direction.x);
+                    const headPerpAngle = headAngle + Math.PI / 2;
+                    
+                    let tailAngle = 0;
+                    let tailPerpAngle = 0;
+                    if (tail) {
+                      const tailDx = head.x - tail.x;
+                      const tailDy = head.y - tail.y;
+                      const tailDist = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
+                      if (tailDist > 0) {
+                        tailAngle = Math.atan2(tailDy, tailDx);
+                        tailPerpAngle = tailAngle + Math.PI / 2;
+                      }
+                    }
+                    
+                    // Calculate bullet speed multiplier (2^bulletSpeedLevel)
+                    const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
+                    const baseBulletSpeed = 8;
+                    const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+                    
+                    if (cannonLevel >= 1) {
+                      const headBulletCount = cannonLevel >= 2 ? 2 : 1;
+                      for (let i = 0; i < headBulletCount; i++) {
+                        const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
+                        game.bullets.push({
+                          x: head.x + Math.cos(headPerpAngle) * offset,
+                          y: head.y + Math.sin(headPerpAngle) * offset,
+                          vx: game.direction.x * bulletSpeed,
+                          vy: game.direction.y * bulletSpeed,
+                          life: 100,
+                          owner: 'player'
+                        });
+                      }
+                    }
+                    
+                    if (cannonLevel >= 3 && tail) {
+                      const tailBulletCount = cannonLevel >= 4 ? 2 : 1;
+                      const tailDir = {
+                        x: -game.direction.x,
+                        y: -game.direction.y
+                      };
+                      
+                      for (let i = 0; i < tailBulletCount; i++) {
+                        const offset = tailBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
+                        game.bullets.push({
+                          x: tail.x + Math.cos(tailPerpAngle) * offset,
+                          y: tail.y + Math.sin(tailPerpAngle) * offset,
+                          vx: tailDir.x * bulletSpeed,
+                          vy: tailDir.y * bulletSpeed,
+                          life: 100,
+                          owner: 'player'
+                        });
+                      }
+                    }
                   }}
                   style={{
                     position: 'absolute',
-                    bottom: '25px',
-                    left: '25px',
-                    width: '60px',
-                    height: '60px',
+                    bottom: '20px',
+                    right: '20px',
+                    width: '70px',
+                    height: '70px',
                     borderRadius: '50%',
-                    background: 'rgba(255, 51, 102, 0.6)',
-                    border: '2px solid rgba(255, 51, 102, 0.8)',
-                    color: '#fff',
+                    background: 'rgba(0, 170, 255, 0.3)',
+                    border: '3px solid #00aaff',
+                    color: '#00aaff',
+                    fontSize: '32px',
+                    fontWeight: 'bold',
                     cursor: 'pointer',
-                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
-                    zIndex: 100,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    boxShadow: '0 0 20px rgba(0, 170, 255, 0.6)',
+                    zIndex: 999,
                     touchAction: 'manipulation',
                     WebkitTapHighlightColor: 'transparent',
                     userSelect: 'none',
-                    transition: 'all 0.1s ease',
-                    fontSize: '0',
-                    padding: '0'
+                    padding: 0
                   }}
-                  onMouseDown={(e) => {
+                  onTouchStart={(e) => {
                     e.preventDefault();
-                    if (shootBulletRef.current) {
-                      shootBulletRef.current();
-                    }
+                    e.stopPropagation();
                   }}
-                  title="Disparar"
-                />
+                >
+                  🔫
+                </button>
               )}
               
-              {/* Shop Button - Top Left */}
+              {/* Botón de tienda - Abajo a la izquierda */}
               <button
                 onClick={() => setShopOpen(prev => !prev)}
                 style={{
                   position: 'absolute',
-                  top: '20px',
+                  bottom: '20px',
                   left: '20px',
-                  width: '50px',
-                  height: '50px',
+                  width: '70px',
+                  height: '70px',
                   borderRadius: '50%',
                   background: 'rgba(255, 0, 255, 0.3)',
-                  border: '2px solid #ff00ff',
+                  border: '3px solid #ff00ff',
                   color: '#ff00ff',
-                  fontSize: '20px',
+                  fontSize: '32px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 0 15px rgba(255, 0, 255, 0.4)',
-                  zIndex: 100,
+                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.6)',
+                  zIndex: 999,
                   touchAction: 'manipulation',
                   WebkitTapHighlightColor: 'transparent',
                   userSelect: 'none',
@@ -3431,6 +3499,57 @@ const SnakeGame = ({ user, onLogout }) => {
                               background: 'transparent',
                               border: '2px solid #ff3366',
                               color: '#ff3366',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                              borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                              width: '100%',
+                              marginTop: '10px'
+                            }}
+                          >
+                            COMPRAR NIVEL {next.level}
+                          </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Velocidad de Bala */}
+                {(() => {
+                  const next = getNextUpgrade('bullet_speed');
+                  const currentLevel = bulletSpeedLevel;
+                  return (
+                    <div style={{ 
+                      border: '2px solid #00ff00', 
+                      padding: '20px', 
+                      borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                            style={{
+                              background: 'transparent',
+                              border: '2px solid #00ff00',
+                              color: '#00ff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
