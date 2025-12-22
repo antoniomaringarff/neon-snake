@@ -11,8 +11,8 @@ const getLevelConfig = (level) => {
     playerSpeed: 2 + (level * 0.1),
     // Velocidad base de los enemigos
     enemySpeed: 2 + (level * 0.15),
-    // Número de enemigos (aumentado 25%)
-    enemyCount: Math.floor((5 + Math.floor(level * 1.5)) * 1.25),
+    // Número de enemigos: nivel 1 = 5, nivel 2 = 10, luego +3 por nivel
+    enemyCount: level === 1 ? 5 : level === 2 ? 10 : 10 + (level - 2) * 3,
     // Densidad de enemigos (para spawn)
     enemyDensity: 15 + (level * 2),
     // Porcentaje de enemigos que pueden disparar (0-100)
@@ -35,7 +35,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 1,
       playerSpeed: 2,
       enemySpeed: 2,
-      enemyCount: Math.floor(3 * 1.25), // 4
+      enemyCount: 5, // Mínimo 5 enemigos en nivel 1
       enemyDensity: 15,
       enemyShootPercentage: 0,
       enemyShieldPercentage: 0,
@@ -48,7 +48,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.2,
       enemySpeed: 2.3,
-      enemyCount: Math.floor(5 * 1.25), // 6
+      enemyCount: 10, // Mínimo 10 enemigos en nivel 2
       enemyDensity: 18,
       enemyShootPercentage: 10,
       enemyShieldPercentage: 0,
@@ -61,7 +61,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.4,
       enemySpeed: 2.6,
-      enemyCount: Math.floor(7 * 1.25), // 9
+      enemyCount: 13, // 10 + 3
       enemyDensity: 21,
       enemyShootPercentage: 20,
       enemyShieldPercentage: 5,
@@ -74,7 +74,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.6,
       enemySpeed: 2.9,
-      enemyCount: Math.floor(9 * 1.25), // 11
+      enemyCount: 16, // 13 + 3
       enemyDensity: 24,
       enemyShootPercentage: 30,
       enemyShieldPercentage: 10,
@@ -87,7 +87,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.8,
       enemySpeed: 3.2,
-      enemyCount: Math.floor(11 * 1.25), // 14
+      enemyCount: 19, // 16 + 3
       enemyDensity: 27,
       enemyShootPercentage: 40,
       enemyShieldPercentage: 15,
@@ -462,6 +462,7 @@ const SnakeGame = ({ user, onLogout }) => {
       game.food = Array.from({ length: levelConfig.xpDensity }, createFood);
       game.stars = []; // Reset stars
       game.enemies = Array.from({ length: levelConfig.enemyCount }, () => createEnemy(levelConfig));
+      console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos`);
       game.particles = [];
       game.currentXP = 0;
       game.currentStars = 0;
@@ -1768,7 +1769,14 @@ const SnakeGame = ({ user, onLogout }) => {
       });
 
       // Draw enemies
+      if (!game.enemies || game.enemies.length === 0) {
+        console.warn('⚠️ No hay enemigos para dibujar');
+      }
       game.enemies.forEach(enemy => {
+        if (!enemy.segments || enemy.segments.length === 0) {
+          console.warn('⚠️ Enemigo sin segmentos:', enemy);
+          return;
+        }
         enemy.segments.forEach((seg, i) => {
           const screenX = seg.x - camX;
           const screenY = seg.y - camY;
@@ -1946,15 +1954,13 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.fillStyle = '#FFD700';
       ctx.fillText(`⭐: ${totalStars}`, CANVAS_WIDTH - 200, 40);
       
-      // Shop hint (only on desktop)
-      if (!isMobile) {
-        ctx.fillStyle = '#ff00ff';
-        ctx.font = 'bold 14px monospace';
-        ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
-      }
+      // Shop hint
+      ctx.fillStyle = '#ff00ff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
       
-      // Cannon hint (if cannon is equipped, only on desktop)
-      if (!isMobile && cannonLevel > 0) {
+      // Cannon hint (if cannon is equipped)
+      if (cannonLevel > 0) {
         ctx.fillStyle = '#ffff00';
         ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
       }
@@ -2124,6 +2130,7 @@ const SnakeGame = ({ user, onLogout }) => {
     game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
       return createEnemy(levelConfig);
     });
+    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos`);
     game.particles = [];
     game.stars = []; // Reset stars
     game.currentXP = 0;
@@ -2259,69 +2266,18 @@ const SnakeGame = ({ user, onLogout }) => {
   // Header component with user info
   const UserHeader = () => {
     const game = gameRef.current;
+    const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
-    // Compact styles
-    const headerPadding = isMobile ? '4px 8px' : '6px 12px';
-    const fontSize = isMobile ? '11px' : '13px';
-    const iconSize = isMobile ? 12 : 14;
-    const iconTextSize = isMobile ? '9px' : '11px';
+    // Mobile styles
+    const headerPadding = isMobile ? '8px 10px' : '15px 20px';
+    const labelFontSize = isMobile ? '8px' : '11px';
+    const valueFontSize = isMobile ? '12px' : '16px';
+    const gap = isMobile ? '8px' : '30px';
+    const iconSize = isMobile ? 14 : 18;
+    const iconTextSize = isMobile ? '10px' : '12px';
     
-    // During gameplay: show only compact game info
-    if (gameState === 'playing') {
-      return (
-        <div style={{
-          width: '100%',
-          background: 'rgba(0, 0, 0, 0.95)',
-          borderBottom: '1px solid #33ffff',
-          padding: headerPadding,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
-          zIndex: 1000
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            gap: isMobile ? '12px' : '20px', 
-            alignItems: 'center'
-          }}>
-            <span style={{ fontSize, color: '#33ffff', fontWeight: 'bold' }}>
-              Nivel {game.level}
-            </span>
-            <span style={{ fontSize, color: '#33ffff' }}>
-              XP: {currentLevelXP}
-            </span>
-            <span style={{ fontSize, color: '#FFD700' }}>
-              ⭐ {currentLevelStars} / {game.starsNeeded}
-            </span>
-          </div>
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-              padding: isMobile ? '4px 8px' : '5px 10px',
-              fontSize: isMobile ? '9px' : '11px',
-              cursor: 'pointer',
-              borderRadius: '3px',
-              transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            Salir
-          </button>
-        </div>
-      );
-    }
-    
-    // When not playing: show full info
     if (isMobile) {
+      // Mobile layout: column
       return (
         <div style={{
           width: '100%',
@@ -2332,40 +2288,62 @@ const SnakeGame = ({ user, onLogout }) => {
           flexDirection: 'column',
           boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
           zIndex: 1000,
-          gap: '6px'
+          gap: '8px'
         }}>
           <div style={{ 
             display: 'flex', 
-            gap: '12px', 
+            gap: gap, 
             alignItems: 'center', 
             flexWrap: 'wrap',
             width: '100%'
           }}>
             <div>
-              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>Usuario</div>
-              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {user?.username || 'Usuario'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>XP Total</div>
-              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {totalXP}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>⭐ Total</div>
-              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#FFD700' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
                 {totalStars}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>Nivel</div>
-              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {level}
               </div>
             </div>
           </div>
+          {gameState === 'playing' && (
+            <div style={{ width: '100%' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
+                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255, 215, 0, 0.2)',
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
+                  height: '100%',
+                  background: '#FFD700',
+                  boxShadow: '0 0 10px #FFD700',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+            </div>
+          )}
           <div style={{ 
             display: 'flex', 
             gap: '8px', 
@@ -2396,34 +2374,33 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
-            <button
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ff3366',
-                color: '#ff3366',
-                padding: '4px 8px',
-                fontSize: '9px',
-                cursor: 'pointer',
-                borderRadius: '3px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              Salir
-            </button>
-          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+              padding: '6px 12px',
+              fontSize: '11px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              transition: 'all 0.3s',
+              width: '100%'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Cerrar Sesión
+          </button>
         </div>
       );
     }
     
-    // Desktop layout when not playing
+    // Desktop layout: original horizontal design
     return (
       <div style={{
         width: '100%',
@@ -2438,48 +2415,70 @@ const SnakeGame = ({ user, onLogout }) => {
       }}>
         <div style={{ 
           display: 'flex', 
-          gap: '20px', 
+          gap: gap, 
           alignItems: 'center', 
           flex: 1
         }}>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>Usuario</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {user?.username || 'Usuario'}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>XP Total</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {totalXP}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>⭐ Total</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#FFD700' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
               {totalStars}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>Nivel</div>
-            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {level}
             </div>
           </div>
+          {gameState === 'playing' && (
+            <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
+                Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                background: 'rgba(255, 215, 0, 0.2)',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
+                  height: '100%',
+                  background: '#FFD700',
+                  boxShadow: '0 0 10px #FFD700',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+            </div>
+          )}
           <div style={{ 
             display: 'flex', 
-            gap: '12px', 
+            gap: '15px', 
             alignItems: 'center', 
             marginLeft: 'auto'
           }}>
             {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
                 <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
               </div>
             )}
             {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
                 <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
                   {headLevel === 2 ? 'Doble' : 'Triple'}
@@ -2487,7 +2486,7 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
             {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
                 <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
                   Cañón {cannonLevel === 2 ? 'x2' : ''}
@@ -2502,12 +2501,12 @@ const SnakeGame = ({ user, onLogout }) => {
             background: 'transparent',
             border: '1px solid #ff3366',
             color: '#ff3366',
-            padding: '5px 10px',
-            fontSize: '11px',
+            padding: '8px 16px',
+            fontSize: '14px',
             cursor: 'pointer',
-            borderRadius: '3px',
+            borderRadius: '5px',
             transition: 'all 0.3s',
-            marginLeft: '15px'
+            marginLeft: '20px'
           }}
           onMouseEnter={(e) => {
             e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -2516,7 +2515,7 @@ const SnakeGame = ({ user, onLogout }) => {
             e.target.style.background = 'transparent';
           }}
         >
-          Salir
+          Cerrar Sesión
         </button>
       </div>
     );
@@ -2678,19 +2677,49 @@ const SnakeGame = ({ user, onLogout }) => {
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.95)',
-          padding: '40px',
+          padding: '30px',
           borderRadius: '10px',
           border: '3px solid #ff00ff',
-          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)'
+          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
+          maxWidth: '1400px',
+          width: '100%',
+          margin: '20px auto',
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto',
+          position: 'relative'
         }}>
-          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center' }}>
+          <button
+            onClick={() => setGameState('menu')}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '8px 16px',
+              fontSize: '14px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            VOLVER
+          </button>
+          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
             TIENDA
           </h2>
-          <p style={{ fontSize: '20px', marginBottom: '30px', textAlign: 'center' }}>
+          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
             XP Total: {totalXP} | ⭐ Total: {totalStars}
           </p>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
             {/* Escudo */}
             {(() => {
               const next = getNextUpgrade('shield');
@@ -2698,46 +2727,51 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #6495ed', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Shield size={48} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Shield size={36} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+                        <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                          style={{
+                            background: 'transparent',
+                            border: '2px solid #6495ed',
+                            color: '#6495ed',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #6495ed',
-                          color: '#6495ed',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -2749,46 +2783,51 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #00ff88', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Magnet size={48} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Magnet size={36} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+                        <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                          style={{
+                            background: 'transparent',
+                            border: '2px solid #00ff88',
+                            color: '#00ff88',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #00ff88',
-                          color: '#00ff88',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -2800,46 +2839,51 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #ffff00', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Sparkles size={48} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Sparkles size={36} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+                        <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                          style={{
+                            background: 'transparent',
+                            border: '2px solid #ffff00',
+                            color: '#ffff00',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #ffff00',
-                          color: '#ffff00',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -2851,46 +2895,51 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #ff3366', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Gauge size={48} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Gauge size={36} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+                        <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                          style={{
+                            background: 'transparent',
+                            border: '2px solid #ff3366',
+                            color: '#ff3366',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #ff3366',
-                          color: '#ff3366',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -2902,65 +2951,55 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #00ff00', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Sparkles size={36} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+                        <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                          style={{
+                            background: 'transparent',
+                            border: '2px solid #00ff00',
+                            color: '#00ff00',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+                        </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #00ff00',
-                          color: '#00ff00',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
           </div>
-
-          <button 
-            onClick={() => setGameState('menu')}
-            style={{
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '15px 40px',
-              fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px'
-            }}
-          >
-            VOLVER
-          </button>
         </div>
       )}
 
