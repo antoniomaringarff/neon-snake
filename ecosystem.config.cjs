@@ -54,6 +54,15 @@ module.exports = {
       
       // Comandos a ejecutar DESPUÉS de hacer git pull
       'post-deploy': [
+        // Create shared directories if they don't exist
+        'echo "📁 Setting up shared directories..."',
+        'mkdir -p ../shared',
+        'mkdir -p api/logs',
+        
+        // Symlink .env from shared folder to api/
+        'echo "🔗 Linking .env file..."',
+        'ln -sf ../../shared/.env api/.env',
+        
         // Frontend: install dependencies and build
         'echo "📦 Building frontend..."',
         'cd front && npm install --production=false && npm run build',
@@ -64,14 +73,11 @@ module.exports = {
         
         // API: run migrations
         'echo "🔄 Running migrations..."',
-        'cd ../api && npm run migrate',
-        
-        // Create logs directory if not exists
-        'mkdir -p api/logs',
+        'npm run migrate',
         
         // Restart PM2 using the root ecosystem file
         'echo "🔄 Restarting PM2..."',
-        'pm2 reload ecosystem.config.cjs --env production',
+        'cd .. && pm2 reload ecosystem.config.cjs --env production',
         
         // Save PM2 state
         'pm2 save',
@@ -93,10 +99,11 @@ module.exports = {
       repo: 'git@github.com:antoniomaringarff/neon-snake.git',
       path: '/home/ubuntu/www/antonio/neonsnake-staging',
       'post-deploy': [
+        'mkdir -p ../shared && mkdir -p api/logs',
+        'ln -sf ../../shared/.env api/.env',
         'cd front && npm install --production=false && npm run build',
         'cd ../api && npm install --production=false && npm run migrate',
-        'mkdir -p api/logs',
-        'pm2 reload ecosystem.config.cjs --env production',
+        'cd .. && pm2 reload ecosystem.config.cjs --env production',
         'pm2 save'
       ].join(' && '),
       env: {
