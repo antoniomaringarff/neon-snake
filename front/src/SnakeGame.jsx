@@ -1870,11 +1870,57 @@ const SnakeGame = ({ user, onLogout }) => {
       });
       ctx.shadowBlur = 0;
 
-      // Draw minimap in top-right corner
+      // Draw HUD - Horizontal level bar at the top (compact)
+      const barHeight = 30;
+      const barPadding = 5;
+      
+      // Background bar (but leave space for minimap on the right)
       const minimapWidth = 120;
-      const minimapHeight = 90;
       const minimapX = CANVAS_WIDTH - minimapWidth - 10;
-      const minimapY = 60; // Below the top bar
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, 0, minimapX - 5, barHeight); // Stop before minimap
+      ctx.fillRect(minimapX + minimapWidth + 5, 0, CANVAS_WIDTH - (minimapX + minimapWidth + 5), barHeight); // After minimap
+      
+      // Level info text
+      ctx.fillStyle = '#33ffff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(`Nivel ${game.level}`, barPadding, 20);
+      
+      // Stars progress (compact and narrow)
+      const barStartX = 100;
+      const barWidth = 200; // Much narrower bar
+      
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
+      ctx.fillRect(barStartX, barPadding + 5, barWidth, barHeight - barPadding * 2 - 5);
+      
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+      ctx.shadowBlur = 3;
+      ctx.shadowColor = 'rgba(255, 215, 0, 0.3)';
+      const progressWidth = (barWidth * game.currentStars) / game.starsNeeded;
+      ctx.fillRect(barStartX, barPadding + 5, progressWidth, barHeight - barPadding * 2 - 5);
+      ctx.shadowBlur = 0;
+      
+      // Stars text on the bar
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px monospace';
+      const starsText = `⭐ ${game.currentStars} / ${game.starsNeeded}`;
+      const textWidth = ctx.measureText(starsText).width;
+      ctx.fillText(starsText, barStartX + barWidth / 2 - textWidth / 2, 22);
+      
+      // Total XP and Stars on the right (but not overlapping minimap)
+      // Minimap starts at CANVAS_WIDTH - 130 (120 width + 10 margin)
+      // Leave space for text width (approx 100px) + margin
+      const statsX = CANVAS_WIDTH - 250; // Well before minimap
+      ctx.fillStyle = '#33ffff';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(`XP: ${totalXP}`, statsX, 15);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(`⭐: ${totalStars}`, statsX, 28);
+      
+      // Draw minimap in top-right corner (after HUD so it's visible)
+      // minimapWidth and minimapX already declared above for HUD spacing
+      const minimapHeight = 90;
+      const minimapY = 10; // Fixed at top-right corner, close to edge
       
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
@@ -1883,15 +1929,24 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.lineWidth = 2;
       ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
       
-      // Draw player position on minimap
+      // Draw player position on minimap (distinctive marker)
       const playerMinimapX = minimapX + (game.snake[0].x / WORLD_WIDTH) * minimapWidth;
       const playerMinimapY = minimapY + (game.snake[0].y / WORLD_HEIGHT) * minimapHeight;
       
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 10;
+      // Outer ring for player
+      ctx.strokeStyle = '#33ffff';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
       ctx.shadowColor = '#33ffff';
       ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 3, 0, Math.PI * 2);
+      ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Inner filled circle for player
+      ctx.fillStyle = '#33ffff';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
       
@@ -1912,57 +1967,18 @@ const SnakeGame = ({ user, onLogout }) => {
           ctx.shadowBlur = 0;
         }
       });
-
-      // Draw HUD - Horizontal level bar at the top
-      const barHeight = 50;
-      const barPadding = 10;
       
-      // Background bar
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(0, 0, CANVAS_WIDTH, barHeight);
-      
-      // Level info text
-      ctx.fillStyle = '#33ffff';
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText(`Nivel ${game.level}`, barPadding, 28);
-      
-      // Stars progress (replaces XP progress)
-      const barStartX = 120;
-      const barWidth = CANVAS_WIDTH - barStartX - 180;
-      
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
-      ctx.fillRect(barStartX, barPadding, barWidth, barHeight - barPadding * 2);
-      
-      ctx.fillStyle = '#FFD700';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#FFD700';
-      const progressWidth = (barWidth * game.currentStars) / game.starsNeeded;
-      ctx.fillRect(barStartX, barPadding, progressWidth, barHeight - barPadding * 2);
-      ctx.shadowBlur = 0;
-      
-      // Stars text on the bar
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px monospace';
-      const starsText = `⭐ ${game.currentStars} / ${game.starsNeeded}`;
-      const textWidth = ctx.measureText(starsText).width;
-      ctx.fillText(starsText, barStartX + barWidth / 2 - textWidth / 2, 32);
-      
-      // Total XP and Stars on the right
-      ctx.fillStyle = '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(`XP: ${totalXP}`, CANVAS_WIDTH - 200, 20);
-      ctx.fillStyle = '#FFD700';
-      ctx.fillText(`⭐: ${totalStars}`, CANVAS_WIDTH - 200, 40);
-      
-      // Shop hint
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
-      
-      // Cannon hint (if cannon is equipped)
-      if (cannonLevel > 0) {
-        ctx.fillStyle = '#ffff00';
-        ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
+      // Shop hint (only on desktop, not mobile)
+      if (!isMobile) {
+        ctx.fillStyle = '#ff00ff';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+        
+        // Cannon hint (if cannon is equipped)
+        if (cannonLevel > 0) {
+          ctx.fillStyle = '#ffff00';
+          ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
+        }
       }
     };
 
@@ -2268,6 +2284,62 @@ const SnakeGame = ({ user, onLogout }) => {
     const game = gameRef.current;
     const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
+    // Compact styles for playing state
+    if (gameState === 'playing') {
+      const compactPadding = isMobile ? '4px 8px' : '6px 12px';
+      const compactFontSize = isMobile ? '11px' : '13px';
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '1px solid #33ffff',
+          padding: compactPadding,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
+          zIndex: 1000
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? '12px' : '20px', 
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff', fontWeight: 'bold' }}>
+              Nivel {game.level}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff' }}>
+              XP: {currentLevelXP}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#FFD700' }}>
+              ⭐ {currentLevelStars} / {game.starsNeeded}
+            </span>
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+              padding: isMobile ? '4px 8px' : '5px 10px',
+              fontSize: isMobile ? '9px' : '11px',
+              cursor: 'pointer',
+              borderRadius: '3px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Salir
+          </button>
+        </div>
+      );
+    }
+    
     // Mobile styles
     const headerPadding = isMobile ? '8px 10px' : '15px 20px';
     const labelFontSize = isMobile ? '8px' : '11px';
@@ -2346,56 +2418,61 @@ const SnakeGame = ({ user, onLogout }) => {
           )}
           <div style={{ 
             display: 'flex', 
-            gap: '8px', 
-            alignItems: 'center', 
-            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             width: '100%'
           }}>
-            {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
-              </div>
-            )}
-            {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                  {headLevel === 2 ? 'Doble' : 'Triple'}
-                </span>
-              </div>
-            )}
-            {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                  Cañón {cannonLevel === 2 ? 'x2' : ''}
-                </span>
-              </div>
-            )}
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              alignItems: 'center', 
+              flexWrap: 'wrap'
+            }}>
+              {shieldLevel > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                  <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+                </div>
+              )}
+              {headLevel > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                  <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                    {headLevel === 2 ? 'Doble' : 'Triple'}
+                  </span>
+                </div>
+              )}
+              {cannonLevel > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                  <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
+                    Cañón {cannonLevel === 2 ? 'x2' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                padding: '4px 8px',
+                fontSize: '10px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Salir
+            </button>
           </div>
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-              padding: '6px 12px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              transition: 'all 0.3s',
-              width: '100%'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            Cerrar Sesión
-          </button>
         </div>
       );
     }
@@ -2465,20 +2542,20 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             </div>
           )}
-          <div style={{ 
-            display: 'flex', 
-            gap: '15px', 
-            alignItems: 'center', 
-            marginLeft: 'auto'
-          }}>
+        </div>
+        <div style={{ 
+          display: 'flex', 
+          gap: '12px', 
+          alignItems: 'center'
+        }}>
             {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
                 <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
               </div>
             )}
             {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
                 <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
                   {headLevel === 2 ? 'Doble' : 'Triple'}
@@ -2486,37 +2563,36 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
             {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
                 <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
                   Cañón {cannonLevel === 2 ? 'x2' : ''}
                 </span>
               </div>
             )}
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                padding: '5px 10px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s',
+                marginLeft: '10px'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Salir
+            </button>
           </div>
-        </div>
-        <button
-          onClick={onLogout}
-          style={{
-            background: 'transparent',
-            border: '1px solid #ff3366',
-            color: '#ff3366',
-            padding: '8px 16px',
-            fontSize: '14px',
-            cursor: 'pointer',
-            borderRadius: '5px',
-            transition: 'all 0.3s',
-            marginLeft: '20px'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'transparent';
-          }}
-        >
-          Cerrar Sesión
-        </button>
       </div>
     );
   };
@@ -2551,95 +2627,122 @@ const SnakeGame = ({ user, onLogout }) => {
       {gameState === 'menu' && (
         <div style={{ 
           display: 'flex',
-          gap: '30px',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '20px',
           width: '100%',
           maxWidth: '1200px',
           padding: '20px',
-          alignItems: 'flex-start'
+          alignItems: isMobile ? 'center' : 'flex-start',
+          justifyContent: 'center'
         }}>
-          {/* Left side: Menu buttons */}
+          {/* Left side: Main action buttons */}
           <div style={{ 
             textAlign: 'center',
             background: 'rgba(0, 0, 0, 0.7)',
-            padding: '40px',
+            padding: '30px',
             borderRadius: '10px',
             border: '2px solid #33ffff',
             boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-            flex: '0 0 400px'
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '0 0 400px'
           }}>
-            <p style={{ fontSize: '20px', marginBottom: '30px' }}>
+            <h1 style={{ 
+              fontSize: '32px', 
+              color: '#33ffff', 
+              textShadow: '0 0 20px #33ffff',
+              marginBottom: '20px'
+            }}>
+              🐍 VIBORITA
+            </h1>
+            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
               Mueve el mouse/trackpad para controlar tu víbora<br/>
               Come puntos brillantes para ganar XP<br/>
               Evita chocar con otras serpientes
             </p>
-            <button 
-              onClick={startGame}
-              style={{
-                background: 'transparent',
-                border: '2px solid #33ffff',
-                color: '#33ffff',
-                padding: '15px 40px',
-                fontSize: '24px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #33ffff',
-                boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-                marginRight: '10px',
-                width: '100%',
-                marginBottom: '15px'
-              }}
-            >
-              JUGAR
-            </button>
-            <button 
-              onClick={() => setGameState('shop')}
-              style={{
-                background: 'transparent',
-                border: '2px solid #ff00ff',
-                color: '#ff00ff',
-                padding: '15px 40px',
-                fontSize: '24px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #ff00ff',
-                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                width: '100%'
-              }}
-            >
-              TIENDA
-            </button>
+            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
+              <button 
+                onClick={startGame}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '15px 40px',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #33ffff',
+                  boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                JUGAR
+              </button>
+              <button 
+                onClick={() => setGameState('shop')}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #ff00ff',
+                  color: '#ff00ff',
+                  padding: '15px 40px',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #ff00ff',
+                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 0, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                TIENDA
+              </button>
+            </div>
           </div>
 
           {/* Right side: Leaderboard */}
           <div style={{ 
             background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
+            padding: '25px',
             borderRadius: '10px',
             border: '2px solid #FFD700',
             boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            flex: '1',
-            minWidth: '300px'
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '1'
           }}>
             <h2 style={{ 
               color: '#FFD700', 
               textShadow: '0 0 20px #FFD700', 
               textAlign: 'center',
               marginBottom: '20px',
-              fontSize: '24px'
+              fontSize: '22px'
             }}>
               🏆 RANKING
             </h2>
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {leaderboard.length === 0 ? (
                 <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Puntos</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Puntos</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2651,16 +2754,16 @@ const SnakeGame = ({ user, onLogout }) => {
                           backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '10px', color: index < 3 ? '#FFD700' : '#33ffff' }}>
+                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
                           {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
                         </td>
-                        <td style={{ padding: '10px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal' }}>
+                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
                           {entry.username}
                         </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
                           {entry.bestScore?.toLocaleString() || 0}
                         </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
                           {entry.highestLevel || 1}
                         </td>
                       </tr>
