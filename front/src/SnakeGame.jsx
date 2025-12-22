@@ -293,21 +293,36 @@ const SnakeGame = ({ user, onLogout }) => {
 
   // Save game session to API
   const saveGameSession = async (finalScore, levelReached, xpEarned, durationSeconds) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.warn('Cannot save session: no user id');
+      return;
+    }
+
+    // Ensure we have valid values
+    const sessionData = {
+      score: finalScore || 0,
+      levelReached: levelReached || 1,
+      xpEarned: xpEarned || 0,
+      durationSeconds: durationSeconds || 0
+    };
+
+    console.log('💾 Saving game session:', sessionData);
 
     try {
-      await fetch('/api/sessions', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({
-          score: finalScore,
-          levelReached,
-          xpEarned,
-          durationSeconds
-        })
+        body: JSON.stringify(sessionData)
       });
+      
+      if (response.ok) {
+        console.log('✅ Session saved successfully');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to save session:', response.status, errorData);
+      }
     } catch (error) {
-      console.error('Error saving session:', error);
+      console.error('❌ Error saving session:', error);
     }
   };
 
@@ -995,7 +1010,8 @@ const SnakeGame = ({ user, onLogout }) => {
           if (checkCollision(playerHead, enemy.segments[i], game.snakeSize + SNAKE_SIZE)) {
             // Player dies - save session and game over
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            // Use game.sessionXP for score because React state (score) may be outdated
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
             setGameState('gameOver');
             return;
@@ -1347,7 +1363,8 @@ const SnakeGame = ({ user, onLogout }) => {
           newHead.y < BORDER_WIDTH || newHead.y > WORLD_HEIGHT - BORDER_WIDTH) {
         // Save game session before game over
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(score || 0, level, game.sessionXP || 0, duration);
+        // Use game.sessionXP for score because React state (score) may be outdated
+        saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
         setGameState('gameOver');
         return;
       }
@@ -1391,14 +1408,14 @@ const SnakeGame = ({ user, onLogout }) => {
             if (headX < opening.x - collisionMargin || headX > opening.x + opening.width + collisionMargin) {
               // Hit the wall, not the opening
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             // No opening, always die if touching wall
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1412,13 +1429,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(bottomOpening);
             if (headX < opening.x - collisionMargin || headX > opening.x + opening.width + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1432,13 +1449,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(leftOpening);
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1452,13 +1469,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(rightOpening);
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1553,7 +1570,7 @@ const SnakeGame = ({ user, onLogout }) => {
       if (game.currentStars >= game.starsNeeded) {
         // Save game session when completing level
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(score, level, game.sessionXP, duration);
+        saveGameSession(game.sessionXP, level, game.sessionXP, duration);
         
         setGameState('levelComplete');
       }
