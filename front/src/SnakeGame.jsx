@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge } from 'lucide-react';
 
 // Configuración de niveles - cada nivel tiene características particulares
@@ -105,6 +105,19 @@ const getLevelConfig = (level) => {
 const SnakeGame = ({ user, onLogout }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // Mobile controls state
+  const [joystickActive, setJoystickActive] = useState(false);
+  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
+  const [joystickDirection, setJoystickDirection] = useState({ x: 0, y: 0 });
+  const joystickRef = useRef({ 
+    centerX: 0, 
+    centerY: 0, 
+    radius: 0, 
+    isActive: false,
+    direction: { x: 0, y: 0 } // Store direction synchronously
+  });
+  const shootBulletRef = useRef(null);
   const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -420,6 +433,11 @@ const SnakeGame = ({ user, onLogout }) => {
     
     const ctx = canvas.getContext('2d');
     let animationId;
+    
+    // Delta time tracking for consistent game speed across all hardware
+    let lastTime = performance.now();
+    const TARGET_FPS = 60;
+    const FRAME_TIME = 1000 / TARGET_FPS; // milliseconds per frame at target FPS
 
     const createParticle = (x, y, color, count = 8) => {
       for (let i = 0; i < count; i++) {
@@ -478,8 +496,98 @@ const SnakeGame = ({ user, onLogout }) => {
       updateMousePos(e.clientX, e.clientY);
     };
 
+    // Joystick handlers for mobile
+    const handleJoystickStart = (e) => {
+      if (!isMobile) return;
+      const touch = e.touches[0] || e.changedTouches[0];
+      if (!touch) return;
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const touchX = touch.clientX;
+      const touchY = touch.clientY;
+      
+      // Joystick area is bottom right (20px from bottom and right)
+      const joystickCenterX = rect.right - 20 - 60; // 60px is half of 120px joystick size
+      const joystickCenterY = rect.bottom - 20 - 60;
+      const joystickRadius = 60; // Radius of joystick base
+      
+      const distance = Math.sqrt(
+        Math.pow(touchX - joystickCenterX, 2) + 
+        Math.pow(touchY - joystickCenterY, 2)
+      );
+      
+      // Check if touch is within joystick activation area (2x radius)
+      if (distance < joystickRadius * 2) {
+        e.preventDefault();
+        joystickRef.current.isActive = true;
+        joystickRef.current.centerX = joystickCenterX;
+        joystickRef.current.centerY = joystickCenterY;
+        joystickRef.current.radius = joystickRadius;
+        setJoystickActive(true);
+        handleJoystickMove(e);
+      }
+    };
+
+    const handleJoystickMove = (e) => {
+      if (!isMobile || !joystickRef.current.isActive) return;
+      e.preventDefault();
+      const touch = e.touches[0] || e.changedTouches[0];
+      if (!touch) return;
+      
+      const touchX = touch.clientX;
+      const touchY = touch.clientY;
+      
+      const centerX = joystickRef.current.centerX;
+      const centerY = joystickRef.current.centerY;
+      const radius = joystickRef.current.radius;
+      
+      const dx = touchX - centerX;
+      const dy = touchY - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < radius) {
+        // Within circle - use actual position
+        const rect = canvasRef.current.getBoundingClientRect();
+        const dir = { x: dx / radius, y: dy / radius };
+        setJoystickPosition({ 
+          x: touchX - rect.left, 
+          y: touchY - rect.top 
+        });
+        setJoystickDirection(dir);
+        joystickRef.current.direction = dir; // Store synchronously
+      } else {
+        // Outside circle - clamp to edge
+        const angle = Math.atan2(dy, dx);
+        const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+        const rect = canvasRef.current.getBoundingClientRect();
+        setJoystickPosition({ 
+          x: (centerX + Math.cos(angle) * radius) - rect.left, 
+          y: (centerY + Math.sin(angle) * radius) - rect.top 
+        });
+        setJoystickDirection(dir);
+        joystickRef.current.direction = dir; // Store synchronously
+      }
+    };
+
+    const handleJoystickEnd = (e) => {
+      if (!isMobile) return;
+      e.preventDefault();
+      joystickRef.current.isActive = false;
+      joystickRef.current.direction = { x: 0, y: 0 };
+      setJoystickActive(false);
+      setJoystickPosition({ x: 0, y: 0 });
+      setJoystickDirection({ x: 0, y: 0 });
+    };
+
     const handleTouchMove = (e) => {
-      e.preventDefault(); // Prevent scrolling
+      if (isMobile) {
+        if (joystickRef.current.isActive) {
+          handleJoystickMove(e);
+          e.preventDefault();
+        }
+        return;
+      }
+      e.preventDefault(); // Prevent scrolling on desktop
       if (e.touches.length > 0) {
         const touch = e.touches[0];
         updateMousePos(touch.clientX, touch.clientY);
@@ -487,7 +595,11 @@ const SnakeGame = ({ user, onLogout }) => {
     };
 
     const handleTouchStart = (e) => {
-      e.preventDefault(); // Prevent scrolling
+      if (isMobile) {
+        handleJoystickStart(e);
+        return;
+      }
+      e.preventDefault(); // Prevent scrolling on desktop
       if (e.touches.length > 0) {
         const touch = e.touches[0];
         updateMousePos(touch.clientX, touch.clientY);
@@ -586,6 +698,9 @@ const SnakeGame = ({ user, onLogout }) => {
         }
       }
     };
+    
+    // Store shootBullet in ref so it can be accessed from JSX
+    shootBulletRef.current = shootBullet;
 
     const checkCollision = (pos1, pos2, distance) => {
       if (!distance) distance = gameRef.current.snakeSize * 2;
@@ -652,20 +767,20 @@ const SnakeGame = ({ user, onLogout }) => {
       });
     };
 
-    const updateEnemies = () => {
+    const updateEnemies = (normalizedDelta) => {
       const game = gameRef.current;
       const enemiesToRemove = [];
       
       game.enemies.forEach((enemy, enemyIndex) => {
-        // Random direction change
-        if (Math.random() < 0.02) {
+        // Random direction change (normalized by delta time)
+        if (Math.random() < 0.02 * normalizedDelta) {
           const angle = Math.random() * Math.PI * 2;
           enemy.direction = { x: Math.cos(angle), y: Math.sin(angle) };
         }
 
         const head = enemy.segments[0];
-        let newX = head.x + enemy.direction.x * enemy.speed;
-        let newY = head.y + enemy.direction.y * enemy.speed;
+        let newX = head.x + enemy.direction.x * enemy.speed * normalizedDelta;
+        let newY = head.y + enemy.direction.y * enemy.speed * normalizedDelta;
 
         // Bounce off world walls
         if (newX < BORDER_WIDTH || newX > WORLD_WIDTH - BORDER_WIDTH) {
@@ -860,9 +975,9 @@ const SnakeGame = ({ user, onLogout }) => {
       // Update bullets and check collisions
       const enemiesToKill = [];
       game.bullets = game.bullets.filter(bullet => {
-        bullet.x += bullet.vx;
-        bullet.y += bullet.vy;
-        bullet.life--;
+        bullet.x += bullet.vx * normalizedDelta;
+        bullet.y += bullet.vy * normalizedDelta;
+        bullet.life -= normalizedDelta;
         
         // Check collision with enemies (player bullets)
         if (bullet.owner === 'player') {
@@ -997,10 +1112,13 @@ const SnakeGame = ({ user, onLogout }) => {
       });
     };
 
-    const update = () => {
+    const update = (deltaTime) => {
       if (gameState !== 'playing' || shopOpen) return; // Pause when shop is open
 
       const game = gameRef.current;
+      
+      // Normalize deltaTime to target FPS (60 FPS = 1.0, 120 FPS = 0.5, 30 FPS = 2.0)
+      const normalizedDelta = deltaTime / FRAME_TIME;
       
       // Check if player is passing through any opening
       if (game.centralRect && game.snake.length > 0) {
@@ -1060,7 +1178,7 @@ const SnakeGame = ({ user, onLogout }) => {
         game.centralRect.openings.forEach(opening => {
           // Only move if not paused
           if (!opening.paused) {
-            opening.position += opening.direction * opening.speed;
+            opening.position += opening.direction * opening.speed * normalizedDelta;
             
             // Bounce at edges
             if (opening.side === 'top' || opening.side === 'bottom') {
@@ -1086,45 +1204,68 @@ const SnakeGame = ({ user, onLogout }) => {
         });
       }
       
-      // Convert mouse position to world coordinates
-      const worldMouseX = game.mousePos.x + game.camera.x;
-      const worldMouseY = game.mousePos.y + game.camera.y;
+      // Get head position (needed for both mobile and desktop)
+      const head = game.snake.length > 0 ? game.snake[0] : { x: 0, y: 0 };
       
-      // Calculate direction towards mouse
-      const head = game.snake[0];
-      const dx = worldMouseX - head.x;
-      const dy = worldMouseY - head.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      // Use joystick direction on mobile, mouse position on desktop
+      let targetDir = { x: 0, y: 0 };
+      let distance = 0;
+      
+      // Check joystick state synchronously using ref
+      const isJoystickActive = joystickRef.current.isActive;
+      const joystickDir = joystickRef.current.direction;
+      
+      if (isMobile && isJoystickActive && (joystickDir.x !== 0 || joystickDir.y !== 0)) {
+        // Mobile: use joystick direction directly from ref (synchronous)
+        targetDir = {
+          x: joystickDir.x,
+          y: joystickDir.y
+        };
+        distance = 1; // Normalized direction, so distance is always 1
+      } else if (!isMobile) {
+        // Desktop: use mouse position
+        const worldMouseX = game.mousePos.x + game.camera.x;
+        const worldMouseY = game.mousePos.y + game.camera.y;
+        
+        const dx = worldMouseX - head.x;
+        const dy = worldMouseY - head.y;
+        distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > 5) {
+          targetDir = {
+            x: dx / distance,
+            y: dy / distance
+          };
+        }
+      }
       
       // Apply speed improvement when cursor is close (speedLevel: 1-10 = 10% to 100% extra)
+      // Only applies on desktop with mouse
       let currentSpeed = game.baseSpeed;
-      if (speedLevel > 0 && distance < 200) { // Only apply when cursor is within 200 pixels
+      if (!isMobile && speedLevel > 0 && distance < 200) {
         const speedBonus = (speedLevel * 10) / 100; // 10% per level
         currentSpeed = game.baseSpeed * (1 + speedBonus);
       }
       game.speed = currentSpeed;
       
       // Smooth turning - interpolate between current and target direction
-      if (distance > 5) {
-        const targetDir = {
-          x: dx / distance,
-          y: dy / distance
-        };
-        
-        // Lerp factor for smooth turning
-        const smoothFactor = 0.15;
+      if (distance > 0.1 || (isMobile && isJoystickActive)) {
+        // Lerp factor for smooth turning - faster on mobile for better responsiveness
+        const smoothFactor = isMobile ? 0.5 : 0.15; // Much faster response on mobile
         game.direction.x += (targetDir.x - game.direction.x) * smoothFactor;
         game.direction.y += (targetDir.y - game.direction.y) * smoothFactor;
         
         // Normalize to maintain constant speed
         const dirLength = Math.sqrt(game.direction.x * game.direction.x + game.direction.y * game.direction.y);
-        game.direction.x /= dirLength;
-        game.direction.y /= dirLength;
+        if (dirLength > 0.01) {
+          game.direction.x /= dirLength;
+          game.direction.y /= dirLength;
+        }
       }
 
       const newHead = {
-        x: head.x + game.direction.x * game.speed,
-        y: head.y + game.direction.y * game.speed
+        x: head.x + game.direction.x * game.speed * normalizedDelta,
+        y: head.y + game.direction.y * game.speed * normalizedDelta
       };
 
       // Check collision with red borders - instant death
@@ -1270,8 +1411,8 @@ const SnakeGame = ({ user, onLogout }) => {
           if (distance < magnetRange && distance > 0) {
             // Attract food towards snake
             const attractionStrength = (1 - distance / magnetRange) * 0.3; // Stronger when closer
-            food.x += (dx / distance) * attractionStrength;
-            food.y += (dy / distance) * attractionStrength;
+            food.x += (dx / distance) * attractionStrength * normalizedDelta;
+            food.y += (dy / distance) * attractionStrength * normalizedDelta;
             
             // Show particle effect when collecting with magnet
             if (distance < game.snakeSize + food.size + 5) {
@@ -1343,13 +1484,13 @@ const SnakeGame = ({ user, onLogout }) => {
         setGameState('levelComplete');
       }
 
-      updateEnemies();
+      updateEnemies(normalizedDelta);
 
       // Update particles
       game.particles = game.particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;
+        p.x += p.vx * normalizedDelta;
+        p.y += p.vy * normalizedDelta;
+        p.life -= 0.02 * normalizedDelta;
         return p.life > 0;
       });
     };
@@ -1799,8 +1940,15 @@ const SnakeGame = ({ user, onLogout }) => {
       }
     };
 
-    const gameLoop = () => {
-      update();
+    const gameLoop = (currentTime) => {
+      // Calculate delta time
+      const deltaTime = currentTime - lastTime;
+      lastTime = currentTime;
+      
+      // Cap delta time to prevent large jumps (e.g., when tab is inactive)
+      const cappedDeltaTime = Math.min(deltaTime, FRAME_TIME * 3); // Max 3 frames worth
+      
+      update(cappedDeltaTime);
       draw();
       animationId = requestAnimationFrame(gameLoop);
     };
@@ -1810,8 +1958,11 @@ const SnakeGame = ({ user, onLogout }) => {
       canvas.addEventListener('mousemove', handleMouseMove);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
+      canvas.addEventListener('touchcancel', handleJoystickEnd, { passive: false });
       window.addEventListener('keydown', handleKeyPress);
-      gameLoop();
+      lastTime = performance.now(); // Initialize time tracking
+      gameLoop(performance.now());
     }
 
     return () => {
@@ -1820,6 +1971,8 @@ const SnakeGame = ({ user, onLogout }) => {
         canvas.removeEventListener('mousemove', handleMouseMove);
         canvas.removeEventListener('touchmove', handleTouchMove);
         canvas.removeEventListener('touchstart', handleTouchStart);
+        canvas.removeEventListener('touchend', handleJoystickEnd);
+        canvas.removeEventListener('touchcancel', handleJoystickEnd);
       }
       window.removeEventListener('keydown', handleKeyPress);
       if (animationId) cancelAnimationFrame(animationId);
