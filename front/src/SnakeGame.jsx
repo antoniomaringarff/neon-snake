@@ -3187,6 +3187,40 @@ const SnakeGame = ({ user, onLogout }) => {
                   title="Disparar"
                 />
               )}
+              
+              {/* Shop Button - Top Left */}
+              <button
+                onClick={() => setShopOpen(prev => !prev)}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '20px',
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  background: 'rgba(255, 0, 255, 0.3)',
+                  border: '2px solid #ff00ff',
+                  color: '#ff00ff',
+                  fontSize: '20px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(255, 0, 255, 0.4)',
+                  zIndex: 100,
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none',
+                  padding: 0
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              >
+                🛒
+              </button>
             </>
           )}
           
