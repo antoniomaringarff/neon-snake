@@ -3147,148 +3147,109 @@ const SnakeGame = ({ user, onLogout }) => {
             }}
           />
           
-          {/* Botones móviles */}
+          {/* Mobile Controls */}
           {isMobile && gameState === 'playing' && (
             <>
-              {/* Botón de disparo - Abajo a la derecha */}
-              {cannonLevel > 0 && (
-                <button
-                  onClick={() => {
-                    const game = gameRef.current;
-                    if (!game.snake || game.snake.length === 0) return;
-                    
-                    const currentTime = Date.now();
-                    const cooldown = cannonLevel === 5 ? 500 : 1000;
-                    
-                    if (currentTime - game.lastPlayerShot < cooldown) {
-                      return;
-                    }
-                    
-                    game.lastPlayerShot = currentTime;
-                    
-                    const head = game.snake[0];
-                    const tail = game.snake.length > 1 ? game.snake[game.snake.length - 1] : null;
-                    
-                    const headAngle = Math.atan2(game.direction.y, game.direction.x);
-                    const headPerpAngle = headAngle + Math.PI / 2;
-                    
-                    let tailAngle = 0;
-                    let tailPerpAngle = 0;
-                    if (tail) {
-                      const tailDx = head.x - tail.x;
-                      const tailDy = head.y - tail.y;
-                      const tailDist = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
-                      if (tailDist > 0) {
-                        tailAngle = Math.atan2(tailDy, tailDx);
-                        tailPerpAngle = tailAngle + Math.PI / 2;
-                      }
-                    }
-                    
-                    // Calculate bullet speed multiplier (2^bulletSpeedLevel)
-                    const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
-                    const baseBulletSpeed = 8;
-                    const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
-                    
-                    if (cannonLevel >= 1) {
-                      const headBulletCount = cannonLevel >= 2 ? 2 : 1;
-                      for (let i = 0; i < headBulletCount; i++) {
-                        const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-                        game.bullets.push({
-                          x: head.x + Math.cos(headPerpAngle) * offset,
-                          y: head.y + Math.sin(headPerpAngle) * offset,
-                          vx: game.direction.x * bulletSpeed,
-                          vy: game.direction.y * bulletSpeed,
-                          life: 100,
-                          owner: 'player'
-                        });
-                      }
-                    }
-                    
-                    if (cannonLevel >= 3 && tail) {
-                      const tailBulletCount = cannonLevel >= 4 ? 2 : 1;
-                      const tailDir = {
-                        x: -game.direction.x,
-                        y: -game.direction.y
-                      };
-                      
-                      for (let i = 0; i < tailBulletCount; i++) {
-                        const offset = tailBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-                        game.bullets.push({
-                          x: tail.x + Math.cos(tailPerpAngle) * offset,
-                          y: tail.y + Math.sin(tailPerpAngle) * offset,
-                          vx: tailDir.x * bulletSpeed,
-                          vy: tailDir.y * bulletSpeed,
-                          life: 100,
-                          owner: 'player'
-                        });
-                      }
-                    }
-                  }}
-                  style={{
-                    position: 'absolute',
-                    bottom: '20px',
-                    right: '20px',
-                    width: '70px',
-                    height: '70px',
-                    borderRadius: '50%',
-                    background: 'rgba(0, 170, 255, 0.3)',
-                    border: '3px solid #00aaff',
-                    color: '#00aaff',
-                    fontSize: '32px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 20px rgba(0, 170, 255, 0.6)',
-                    zIndex: 999,
-                    touchAction: 'manipulation',
-                    WebkitTapHighlightColor: 'transparent',
-                    userSelect: 'none',
-                    padding: 0
-                  }}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  🔫
-                </button>
-              )}
-              
-              {/* Botón de tienda - Abajo a la izquierda */}
-              <button
-                onClick={() => setShopOpen(prev => !prev)}
+              {/* Joystick - Bottom Right */}
+              <div
                 style={{
                   position: 'absolute',
                   bottom: '20px',
-                  left: '20px',
-                  width: '70px',
-                  height: '70px',
-                  borderRadius: '50%',
-                  background: 'rgba(255, 0, 255, 0.3)',
-                  border: '3px solid #ff00ff',
-                  color: '#ff00ff',
-                  fontSize: '32px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.6)',
-                  zIndex: 999,
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  userSelect: 'none',
-                  padding: 0
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
+                  right: '20px',
+                  width: '120px',
+                  height: '120px',
+                  pointerEvents: 'none',
+                  zIndex: 100
                 }}
               >
-                🛒
-              </button>
+                {/* Joystick Base */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid rgba(51, 255, 255, 0.5)',
+                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.3)',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                />
+                {/* Joystick Handle */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    background: joystickActive 
+                      ? 'rgba(51, 255, 255, 0.9)' 
+                      : 'rgba(51, 255, 255, 0.4)',
+                    border: '2px solid #33ffff',
+                    boxShadow: joystickActive 
+                      ? '0 0 20px rgba(51, 255, 255, 0.8)' 
+                      : '0 0 10px rgba(51, 255, 255, 0.4)',
+                    left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.x * 35}px`
+                      : '50%',
+                    top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.y * 35}px`
+                      : '50%',
+                    transform: 'translate(-50%, -50%)',
+                    transition: joystickActive ? 'none' : 'all 0.2s ease-out',
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Shoot Button - Bottom Left */}
+              {cannonLevel > 0 && (
+                <button
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (shootBulletRef.current) {
+                      shootBulletRef.current();
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  style={{
+                    position: 'absolute',
+                    bottom: '25px',
+                    left: '25px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 51, 102, 0.6)',
+                    border: '2px solid rgba(255, 51, 102, 0.8)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+                    zIndex: 100,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    transition: 'all 0.1s ease',
+                    fontSize: '0',
+                    padding: '0'
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (shootBulletRef.current) {
+                      shootBulletRef.current();
+                    }
+                  }}
+                  title="Disparar"
+                />
+              )}
             </>
           )}
           
