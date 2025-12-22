@@ -17,11 +17,11 @@ yarn global add pm2
 ```bash
 # Desde la raíz del proyecto
 cd /Users/antoniomaringarff/www/viborita
-pm2 start api/ecosystem.config.js
+pm2 start api/ecosystem.config.cjs
 
 # O desde el directorio api
 cd api
-pm2 start ../ecosystem.config.js
+pm2 start ../ecosystem.config.cjs
 ```
 
 ### Opción 2: Comando directo

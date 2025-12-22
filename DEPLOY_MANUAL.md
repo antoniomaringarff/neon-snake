@@ -103,13 +103,13 @@ npm run dev
 
 ```bash
 # Desde la carpeta api/
-# Opción 1: Usar ecosystem.config.js (recomendado)
-pm2 start ecosystem.config.js
+# Opción 1: Usar ecosystem.config.cjs (recomendado)
+pm2 start ecosystem.config.cjs
 
 # Opción 2: Comando directo
 pm2 start server.js --name "viborita-api" --env production
 
-# ⚠️ NO uses 'npm run dev' en producción - usa 'node server.js' o ecosystem.config.js
+# ⚠️ NO uses 'npm run dev' en producción - usa 'node server.js' o ecosystem.config.cjs
 
 # Guardar configuración de PM2
 pm2 save
