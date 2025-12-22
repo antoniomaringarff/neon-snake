@@ -6,6 +6,7 @@ import authRoutes from './src/routes/auth.js';
 import usersRoutes from './src/routes/users.js';
 import leaderboardRoutes from './src/routes/leaderboard.js';
 import sessionsRoutes from './src/routes/sessions.js';
+import shopRoutes from './src/routes/shop.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ fastify.register(authRoutes, { prefix: '/api/auth' });
 fastify.register(usersRoutes, { prefix: '/api/users' });
 fastify.register(leaderboardRoutes, { prefix: '/api/leaderboard' });
 fastify.register(sessionsRoutes, { prefix: '/api/sessions' });
+fastify.register(shopRoutes, { prefix: '/api/shop' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {
@@ -72,9 +74,28 @@ fastify.setErrorHandler((error, request, reply) => {
   });
 });
 
+// Run migrations before starting server (only in production)
+const runMigrationsOnStart = async () => {
+  if (process.env.NODE_ENV === 'production' && process.env.SKIP_MIGRATIONS !== 'true') {
+    try {
+      console.log('📊 Ejecutando migraciones de base de datos...');
+      const { runMigrations } = await import('./src/migrations/run.js');
+      await runMigrations();
+      console.log('✅ Migraciones completadas');
+    } catch (error) {
+      console.error('⚠️  Error ejecutando migraciones:', error.message);
+      // No bloqueamos el inicio del servidor si las migraciones fallan
+      // (puede que ya estén ejecutadas o haya un problema temporal)
+    }
+  }
+};
+
 // Start server
 const start = async () => {
   try {
+    // Run migrations first in production
+    await runMigrationsOnStart();
+    
     const port = process.env.PORT || 3003;
     await fastify.listen({ port, host: '0.0.0.0' });
     console.log(`🚀 Server running on http://localhost:${port}`);

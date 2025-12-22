@@ -298,6 +298,15 @@ sudo systemctl status nginx
 
 ### Actualizaciones (cuando hay cambios)
 
+**Opción A: Script automático (recomendado)**
+
+```bash
+cd ~/www/antonio/neonsnake
+./deploy-manual.sh
+```
+
+**Opción B: Manual**
+
 ```bash
 # 1. Actualizar código
 cd ~/www/antonio/neonsnake
@@ -306,7 +315,7 @@ git pull
 # 2. Actualizar API
 cd api
 npm install
-npm run migrate  # Solo si hay cambios en la BD
+npm run migrate  # Las migraciones se ejecutan automáticamente al iniciar, pero es bueno ejecutarlas manualmente también
 pm2 restart viborita-api
 
 # 3. Rebuild del frontend
@@ -317,6 +326,8 @@ npm run build
 # 4. Nginx ya está sirviendo desde front/dist, no necesita reinicio
 # (a menos que cambies la configuración de Nginx)
 ```
+
+**Nota:** Las migraciones se ejecutan automáticamente cuando PM2 reinicia la API en producción. Si quieres ejecutarlas manualmente antes, usa `npm run migrate` desde la carpeta `api/`.
 
 ## Verificación
 

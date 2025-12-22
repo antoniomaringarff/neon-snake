@@ -1,11 +1,15 @@
 import { pool } from '../config/database.js';
 import * as migration001 from './001_initial_schema.js';
+import * as migration002 from './002_shop_upgrades.js';
+import * as migration003 from './003_add_magnet_speed.js';
 
 const migrations = [
-  { name: '001_initial_schema', up: migration001.up, down: migration001.down }
+  { name: '001_initial_schema', up: migration001.up, down: migration001.down },
+  { name: '002_shop_upgrades', up: migration002.up, down: migration002.down },
+  { name: '003_add_magnet_speed', up: migration003.up, down: migration003.down }
 ];
 
-async function runMigrations() {
+export async function runMigrations() {
   try {
     // Create migrations table if it doesn't exist
     await pool.query(`
@@ -38,11 +42,17 @@ async function runMigrations() {
     }
 
     console.log('\n🎉 All migrations completed successfully!');
-    process.exit(0);
+    return true;
   } catch (error) {
     console.error('❌ Migration failed:', error);
-    process.exit(1);
+    throw error;
   }
 }
 
-runMigrations();
+// Si se ejecuta directamente (npm run migrate), hacer exit
+// Verificar si es el módulo principal
+if (process.argv[1] && process.argv[1].endsWith('run.js')) {
+  runMigrations()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}
