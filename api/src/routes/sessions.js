@@ -8,7 +8,7 @@ export default async function sessionsRoutes(fastify, options) {
     const { score, levelReached, xpEarned, durationSeconds } = request.body;
     const userId = request.user.id;
 
-    if (!score || !levelReached || !xpEarned) {
+    if (score === undefined || levelReached === undefined || xpEarned === undefined) {
       return reply.code(400).send({ error: 'Missing required fields' });
     }
 
