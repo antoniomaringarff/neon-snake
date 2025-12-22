@@ -1,41 +1,49 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge } from 'lucide-react';
+import AdminPanel from './components/AdminPanel';
 
 // Configuración de niveles - cada nivel tiene características particulares
-const getLevelConfig = (level) => {
-  // Configuración base escalonada
+// Esta función ahora usa los niveles cargados desde la DB si están disponibles
+const getLevelConfig = (level, levelConfigsFromDB = {}) => {
+  // Si tenemos configuración desde la DB para este nivel, usarla
+  if (levelConfigsFromDB[level]) {
+    const dbConfig = levelConfigsFromDB[level];
+    return {
+      starsNeeded: dbConfig.starsNeeded,
+      playerSpeed: dbConfig.playerSpeed,
+      enemySpeed: dbConfig.enemySpeed,
+      enemyCount: dbConfig.enemyCount,
+      enemyDensity: dbConfig.enemyDensity,
+      enemyShootPercentage: dbConfig.enemyShootPercentage,
+      enemyShieldPercentage: dbConfig.enemyShieldPercentage,
+      enemyShootCooldown: dbConfig.enemyShootCooldown,
+      xpDensity: dbConfig.xpDensity,
+      hasCentralCell: dbConfig.hasCentralCell,
+      centralCellOpeningSpeed: dbConfig.centralCellOpeningSpeed,
+    };
+  }
+
+  // Fallback a configuración hardcodeada si no hay datos de DB
   const baseConfig = {
-    // Estrellas necesarias para completar el nivel
     starsNeeded: Math.max(1, Math.floor(level * 0.5) + 1),
-    // Velocidad base del jugador
     playerSpeed: 2 + (level * 0.1),
-    // Velocidad base de los enemigos
     enemySpeed: 2 + (level * 0.15),
-    // Número de enemigos: nivel 1 = 5, nivel 2 = 10, luego +3 por nivel
     enemyCount: level === 1 ? 5 : level === 2 ? 10 : 10 + (level - 2) * 3,
-    // Densidad de enemigos (para spawn)
     enemyDensity: 15 + (level * 2),
-    // Porcentaje de enemigos que pueden disparar (0-100)
     enemyShootPercentage: Math.min(30 + (level * 5), 80),
-    // Porcentaje de enemigos que tienen escudo (0-100)
     enemyShieldPercentage: Math.min(0 + (level * 3), 50),
-    // Cooldown de disparo de enemigos (ms)
     enemyShootCooldown: Math.max(2000, 5000 - (level * 100)),
-    // Densidad de comida/XP (número de items en el mapa)
     xpDensity: 100 + (level * 5),
-    // Si tiene celda del medio (rectángulo central)
     hasCentralCell: level >= 2,
-    // Velocidad de movimiento de las aberturas en la celda del medio
     centralCellOpeningSpeed: 0.002 + (level * 0.0005),
   };
 
-  // Configuraciones específicas por nivel (puedes personalizar cada uno)
   const levelSpecificConfigs = {
     1: {
       starsNeeded: 1,
       playerSpeed: 2,
       enemySpeed: 2,
-      enemyCount: 5, // Mínimo 5 enemigos en nivel 1
+      enemyCount: 5,
       enemyDensity: 15,
       enemyShootPercentage: 0,
       enemyShieldPercentage: 0,
@@ -48,7 +56,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.2,
       enemySpeed: 2.3,
-      enemyCount: 10, // Mínimo 10 enemigos en nivel 2
+      enemyCount: 10,
       enemyDensity: 18,
       enemyShootPercentage: 10,
       enemyShieldPercentage: 0,
@@ -61,7 +69,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.4,
       enemySpeed: 2.6,
-      enemyCount: 13, // 10 + 3
+      enemyCount: 13,
       enemyDensity: 21,
       enemyShootPercentage: 20,
       enemyShieldPercentage: 5,
@@ -74,7 +82,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.6,
       enemySpeed: 2.9,
-      enemyCount: 16, // 13 + 3
+      enemyCount: 16,
       enemyDensity: 24,
       enemyShootPercentage: 30,
       enemyShieldPercentage: 10,
@@ -87,7 +95,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.8,
       enemySpeed: 3.2,
-      enemyCount: 19, // 16 + 3
+      enemyCount: 19,
       enemyDensity: 27,
       enemyShootPercentage: 40,
       enemyShieldPercentage: 15,
@@ -98,11 +106,10 @@ const getLevelConfig = (level) => {
     },
   };
 
-  // Si hay configuración específica para este nivel, úsala, sino usa la base
   return levelSpecificConfigs[level] || baseConfig;
 };
 
-const SnakeGame = ({ user, onLogout }) => {
+const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
@@ -139,6 +146,8 @@ const SnakeGame = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [shopConfigs, setShopConfigs] = useState(null); // Configuraciones de la tienda desde la DB
   const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [levelConfigs, setLevelConfigs] = useState({}); // Configuraciones de niveles desde la DB
   
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
@@ -181,6 +190,38 @@ const SnakeGame = ({ user, onLogout }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Load level configurations from API
+  const loadLevelConfigs = async () => {
+    try {
+      const response = await fetch('/api/admin/levels', {
+        headers: getAuthHeaders()
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const configsMap = {};
+        data.forEach(level => {
+          configsMap[level.levelNumber] = {
+            starsNeeded: level.starsNeeded,
+            playerSpeed: level.playerSpeed,
+            enemySpeed: level.enemySpeed,
+            enemyCount: level.enemyCount,
+            enemyDensity: level.enemyDensity,
+            enemyShootPercentage: level.enemyShootPercentage,
+            enemyShieldPercentage: level.enemyShieldPercentage,
+            enemyShootCooldown: level.enemyShootCooldown,
+            xpDensity: level.xpDensity,
+            hasCentralCell: level.hasCentralCell,
+            centralCellOpeningSpeed: level.centralCellOpeningSpeed,
+          };
+        });
+        setLevelConfigs(configsMap);
+      }
+    } catch (error) {
+      console.error('Error loading level configs:', error);
+      // Fallback to hardcoded configs
+    }
+  };
 
   // Load shop configurations from API
   const loadShopConfigs = async () => {
@@ -265,6 +306,35 @@ const SnakeGame = ({ user, onLogout }) => {
       setLoading(false);
     }
   };
+
+  // Load all initial data
+  useEffect(() => {
+    if (user?.id) {
+      loadShopConfigs();
+      loadUserProgress();
+      if (isAdmin) {
+        loadLevelConfigs();
+      }
+    }
+  }, [user?.id, isAdmin]);
+
+  // Handle ESC key to close admin panel and R key to open it (global, works anytime)
+  useEffect(() => {
+    if (!isAdmin) return;
+    
+    const handleKeyPress = (e) => {
+      if (e.key === 'Escape' && showAdminPanel) {
+        setShowAdminPanel(false);
+      } else if (e.key.toLowerCase() === 'r' && !showAdminPanel) {
+        // R key works anytime for admin panel
+        e.preventDefault();
+        setShowAdminPanel(true);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showAdminPanel, isAdmin]);
 
   // Save user progress to API
   const saveUserProgress = async () => {
@@ -473,7 +543,7 @@ const SnakeGame = ({ user, onLogout }) => {
 
     const initGame = () => {
       const game = gameRef.current;
-      const levelConfig = getLevelConfig(game.level);
+      const levelConfig = getLevelConfig(game.level, levelConfigs);
       
       game.snake = [{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }];
       game.direction = { x: 1, y: 0 };
@@ -668,6 +738,9 @@ const SnakeGame = ({ user, onLogout }) => {
     stopAutoFireRef.current = stopAutoFire;
 
     const handleKeyDown = (e) => {
+      // Don't handle keys if admin panel is open
+      if (showAdminPanel) return;
+      
       if (e.key.toLowerCase() === 'j') {
         setShopOpen(prev => !prev);
       } else if (e.key === ' ' && cannonLevel > 0) {
@@ -1561,7 +1634,7 @@ const SnakeGame = ({ user, onLogout }) => {
       }
 
       // Add new food if needed - usar densidad del nivel
-      const levelConfig = getLevelConfig(game.level);
+      const levelConfig = getLevelConfig(game.level, levelConfigs);
       while (game.food.length < levelConfig.xpDensity) {
         game.food.push(createFood());
       }
@@ -2123,11 +2196,11 @@ const SnakeGame = ({ user, onLogout }) => {
         shootingIntervalRef.current = null;
       }
     };
-  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen]); // Quitado totalXP de las dependencias
+  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen, showAdminPanel, isAdmin]); // Quitado totalXP de las dependencias
 
   const startGame = () => {
     gameRef.current.level = level;
-    const levelConfig = getLevelConfig(level);
+    const levelConfig = getLevelConfig(level, levelConfigs);
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
@@ -2419,17 +2492,41 @@ const SnakeGame = ({ user, onLogout }) => {
               ⭐ {currentLevelStars} / {game.starsNeeded}
             </span>
           </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #33ffff',
+                color: '#33ffff',
+                padding: isMobile ? '4px 8px' : '5px 10px',
+                fontSize: isMobile ? '9px' : '11px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Admin [R]
+            </button>
+          )}
           <button
             onClick={onLogout}
             style={{
               background: 'transparent',
               border: '1px solid #ff3366',
               color: '#ff3366',
-              padding: isMobile ? '4px 8px' : '5px 10px',
-              fontSize: isMobile ? '9px' : '11px',
+                  padding: isMobile ? '4px 8px' : '5px 10px',
+                  fontSize: isMobile ? '9px' : '11px',
               cursor: 'pointer',
-              borderRadius: '3px',
-              transition: 'all 0.3s'
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
             }}
             onMouseEnter={(e) => {
               e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -2440,6 +2537,7 @@ const SnakeGame = ({ user, onLogout }) => {
           >
             Salir
           </button>
+        </div>
         </div>
       );
     }
@@ -2555,27 +2653,52 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
           </div>
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-                padding: '4px 8px',
-                fontSize: '10px',
-              cursor: 'pointer',
-                borderRadius: '3px',
-                transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-              Salir
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '4px 8px',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                Admin [R]
+              </button>
+            )}
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                  padding: '4px 8px',
+                  fontSize: '10px',
+                cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+                Salir
+            </button>
+          </div>
           </div>
         </div>
       );
@@ -2674,32 +2797,94 @@ const SnakeGame = ({ user, onLogout }) => {
                 </span>
               </div>
             )}
-        <button
-          onClick={onLogout}
-          style={{
-            background: 'transparent',
-            border: '1px solid #ff3366',
-            color: '#ff3366',
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #33ffff',
+                color: '#33ffff',
                 padding: '5px 10px',
                 fontSize: '11px',
-            cursor: 'pointer',
+                cursor: 'pointer',
                 borderRadius: '3px',
-            transition: 'all 0.3s',
-                marginLeft: '10px'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'transparent';
-          }}
-        >
-              Salir
-        </button>
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Admin [R]
+            </button>
+          )}
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+              cursor: 'pointer',
+                  borderRadius: '3px',
+              transition: 'all 0.3s',
+                  marginLeft: '10px'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+                Salir
+          </button>
+        </div>
           </div>
       </div>
     );
   };
+
+  // Show banned message if user is banned
+  if (isBanned) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+        color: '#ff3366',
+        fontSize: '24px',
+        fontFamily: 'monospace',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <h1 style={{ color: '#ff3366', margin: 0 }}>Cuenta Suspendida</h1>
+        <p style={{ color: '#888', fontSize: '16px' }}>
+          Tu cuenta ha sido suspendida. Por favor contacta al administrador.
+        </p>
+        <button
+          onClick={onLogout}
+          style={{
+            padding: '10px 20px',
+            background: 'transparent',
+            border: '2px solid #ff3366',
+            color: '#ff3366',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          Cerrar Sesión
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ 
@@ -2711,6 +2896,17 @@ const SnakeGame = ({ user, onLogout }) => {
       fontFamily: 'monospace',
       overflow: 'hidden'
     }}>
+      {/* Admin Panel */}
+      {showAdminPanel && (
+        <AdminPanel onClose={() => {
+          setShowAdminPanel(false);
+          // Reload level configs after admin changes
+          if (isAdmin) {
+            loadLevelConfigs();
+          }
+        }} />
+      )}
+      
       {/* Header siempre visible */}
       <UserHeader />
       

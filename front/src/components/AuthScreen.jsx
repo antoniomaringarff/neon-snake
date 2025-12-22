@@ -43,10 +43,14 @@ export default function AuthScreen({ onLogin }) {
       }
 
       if (!response.ok) {
+        // Check if user is banned
+        if (data.isBanned) {
+          throw new Error('Tu cuenta ha sido suspendida. Por favor contacta al administrador.');
+        }
         throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      onLogin(data.user, data.token);
+      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false);
     } catch (err) {
       setError(err.message || 'Error en la autenticación');
       console.error('Login error:', err);

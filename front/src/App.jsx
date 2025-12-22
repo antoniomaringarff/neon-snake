@@ -5,6 +5,8 @@ import AuthScreen from './components/AuthScreen';
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -24,6 +26,8 @@ function App() {
       })
       .then(data => {
         setUser(data);
+        setIsAdmin(data.isAdmin || false);
+        setIsBanned(data.isBanned || false);
       })
       .catch(() => {
         localStorage.removeItem('token');
@@ -37,16 +41,20 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (userData, token) => {
+  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false) => {
     localStorage.setItem('token', token);
     localStorage.setItem('userId', userData.id);
     setUser(userData);
+    setIsAdmin(adminStatus);
+    setIsBanned(bannedStatus);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
     setUser(null);
+    setIsAdmin(false);
+    setIsBanned(false);
   };
 
   if (loading) {
@@ -70,7 +78,7 @@ function App() {
     return <AuthScreen onLogin={handleLogin} />;
   }
 
-  return <SnakeGame user={user} onLogout={handleLogout} />;
+  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} />;
 }
 
 export default App;
