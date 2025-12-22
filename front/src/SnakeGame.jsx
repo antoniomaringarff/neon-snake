@@ -445,9 +445,11 @@ const SnakeGame = ({ user, onLogout }) => {
       game.stars = []; // Reset stars
       game.enemies = Array.from({ length: levelConfig.enemyCount }, () => createEnemy(levelConfig));
       game.particles = [];
+      game.bullets = [];
       game.currentXP = 0;
       game.currentStars = 0;
       game.starsNeeded = levelConfig.starsNeeded;
+      game.lastPlayerShot = 0; // Reset cooldown
       // Aplicar velocidad del nivel
       game.speed = levelConfig.playerSpeed;
       game.baseSpeed = levelConfig.playerSpeed;
@@ -505,13 +507,22 @@ const SnakeGame = ({ user, onLogout }) => {
 
     const shootBullet = () => {
       const game = gameRef.current;
-      if (!game.snake || game.snake.length === 0) return;
+      if (!game.snake || game.snake.length === 0) {
+        console.log('No se puede disparar: no hay snake');
+        return;
+      }
+      
+      if (cannonLevel === 0) {
+        console.log('No se puede disparar: no tienes cañón comprado');
+        return;
+      }
       
       const currentTime = Date.now();
       // Cannon level 5: 2 shots/sec (500ms cooldown), others: 1 shot/sec (1000ms cooldown)
       const cooldown = cannonLevel === 5 ? 500 : 1000;
       
       if (currentTime - game.lastPlayerShot < cooldown) {
+        console.log('No se puede disparar: en cooldown', currentTime - game.lastPlayerShot, 'ms');
         return; // Still on cooldown
       }
       
@@ -1931,6 +1942,7 @@ const SnakeGame = ({ user, onLogout }) => {
     game.baseSpeed = levelConfig.playerSpeed;
     game.snakeSize = SNAKE_SIZE;
     game.bullets = [];
+    game.lastPlayerShot = 0; // Reset cooldown
     
     // Create regular food across the map - usar densidad del nivel
     game.food = Array.from({ length: levelConfig.xpDensity }, () => createFood());
