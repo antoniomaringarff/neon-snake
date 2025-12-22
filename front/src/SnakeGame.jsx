@@ -136,7 +136,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
   const [totalStars, setTotalStars] = useState(0);
   const [currentLevelStars, setCurrentLevelStars] = useState(0);
   const [currentLevelXP, setCurrentLevelXP] = useState(0);
-  const [shieldLevel, setShieldLevel] = useState(0); // 0 = none, 1 = cabeza, 2 = atras/adelante, 3 = todo cuerpo, 4 = x2, 5 = x3
+  const [shieldLevel, setShieldLevel] = useState(0); // 0-10: sistema de daño incremental por balas
   const [magnetLevel, setMagnetLevel] = useState(0); // 0 = none, 1-5 = 10%, 20%, 30%, 40%, 50%
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
   const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
@@ -170,7 +170,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     enemyDensity: 23, // Configurable: more enemies = higher density (1.5x original)
     gameStartTime: null,
     sessionXP: 0,
-    lastPlayerShot: 0 // For cannon cooldown
+    lastPlayerShot: 0, // For cannon cooldown
+    headHits: 0, // Contador de balas recibidas en la cabeza
+    bodyHits: 0 // Contador de balas recibidas en el cuerpo
   });
 
   // Helper function to get auth token
@@ -318,17 +320,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     }
   }, [user?.id, isAdmin]);
 
-  // Handle ESC key to close admin panel and R key to open it (global, works anytime)
+  // Handle ESC key to close admin panel
   useEffect(() => {
     if (!isAdmin) return;
     
     const handleKeyPress = (e) => {
       if (e.key === 'Escape' && showAdminPanel) {
         setShowAdminPanel(false);
-      } else if (e.key.toLowerCase() === 'r' && !showAdminPanel) {
-        // R key works anytime for admin panel
-        e.preventDefault();
-        setShowAdminPanel(true);
       }
     };
     
@@ -1181,50 +1179,59 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
         // Check collision with player (enemy bullets)
         if (bullet.owner === 'enemy' && game.snake.length > 0) {
           const playerHead = game.snake[0];
-          let hitPlayer = false;
+          let hitHead = false;
+          let hitBody = false;
           
-          // Shield level 1: only head protected
-          // Shield level 2: head and tail protected  
-          // Shield level 3: full body protected
-          // Shield level 4: full body x2 protection
-          // Shield level 5: full body x3 protection
-          
-          if (shieldLevel >= 3) {
-            // Full body protection - check collision with any segment
-            for (let i = 0; i < game.snake.length; i++) {
+          // Check head collision
+          if (checkCollision(bullet, playerHead, 15)) {
+            hitHead = true;
+          } else {
+            // Check body collision (all segments except head)
+            for (let i = 1; i < game.snake.length; i++) {
               if (checkCollision(bullet, game.snake[i], 15)) {
-                hitPlayer = true;
+                hitBody = true;
                 break;
               }
             }
-            } else if (shieldLevel === 2) {
-            // Head and tail protected
-            const headHit = checkCollision(bullet, playerHead, 15);
-            const tailHit = game.snake.length > 1 && checkCollision(bullet, game.snake[game.snake.length - 1], 15);
-            hitPlayer = headHit || tailHit;
-          } else if (shieldLevel === 1) {
-            // Only head protected
-            hitPlayer = checkCollision(bullet, playerHead, 15);
-          } else {
-            // No shield - check head collision (will cause damage)
-            hitPlayer = checkCollision(bullet, playerHead, 15);
           }
           
-          if (hitPlayer) {
-            // Shield blocks bullets for levels 1-3, reduces damage for 4-5
-            if (shieldLevel >= 1 && shieldLevel <= 3) {
-              // Bullets are blocked
-              createParticle(bullet.x, bullet.y, '#6495ed', 8); // Blue shield effect
-              return false; // Remove bullet, no damage
-            } else if (shieldLevel >= 4) {
-              // Reduced damage (x2 or x3 protection)
-              createParticle(bullet.x, bullet.y, '#6495ed', 8);
-              return false; // Remove bullet
-            } else {
-              // No shield - take damage
-            createParticle(bullet.x, bullet.y, '#ff0000', 8);
-            return false; // Remove bullet
+          if (hitHead || hitBody) {
+            // Sistema de daño por escudo:
+            // Sin escudo (0): 1 bala cabeza = muerte, 2 balas cuerpo = muerte
+            // Escudo nivel 1: 2 balas cabeza = muerte, 3 balas cuerpo = muerte
+            // Escudo nivel 2: 3 balas cabeza = muerte, 4 balas cuerpo = muerte
+            // ... hasta nivel 10
+            
+            const headHitsNeeded = 1 + shieldLevel; // Nivel 0 = 1, nivel 1 = 2, etc.
+            const bodyHitsNeeded = 2 + shieldLevel; // Nivel 0 = 2, nivel 1 = 3, etc.
+            
+            if (hitHead) {
+              game.headHits++;
+              createParticle(bullet.x, bullet.y, shieldLevel > 0 ? '#6495ed' : '#ff0000', 8);
+              
+              if (game.headHits >= headHitsNeeded) {
+                // Player dies
+                const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+                createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
+                setGameState('gameOver');
+                return false;
+              }
+            } else if (hitBody) {
+              game.bodyHits++;
+              createParticle(bullet.x, bullet.y, shieldLevel > 0 ? '#6495ed' : '#ff0000', 8);
+              
+              if (game.bodyHits >= bodyHitsNeeded) {
+                // Player dies
+                const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+                createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
+                setGameState('gameOver');
+                return false;
+              }
             }
+            
+            return false; // Remove bullet
           }
         }
         
@@ -2204,6 +2211,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
+    gameRef.current.headHits = 0; // Reset head hits counter
+    gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     initGame();
     setShopOpen(false);
@@ -2341,11 +2350,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     const newLevel = level + 1;
     setLevel(newLevel);
     gameRef.current.level = newLevel;
-    const levelConfig = getLevelConfig(newLevel);
+    const levelConfig = getLevelConfig(newLevel, levelConfigs);
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
     gameRef.current.currentStars = 0; // Reset stars for new level
+    gameRef.current.headHits = 0; // Reset head hits counter
+    gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setCurrentLevelStars(0);
     initGame();
@@ -2513,7 +2524,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
                 e.target.style.background = 'transparent';
               }}
             >
-              Admin [R]
+              Admin
             </button>
           )}
           <button
@@ -2674,7 +2685,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
                   e.target.style.background = 'transparent';
                 }}
               >
-                Admin [R]
+                Admin
               </button>
             )}
             <button
@@ -2818,7 +2829,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
                 e.target.style.background = 'transparent';
               }}
             >
-              Admin [R]
+              Admin
             </button>
           )}
           <button
