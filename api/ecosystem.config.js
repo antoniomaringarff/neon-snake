@@ -1,8 +1,7 @@
-export default {
+module.exports = {
   apps: [{
     name: 'viborita-api',
     script: 'server.js',
-    cwd: './api',
     instances: 1,
     exec_mode: 'fork',
     watch: false,
