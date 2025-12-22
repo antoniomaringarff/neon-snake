@@ -11,8 +11,8 @@ const getLevelConfig = (level) => {
     playerSpeed: 2 + (level * 0.1),
     // Velocidad base de los enemigos
     enemySpeed: 2 + (level * 0.15),
-    // Número de enemigos
-    enemyCount: 5 + Math.floor(level * 1.5),
+    // Número de enemigos (aumentado 25%)
+    enemyCount: Math.floor((5 + Math.floor(level * 1.5)) * 1.25),
     // Densidad de enemigos (para spawn)
     enemyDensity: 15 + (level * 2),
     // Porcentaje de enemigos que pueden disparar (0-100)
@@ -35,7 +35,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 1,
       playerSpeed: 2,
       enemySpeed: 2,
-      enemyCount: 3,
+      enemyCount: Math.floor(3 * 1.25), // 4
       enemyDensity: 15,
       enemyShootPercentage: 0,
       enemyShieldPercentage: 0,
@@ -48,7 +48,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.2,
       enemySpeed: 2.3,
-      enemyCount: 5,
+      enemyCount: Math.floor(5 * 1.25), // 6
       enemyDensity: 18,
       enemyShootPercentage: 10,
       enemyShieldPercentage: 0,
@@ -61,7 +61,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.4,
       enemySpeed: 2.6,
-      enemyCount: 7,
+      enemyCount: Math.floor(7 * 1.25), // 9
       enemyDensity: 21,
       enemyShootPercentage: 20,
       enemyShieldPercentage: 5,
@@ -74,7 +74,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.6,
       enemySpeed: 2.9,
-      enemyCount: 9,
+      enemyCount: Math.floor(9 * 1.25), // 11
       enemyDensity: 24,
       enemyShootPercentage: 30,
       enemyShieldPercentage: 10,
@@ -87,7 +87,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.8,
       enemySpeed: 3.2,
-      enemyCount: 11,
+      enemyCount: Math.floor(11 * 1.25), // 14
       enemyDensity: 27,
       enemyShootPercentage: 40,
       enemyShieldPercentage: 15,
@@ -2930,6 +2930,146 @@ const SnakeGame = ({ user, onLogout }) => {
               userSelect: 'none'
             }}
           />
+          
+          {/* Botones móviles */}
+          {isMobile && gameState === 'playing' && (
+            <>
+              {/* Botón de disparo - Abajo a la derecha */}
+              {cannonLevel > 0 && (
+                <button
+                  onClick={() => {
+                    const game = gameRef.current;
+                    if (!game.snake || game.snake.length === 0) return;
+                    
+                    const currentTime = Date.now();
+                    const cooldown = cannonLevel === 5 ? 500 : 1000;
+                    
+                    if (currentTime - game.lastPlayerShot < cooldown) {
+                      return;
+                    }
+                    
+                    game.lastPlayerShot = currentTime;
+                    
+                    const head = game.snake[0];
+                    const tail = game.snake.length > 1 ? game.snake[game.snake.length - 1] : null;
+                    
+                    const headAngle = Math.atan2(game.direction.y, game.direction.x);
+                    const headPerpAngle = headAngle + Math.PI / 2;
+                    
+                    let tailAngle = 0;
+                    let tailPerpAngle = 0;
+                    if (tail) {
+                      const tailDx = head.x - tail.x;
+                      const tailDy = head.y - tail.y;
+                      const tailDist = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
+                      if (tailDist > 0) {
+                        tailAngle = Math.atan2(tailDy, tailDx);
+                        tailPerpAngle = tailAngle + Math.PI / 2;
+                      }
+                    }
+                    
+                    if (cannonLevel >= 1) {
+                      const headBulletCount = cannonLevel >= 2 ? 2 : 1;
+                      for (let i = 0; i < headBulletCount; i++) {
+                        const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
+                        game.bullets.push({
+                          x: head.x + Math.cos(headPerpAngle) * offset,
+                          y: head.y + Math.sin(headPerpAngle) * offset,
+                          vx: game.direction.x * 8,
+                          vy: game.direction.y * 8,
+                          life: 100,
+                          owner: 'player'
+                        });
+                      }
+                    }
+                    
+                    if (cannonLevel >= 3 && tail) {
+                      const tailBulletCount = cannonLevel >= 4 ? 2 : 1;
+                      const tailDir = {
+                        x: -game.direction.x,
+                        y: -game.direction.y
+                      };
+                      
+                      for (let i = 0; i < tailBulletCount; i++) {
+                        const offset = tailBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
+                        game.bullets.push({
+                          x: tail.x + Math.cos(tailPerpAngle) * offset,
+                          y: tail.y + Math.sin(tailPerpAngle) * offset,
+                          vx: tailDir.x * 8,
+                          vy: tailDir.y * 8,
+                          life: 100,
+                          owner: 'player'
+                        });
+                      }
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    right: '20px',
+                    width: '70px',
+                    height: '70px',
+                    borderRadius: '50%',
+                    background: 'rgba(0, 170, 255, 0.3)',
+                    border: '3px solid #00aaff',
+                    color: '#00aaff',
+                    fontSize: '32px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 20px rgba(0, 170, 255, 0.6)',
+                    zIndex: 999,
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    padding: 0
+                  }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  🔫
+                </button>
+              )}
+              
+              {/* Botón de tienda - Abajo a la izquierda */}
+              <button
+                onClick={() => setShopOpen(prev => !prev)}
+                style={{
+                  position: 'absolute',
+                  bottom: '20px',
+                  left: '20px',
+                  width: '70px',
+                  height: '70px',
+                  borderRadius: '50%',
+                  background: 'rgba(255, 0, 255, 0.3)',
+                  border: '3px solid #ff00ff',
+                  color: '#ff00ff',
+                  fontSize: '32px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.6)',
+                  zIndex: 999,
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none',
+                  padding: 0
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              >
+                🛒
+              </button>
+            </>
+          )}
           
           {shopOpen && (
             <div style={{
