@@ -59,8 +59,19 @@ export async function runMigrations() {
 
 // Si se ejecuta directamente (npm run migrate), hacer exit
 // Verificar si es el módulo principal
-if (process.argv[1] && process.argv[1].endsWith('run.js')) {
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('run.js') || 
+  process.argv[1].includes('migrations/run.js')
+);
+
+if (isMainModule) {
   runMigrations()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+    .then(() => {
+      console.log('\n✅ Migrations completed successfully');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('\n❌ Migration failed:', error);
+      process.exit(1);
+    });
 }

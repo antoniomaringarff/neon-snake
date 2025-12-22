@@ -25,9 +25,11 @@ function App() {
         return res.json();
       })
       .then(data => {
+        console.log('User data from /api/auth/me:', data);
         setUser(data);
-        setIsAdmin(data.isAdmin || false);
-        setIsBanned(data.isBanned || false);
+        setIsAdmin(data.isAdmin === true || data.isAdmin === 'true');
+        setIsBanned(data.isBanned === true || data.isBanned === 'true');
+        console.log('isAdmin set to:', data.isAdmin === true || data.isAdmin === 'true');
       })
       .catch(() => {
         localStorage.removeItem('token');

@@ -79,20 +79,26 @@ fastify.setErrorHandler((error, request, reply) => {
 // Run migrations before starting server
 // Se ejecutan siempre a menos que SKIP_MIGRATIONS=true
 const runMigrationsOnStart = async () => {
-  if (process.env.SKIP_MIGRATIONS !== 'true') {
-    try {
-      console.log('📊 Ejecutando migraciones de base de datos...');
-      const { runMigrations } = await import('./src/migrations/run.js');
-      await runMigrations();
-      console.log('✅ Migraciones completadas');
-    } catch (error) {
-      console.error('⚠️  Error ejecutando migraciones:', error.message);
-      console.error('   Stack:', error.stack);
-      // No bloqueamos el inicio del servidor si las migraciones fallan
-      // (puede que ya estén ejecutadas o haya un problema temporal)
-    }
-  } else {
+  if (process.env.SKIP_MIGRATIONS === 'true') {
     console.log('⏭️  Migraciones omitidas (SKIP_MIGRATIONS=true)');
+    return;
+  }
+  
+  try {
+    console.log('📊 Ejecutando migraciones de base de datos...');
+    const { runMigrations } = await import('./src/migrations/run.js');
+    await runMigrations();
+    console.log('✅ Migraciones completadas');
+  } catch (error) {
+    console.error('⚠️  Error ejecutando migraciones:', error.message);
+    console.error('   Stack:', error.stack);
+    // En producción, es mejor fallar si las migraciones no se pueden ejecutar
+    if (process.env.NODE_ENV === 'production') {
+      console.error('❌ No se puede iniciar el servidor sin ejecutar migraciones en producción');
+      process.exit(1);
+    }
+    // En desarrollo, continuamos aunque fallen las migraciones
+    console.warn('⚠️  Continuando sin migraciones (modo desarrollo)');
   }
 };
 

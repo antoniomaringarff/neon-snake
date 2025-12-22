@@ -102,7 +102,7 @@ export default async function authRoutes(fastify, options) {
           totalStars: user.total_stars || 0
         },
         token,
-        isAdmin: user.is_admin || false,
+        isAdmin: user.is_admin === true || user.is_admin === 'true' || user.is_admin === 1,
         isBanned: false
       };
     } catch (error) {
@@ -139,7 +139,7 @@ export default async function authRoutes(fastify, options) {
         totalXp: user.total_xp,
         createdAt: user.created_at,
         isBanned: user.is_banned || false,
-        isAdmin: user.is_admin || false
+        isAdmin: user.is_admin === true || user.is_admin === 'true' || user.is_admin === 1
       };
     } catch (error) {
       throw error;

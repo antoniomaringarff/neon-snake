@@ -71,9 +71,9 @@ module.exports = {
         'echo "📦 Installing API dependencies..."',
         'cd ../api && npm install --production=false',
         
-        // API: run migrations
+        // API: run migrations (with error handling)
         'echo "🔄 Running migrations..."',
-        'npm run migrate',
+        'cd api && npm run migrate || (echo "❌ Migration failed!" && exit 1)',
         
         // Restart PM2 using the root ecosystem file
         'echo "🔄 Restarting PM2..."',
