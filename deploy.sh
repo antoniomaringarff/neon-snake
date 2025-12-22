@@ -41,12 +41,20 @@ fi
 echo "🔨 Construyendo imágenes Docker..."
 $DOCKER_COMPOSE build
 
+# Iniciar servicios (solo DB primero para que esté lista)
+echo "▶️  Iniciando base de datos..."
+$DOCKER_COMPOSE up -d db
+
+# Esperar a que la base de datos esté lista
+echo "⏳ Esperando a que la base de datos esté lista..."
+sleep 10
+
 # Ejecutar migraciones
 echo "📊 Ejecutando migraciones de base de datos..."
 $DOCKER_COMPOSE run --rm api npm run migrate
 
-# Iniciar servicios
-echo "▶️  Iniciando servicios..."
+# Iniciar todos los servicios
+echo "▶️  Iniciando todos los servicios..."
 $DOCKER_COMPOSE up -d
 
 # Esperar a que los servicios estén listos
