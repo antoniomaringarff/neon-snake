@@ -116,6 +116,7 @@ const SnakeGame = ({ user, onLogout }) => {
   const [magnetLevel, setMagnetLevel] = useState(0); // 0 = none, 1-5 = 10%, 20%, 30%, 40%, 50%
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
   const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
+  const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0 = none, 1-10 = x2, x4, x8, x16, x32, x64, x128, x256, x512, x1024
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -237,6 +238,7 @@ const SnakeGame = ({ user, onLogout }) => {
       setMagnetLevel(data.magnetLevel || 0);
       setCannonLevel(data.cannonLevel || 0);
       setSpeedLevel(data.speedLevel || 0);
+      setBulletSpeedLevel(data.bulletSpeedLevel || 0);
       setHeadLevel(data.headLevel || 1);
       gameRef.current.level = data.currentLevel || 1;
       
@@ -261,6 +263,7 @@ const SnakeGame = ({ user, onLogout }) => {
           magnetLevel,
           cannonLevel,
           speedLevel,
+          bulletSpeedLevel,
           currentLevel: level,
           totalXp: totalXP,
           totalStars: totalStars
@@ -330,7 +333,7 @@ const SnakeGame = ({ user, onLogout }) => {
     }, 2000); // Save 2 seconds after last change
 
     return () => clearTimeout(timeoutId);
-  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel]);
+  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel]);
 
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 600;
@@ -541,6 +544,11 @@ const SnakeGame = ({ user, onLogout }) => {
       // Level 4: 2 bullets from head + 2 from tail (double cannon tail)
       // Level 5: Same as 4 but faster (2 shots/sec)
       
+      // Calculate bullet speed multiplier (2^bulletSpeedLevel)
+      const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
+      const baseBulletSpeed = 8;
+      const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+      
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
         const headBulletCount = cannonLevel >= 2 ? 2 : 1;
@@ -549,8 +557,8 @@ const SnakeGame = ({ user, onLogout }) => {
           game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
-            vx: game.direction.x * 8,
-            vy: game.direction.y * 8,
+            vx: game.direction.x * bulletSpeed,
+            vy: game.direction.y * bulletSpeed,
             life: 100,
             owner: 'player'
           });
@@ -570,8 +578,8 @@ const SnakeGame = ({ user, onLogout }) => {
           game.bullets.push({
             x: tail.x + Math.cos(tailPerpAngle) * offset,
             y: tail.y + Math.sin(tailPerpAngle) * offset,
-            vx: tailDir.x * 8,
-            vy: tailDir.y * 8,
+            vx: tailDir.x * bulletSpeed,
+            vy: tailDir.y * bulletSpeed,
             life: 100,
             owner: 'player'
           });
@@ -2005,6 +2013,8 @@ const SnakeGame = ({ user, onLogout }) => {
         setCannonLevel(level);
       } else if (type === 'speed') {
         setSpeedLevel(level);
+      } else if (type === 'bullet_speed') {
+        setBulletSpeedLevel(level);
       } else if (type === 'head') {
         setHeadLevel(level);
       }
@@ -2033,6 +2043,8 @@ const SnakeGame = ({ user, onLogout }) => {
       currentLevel = cannonLevel;
     } else if (type === 'speed') {
       currentLevel = speedLevel;
+    } else if (type === 'bullet_speed') {
+      currentLevel = bulletSpeedLevel;
     } else if (type === 'head') {
       currentLevel = headLevel;
     }
@@ -2701,6 +2713,57 @@ const SnakeGame = ({ user, onLogout }) => {
                 </div>
               );
             })()}
+
+            {/* Velocidad de Bala */}
+            {(() => {
+              const next = getNextUpgrade('bullet_speed');
+              const currentLevel = bulletSpeedLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #00ff00', 
+                  padding: '20px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                  minWidth: '220px'
+                }}>
+                  <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                    VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  {next ? (
+                    <>
+                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #00ff00',
+                          color: '#00ff00',
+                          padding: '10px 20px',
+                          fontSize: '16px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                          marginTop: '10px'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <button 
@@ -2968,6 +3031,11 @@ const SnakeGame = ({ user, onLogout }) => {
                       }
                     }
                     
+                    // Calculate bullet speed multiplier (2^bulletSpeedLevel)
+                    const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
+                    const baseBulletSpeed = 8;
+                    const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+                    
                     if (cannonLevel >= 1) {
                       const headBulletCount = cannonLevel >= 2 ? 2 : 1;
                       for (let i = 0; i < headBulletCount; i++) {
@@ -2975,8 +3043,8 @@ const SnakeGame = ({ user, onLogout }) => {
                         game.bullets.push({
                           x: head.x + Math.cos(headPerpAngle) * offset,
                           y: head.y + Math.sin(headPerpAngle) * offset,
-                          vx: game.direction.x * 8,
-                          vy: game.direction.y * 8,
+                          vx: game.direction.x * bulletSpeed,
+                          vy: game.direction.y * bulletSpeed,
                           life: 100,
                           owner: 'player'
                         });
@@ -2995,8 +3063,8 @@ const SnakeGame = ({ user, onLogout }) => {
                         game.bullets.push({
                           x: tail.x + Math.cos(tailPerpAngle) * offset,
                           y: tail.y + Math.sin(tailPerpAngle) * offset,
-                          vx: tailDir.x * 8,
-                          vy: tailDir.y * 8,
+                          vx: tailDir.x * bulletSpeed,
+                          vy: tailDir.y * bulletSpeed,
                           life: 100,
                           owner: 'player'
                         });
@@ -3278,6 +3346,57 @@ const SnakeGame = ({ user, onLogout }) => {
                               background: 'transparent',
                               border: '2px solid #ff3366',
                               color: '#ff3366',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                              borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                              width: '100%',
+                              marginTop: '10px'
+                            }}
+                          >
+                            COMPRAR NIVEL {next.level}
+                          </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Velocidad de Bala */}
+                {(() => {
+                  const next = getNextUpgrade('bullet_speed');
+                  const currentLevel = bulletSpeedLevel;
+                  return (
+                    <div style={{ 
+                      border: '2px solid #00ff00', 
+                      padding: '20px', 
+                      borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                            style={{
+                              background: 'transparent',
+                              border: '2px solid #00ff00',
+                              color: '#00ff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
