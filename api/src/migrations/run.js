@@ -4,13 +4,15 @@ import * as migration002 from './002_shop_upgrades.js';
 import * as migration003 from './003_add_magnet_speed.js';
 import * as migration004 from './004_add_bullet_speed.js';
 import * as migration005 from './005_admin_features.js';
+import * as migration006 from './006_update_shield_level_to_10.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
   { name: '002_shop_upgrades', up: migration002.up, down: migration002.down },
   { name: '003_add_magnet_speed', up: migration003.up, down: migration003.down },
   { name: '004_add_bullet_speed', up: migration004.up, down: migration004.down },
-  { name: '005_admin_features', up: migration005.up, down: migration005.down }
+  { name: '005_admin_features', up: migration005.up, down: migration005.down },
+  { name: '006_update_shield_level_to_10', up: migration006.up, down: migration006.down }
 ];
 
 export async function runMigrations() {

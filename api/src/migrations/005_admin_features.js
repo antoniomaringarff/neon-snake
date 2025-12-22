@@ -4,13 +4,6 @@ export const up = async (pool) => {
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
 
-    -- Update shield_level constraint to allow up to level 10
-    ALTER TABLE user_progress
-    DROP CONSTRAINT IF EXISTS user_progress_shield_level_check;
-    
-    ALTER TABLE user_progress
-    ADD CONSTRAINT user_progress_shield_level_check CHECK (shield_level >= 0 AND shield_level <= 10);
-
     -- Create game_structures table
     CREATE TABLE IF NOT EXISTS game_structures (
       id SERIAL PRIMARY KEY,
