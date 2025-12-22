@@ -74,9 +74,10 @@ fastify.setErrorHandler((error, request, reply) => {
   });
 });
 
-// Run migrations before starting server (only in production)
+// Run migrations before starting server
+// Se ejecutan siempre a menos que SKIP_MIGRATIONS=true
 const runMigrationsOnStart = async () => {
-  if (process.env.NODE_ENV === 'production' && process.env.SKIP_MIGRATIONS !== 'true') {
+  if (process.env.SKIP_MIGRATIONS !== 'true') {
     try {
       console.log('📊 Ejecutando migraciones de base de datos...');
       const { runMigrations } = await import('./src/migrations/run.js');
@@ -84,9 +85,12 @@ const runMigrationsOnStart = async () => {
       console.log('✅ Migraciones completadas');
     } catch (error) {
       console.error('⚠️  Error ejecutando migraciones:', error.message);
+      console.error('   Stack:', error.stack);
       // No bloqueamos el inicio del servidor si las migraciones fallan
       // (puede que ya estén ejecutadas o haya un problema temporal)
     }
+  } else {
+    console.log('⏭️  Migraciones omitidas (SKIP_MIGRATIONS=true)');
   }
 };
 

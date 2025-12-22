@@ -1,7 +1,7 @@
 export default {
   apps: [{
     name: 'viborita-api',
-    script: './server.js',
+    script: 'server.js',
     cwd: './api',
     instances: 1,
     exec_mode: 'fork',
@@ -17,7 +17,8 @@ export default {
     merge_logs: true,
     autorestart: true,
     max_restarts: 10,
-    min_uptime: '10s'
+    min_uptime: '10s',
+    interpreter: 'node'
   }]
 };
 
