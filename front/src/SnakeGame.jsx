@@ -1886,6 +1886,24 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.arc(playerMinimapX, playerMinimapY, 3, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
+      
+      // Draw enemy positions on minimap as colored dots
+      game.enemies.forEach(enemy => {
+        if (enemy.segments && enemy.segments.length > 0) {
+          const enemyHead = enemy.segments[0];
+          const enemyMinimapX = minimapX + (enemyHead.x / WORLD_WIDTH) * minimapWidth;
+          const enemyMinimapY = minimapY + (enemyHead.y / WORLD_HEIGHT) * minimapHeight;
+          
+          // Use the enemy's hue color
+          ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
+          ctx.beginPath();
+          ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      });
 
       // Draw HUD - Horizontal level bar at the top
       const barHeight = 50;
@@ -1928,13 +1946,15 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.fillStyle = '#FFD700';
       ctx.fillText(`⭐: ${totalStars}`, CANVAS_WIDTH - 200, 40);
       
-      // Shop hint
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+      // Shop hint (only on desktop)
+      if (!isMobile) {
+        ctx.fillStyle = '#ff00ff';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+      }
       
-      // Cannon hint (if cannon is equipped)
-      if (cannonLevel > 0) {
+      // Cannon hint (if cannon is equipped, only on desktop)
+      if (!isMobile && cannonLevel > 0) {
         ctx.fillStyle = '#ffff00';
         ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
       }
@@ -2239,18 +2259,69 @@ const SnakeGame = ({ user, onLogout }) => {
   // Header component with user info
   const UserHeader = () => {
     const game = gameRef.current;
-    const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
-    // Mobile styles
-    const headerPadding = isMobile ? '8px 10px' : '15px 20px';
-    const labelFontSize = isMobile ? '8px' : '11px';
-    const valueFontSize = isMobile ? '12px' : '16px';
-    const gap = isMobile ? '8px' : '30px';
-    const iconSize = isMobile ? 14 : 18;
-    const iconTextSize = isMobile ? '10px' : '12px';
+    // Compact styles
+    const headerPadding = isMobile ? '4px 8px' : '6px 12px';
+    const fontSize = isMobile ? '11px' : '13px';
+    const iconSize = isMobile ? 12 : 14;
+    const iconTextSize = isMobile ? '9px' : '11px';
     
+    // During gameplay: show only compact game info
+    if (gameState === 'playing') {
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '1px solid #33ffff',
+          padding: headerPadding,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
+          zIndex: 1000
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? '12px' : '20px', 
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize, color: '#33ffff', fontWeight: 'bold' }}>
+              Nivel {game.level}
+            </span>
+            <span style={{ fontSize, color: '#33ffff' }}>
+              XP: {currentLevelXP}
+            </span>
+            <span style={{ fontSize, color: '#FFD700' }}>
+              ⭐ {currentLevelStars} / {game.starsNeeded}
+            </span>
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+              padding: isMobile ? '4px 8px' : '5px 10px',
+              fontSize: isMobile ? '9px' : '11px',
+              cursor: 'pointer',
+              borderRadius: '3px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Salir
+          </button>
+        </div>
+      );
+    }
+    
+    // When not playing: show full info
     if (isMobile) {
-      // Mobile layout: column
       return (
         <div style={{
           width: '100%',
@@ -2261,62 +2332,40 @@ const SnakeGame = ({ user, onLogout }) => {
           flexDirection: 'column',
           boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
           zIndex: 1000,
-          gap: '8px'
+          gap: '6px'
         }}>
           <div style={{ 
             display: 'flex', 
-            gap: gap, 
+            gap: '12px', 
             alignItems: 'center', 
             flexWrap: 'wrap',
             width: '100%'
           }}>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>Usuario</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
                 {user?.username || 'Usuario'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>XP Total</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
                 {totalXP}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>⭐ Total</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#FFD700' }}>
                 {totalStars}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: '9px', color: '#888', marginBottom: '1px' }}>Nivel</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#33ffff' }}>
                 {level}
               </div>
             </div>
           </div>
-          {gameState === 'playing' && (
-            <div style={{ width: '100%' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
           <div style={{ 
             display: 'flex', 
             gap: '8px', 
@@ -2347,33 +2396,34 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
           </div>
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-              padding: '6px 12px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              transition: 'all 0.3s',
-              width: '100%'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            Cerrar Sesión
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                padding: '4px 8px',
+                fontSize: '9px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Salir
+            </button>
+          </div>
         </div>
       );
     }
     
-    // Desktop layout: original horizontal design
+    // Desktop layout when not playing
     return (
       <div style={{
         width: '100%',
@@ -2388,70 +2438,48 @@ const SnakeGame = ({ user, onLogout }) => {
       }}>
         <div style={{ 
           display: 'flex', 
-          gap: gap, 
+          gap: '20px', 
           alignItems: 'center', 
           flex: 1
         }}>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>Usuario</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
               {user?.username || 'Usuario'}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>XP Total</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
               {totalXP}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>⭐ Total</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#FFD700' }}>
               {totalStars}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '1px' }}>Nivel</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#33ffff' }}>
               {level}
             </div>
           </div>
-          {gameState === 'playing' && (
-            <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '8px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
           <div style={{ 
             display: 'flex', 
-            gap: '15px', 
+            gap: '12px', 
             alignItems: 'center', 
             marginLeft: 'auto'
           }}>
             {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
                 <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
               </div>
             )}
             {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
                 <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
                   {headLevel === 2 ? 'Doble' : 'Triple'}
@@ -2459,7 +2487,7 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
             {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
                 <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
                   Cañón {cannonLevel === 2 ? 'x2' : ''}
@@ -2474,12 +2502,12 @@ const SnakeGame = ({ user, onLogout }) => {
             background: 'transparent',
             border: '1px solid #ff3366',
             color: '#ff3366',
-            padding: '8px 16px',
-            fontSize: '14px',
+            padding: '5px 10px',
+            fontSize: '11px',
             cursor: 'pointer',
-            borderRadius: '5px',
+            borderRadius: '3px',
             transition: 'all 0.3s',
-            marginLeft: '20px'
+            marginLeft: '15px'
           }}
           onMouseEnter={(e) => {
             e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -2488,7 +2516,7 @@ const SnakeGame = ({ user, onLogout }) => {
             e.target.style.background = 'transparent';
           }}
         >
-          Cerrar Sesión
+          Salir
         </button>
       </div>
     );
