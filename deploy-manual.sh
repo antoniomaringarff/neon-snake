@@ -32,7 +32,7 @@ npm run migrate
 
 # Reiniciar PM2
 echo "🔄 Reiniciando API con PM2..."
-pm2 restart viborita-api || pm2 start server.js --name "viborita-api" --env production
+pm2 restart viborita-api || pm2 start ecosystem.config.js || pm2 start server.js --name "viborita-api" --env production
 
 # Guardar configuración PM2
 pm2 save
