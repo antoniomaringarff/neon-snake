@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge } from 'lucide-react';
 
 // Configuración de niveles - cada nivel tiene características particulares
@@ -11,8 +11,8 @@ const getLevelConfig = (level) => {
     playerSpeed: 2 + (level * 0.1),
     // Velocidad base de los enemigos
     enemySpeed: 2 + (level * 0.15),
-    // Número de enemigos (aumentado 25%)
-    enemyCount: Math.floor((5 + Math.floor(level * 1.5)) * 1.25),
+    // Número de enemigos: nivel 1 = 5, nivel 2 = 10, luego +3 por nivel
+    enemyCount: level === 1 ? 5 : level === 2 ? 10 : 10 + (level - 2) * 3,
     // Densidad de enemigos (para spawn)
     enemyDensity: 15 + (level * 2),
     // Porcentaje de enemigos que pueden disparar (0-100)
@@ -35,7 +35,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 1,
       playerSpeed: 2,
       enemySpeed: 2,
-      enemyCount: Math.floor(3 * 1.25), // 4
+      enemyCount: 5, // Mínimo 5 enemigos en nivel 1
       enemyDensity: 15,
       enemyShootPercentage: 0,
       enemyShieldPercentage: 0,
@@ -48,7 +48,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.2,
       enemySpeed: 2.3,
-      enemyCount: Math.floor(5 * 1.25), // 6
+      enemyCount: 10, // Mínimo 10 enemigos en nivel 2
       enemyDensity: 18,
       enemyShootPercentage: 10,
       enemyShieldPercentage: 0,
@@ -61,7 +61,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 2,
       playerSpeed: 2.4,
       enemySpeed: 2.6,
-      enemyCount: Math.floor(7 * 1.25), // 9
+      enemyCount: 13, // 10 + 3
       enemyDensity: 21,
       enemyShootPercentage: 20,
       enemyShieldPercentage: 5,
@@ -74,7 +74,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.6,
       enemySpeed: 2.9,
-      enemyCount: Math.floor(9 * 1.25), // 11
+      enemyCount: 16, // 13 + 3
       enemyDensity: 24,
       enemyShootPercentage: 30,
       enemyShieldPercentage: 10,
@@ -87,7 +87,7 @@ const getLevelConfig = (level) => {
       starsNeeded: 3,
       playerSpeed: 2.8,
       enemySpeed: 3.2,
-      enemyCount: Math.floor(11 * 1.25), // 14
+      enemyCount: 19, // 16 + 3
       enemyDensity: 27,
       enemyShootPercentage: 40,
       enemyShieldPercentage: 15,
@@ -105,6 +105,23 @@ const getLevelConfig = (level) => {
 const SnakeGame = ({ user, onLogout }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // Mobile controls state
+  const [joystickActive, setJoystickActive] = useState(false);
+  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
+  const [joystickDirection, setJoystickDirection] = useState({ x: 0, y: 0 });
+  const joystickRef = useRef({ 
+    centerX: 0, 
+    centerY: 0, 
+    radius: 0, 
+    isActive: false,
+    direction: { x: 0, y: 0 } // Store direction synchronously
+  });
+  const shootBulletRef = useRef(null);
+  const isShootingRef = useRef(false);
+  const shootingIntervalRef = useRef(null);
+  const startAutoFireRef = useRef(null);
+  const stopAutoFireRef = useRef(null);
   const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -276,21 +293,36 @@ const SnakeGame = ({ user, onLogout }) => {
 
   // Save game session to API
   const saveGameSession = async (finalScore, levelReached, xpEarned, durationSeconds) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.warn('Cannot save session: no user id');
+      return;
+    }
+
+    // Ensure we have valid values
+    const sessionData = {
+      score: finalScore || 0,
+      levelReached: levelReached || 1,
+      xpEarned: xpEarned || 0,
+      durationSeconds: durationSeconds || 0
+    };
+
+    console.log('💾 Saving game session:', sessionData);
 
     try {
-      await fetch('/api/sessions', {
+      const response = await fetch('/api/sessions', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({
-          score: finalScore,
-          levelReached,
-          xpEarned,
-          durationSeconds
-        })
+        body: JSON.stringify(sessionData)
       });
+      
+      if (response.ok) {
+        console.log('✅ Session saved successfully');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Failed to save session:', response.status, errorData);
+      }
     } catch (error) {
-      console.error('Error saving session:', error);
+      console.error('❌ Error saving session:', error);
     }
   };
 
@@ -420,6 +452,11 @@ const SnakeGame = ({ user, onLogout }) => {
     
     const ctx = canvas.getContext('2d');
     let animationId;
+    
+    // Delta time tracking for consistent game speed across all hardware
+    let lastTime = performance.now();
+    const TARGET_FPS = 60;
+    const FRAME_TIME = 1000 / TARGET_FPS; // milliseconds per frame at target FPS
 
     const createParticle = (x, y, color, count = 8) => {
       for (let i = 0; i < count; i++) {
@@ -444,6 +481,7 @@ const SnakeGame = ({ user, onLogout }) => {
       game.food = Array.from({ length: levelConfig.xpDensity }, createFood);
       game.stars = []; // Reset stars
       game.enemies = Array.from({ length: levelConfig.enemyCount }, () => createEnemy(levelConfig));
+      console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos`);
       game.particles = [];
       game.bullets = [];
       game.currentXP = 0;
@@ -480,8 +518,98 @@ const SnakeGame = ({ user, onLogout }) => {
       updateMousePos(e.clientX, e.clientY);
     };
 
+    // Joystick handlers for mobile
+    const handleJoystickStart = (e) => {
+      if (!isMobile) return;
+      const touch = e.touches[0] || e.changedTouches[0];
+      if (!touch) return;
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const touchX = touch.clientX;
+      const touchY = touch.clientY;
+      
+      // Joystick area is bottom right (20px from bottom and right)
+      const joystickCenterX = rect.right - 20 - 60; // 60px is half of 120px joystick size
+      const joystickCenterY = rect.bottom - 20 - 60;
+      const joystickRadius = 60; // Radius of joystick base
+      
+      const distance = Math.sqrt(
+        Math.pow(touchX - joystickCenterX, 2) + 
+        Math.pow(touchY - joystickCenterY, 2)
+      );
+      
+      // Check if touch is within joystick activation area (2x radius)
+      if (distance < joystickRadius * 2) {
+        e.preventDefault();
+        joystickRef.current.isActive = true;
+        joystickRef.current.centerX = joystickCenterX;
+        joystickRef.current.centerY = joystickCenterY;
+        joystickRef.current.radius = joystickRadius;
+        setJoystickActive(true);
+        handleJoystickMove(e);
+      }
+    };
+
+    const handleJoystickMove = (e) => {
+      if (!isMobile || !joystickRef.current.isActive) return;
+      e.preventDefault();
+      const touch = e.touches[0] || e.changedTouches[0];
+      if (!touch) return;
+      
+      const touchX = touch.clientX;
+      const touchY = touch.clientY;
+      
+      const centerX = joystickRef.current.centerX;
+      const centerY = joystickRef.current.centerY;
+      const radius = joystickRef.current.radius;
+      
+      const dx = touchX - centerX;
+      const dy = touchY - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < radius) {
+        // Within circle - use actual position
+        const rect = canvasRef.current.getBoundingClientRect();
+        const dir = { x: dx / radius, y: dy / radius };
+        setJoystickPosition({ 
+          x: touchX - rect.left, 
+          y: touchY - rect.top 
+        });
+        setJoystickDirection(dir);
+        joystickRef.current.direction = dir; // Store synchronously
+      } else {
+        // Outside circle - clamp to edge
+        const angle = Math.atan2(dy, dx);
+        const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+        const rect = canvasRef.current.getBoundingClientRect();
+        setJoystickPosition({ 
+          x: (centerX + Math.cos(angle) * radius) - rect.left, 
+          y: (centerY + Math.sin(angle) * radius) - rect.top 
+        });
+        setJoystickDirection(dir);
+        joystickRef.current.direction = dir; // Store synchronously
+      }
+    };
+
+    const handleJoystickEnd = (e) => {
+      if (!isMobile) return;
+      e.preventDefault();
+      joystickRef.current.isActive = false;
+      joystickRef.current.direction = { x: 0, y: 0 };
+      setJoystickActive(false);
+      setJoystickPosition({ x: 0, y: 0 });
+      setJoystickDirection({ x: 0, y: 0 });
+    };
+
     const handleTouchMove = (e) => {
-      e.preventDefault(); // Prevent scrolling
+      if (isMobile) {
+        if (joystickRef.current.isActive) {
+          handleJoystickMove(e);
+          e.preventDefault();
+        }
+        return;
+      }
+      e.preventDefault(); // Prevent scrolling on desktop
       if (e.touches.length > 0) {
         const touch = e.touches[0];
         updateMousePos(touch.clientX, touch.clientY);
@@ -489,40 +617,103 @@ const SnakeGame = ({ user, onLogout }) => {
     };
 
     const handleTouchStart = (e) => {
-      e.preventDefault(); // Prevent scrolling
+      if (isMobile) {
+        handleJoystickStart(e);
+        return;
+      }
+      e.preventDefault(); // Prevent scrolling on desktop
       if (e.touches.length > 0) {
         const touch = e.touches[0];
         updateMousePos(touch.clientX, touch.clientY);
       }
     };
 
-    const handleKeyPress = (e) => {
+    // Función para iniciar auto-fire (usa setTimeout recursivo para ajustarse a cambios)
+    const startAutoFire = () => {
+      if (shootingIntervalRef.current) return; // Ya está activo
+      
+      const scheduleNextShot = () => {
+        if (!isShootingRef.current || cannonLevel === 0) {
+          shootingIntervalRef.current = null;
+          return;
+        }
+        
+        // Calcular cooldown basado en valores actuales (se actualiza automáticamente)
+        const baseCooldown = cannonLevel === 5 ? 500 : 1000;
+        const cooldownReduction = bulletSpeedLevel * 0.1;
+        const cooldown = Math.max(50, baseCooldown * (1 - cooldownReduction));
+        
+        // Disparar
+        if (shootBulletRef.current) {
+          shootBulletRef.current();
+        }
+        
+        // Programar siguiente disparo
+        shootingIntervalRef.current = setTimeout(scheduleNextShot, cooldown);
+      };
+      
+      // Iniciar el ciclo
+      scheduleNextShot();
+    };
+
+    // Función para detener auto-fire
+    const stopAutoFire = () => {
+      isShootingRef.current = false;
+      if (shootingIntervalRef.current) {
+        clearTimeout(shootingIntervalRef.current);
+        shootingIntervalRef.current = null;
+      }
+    };
+
+    // Guardar en refs para acceder desde JSX
+    startAutoFireRef.current = startAutoFire;
+    stopAutoFireRef.current = stopAutoFire;
+
+    const handleKeyDown = (e) => {
       if (e.key.toLowerCase() === 'j') {
         setShopOpen(prev => !prev);
       } else if (e.key === ' ' && cannonLevel > 0) {
         e.preventDefault();
-        shootBullet();
+        if (!isShootingRef.current) {
+          isShootingRef.current = true;
+          shootBullet(); // Disparo inmediato
+          startAutoFire(); // Iniciar auto-fire
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        stopAutoFire();
       }
     };
 
     const shootBullet = () => {
       const game = gameRef.current;
       if (!game.snake || game.snake.length === 0) {
-        console.log('No se puede disparar: no hay snake');
         return;
       }
       
       if (cannonLevel === 0) {
-        console.log('No se puede disparar: no tienes cañón comprado');
         return;
       }
       
+      // Initialize lastPlayerShot if not exists
+      if (game.lastPlayerShot === undefined) {
+        game.lastPlayerShot = 0;
+      }
+      
       const currentTime = Date.now();
-      // Cannon level 5: 2 shots/sec (500ms cooldown), others: 1 shot/sec (1000ms cooldown)
-      const cooldown = cannonLevel === 5 ? 500 : 1000;
+      
+      // Calcular cooldown: base según cannonLevel, reducido por bulletSpeedLevel
+      // Base: cannon level 5 = 500ms, otros = 1000ms
+      const baseCooldown = cannonLevel === 5 ? 500 : 1000;
+      // bulletSpeedLevel reduce el cooldown: nivel 1 = 10% menos, nivel 10 = 90% menos
+      const cooldownReduction = bulletSpeedLevel * 0.1; // 10% por nivel
+      const cooldown = Math.max(50, baseCooldown * (1 - cooldownReduction)); // Mínimo 50ms
       
       if (currentTime - game.lastPlayerShot < cooldown) {
-        console.log('No se puede disparar: en cooldown', currentTime - game.lastPlayerShot, 'ms');
         return; // Still on cooldown
       }
       
@@ -555,25 +746,23 @@ const SnakeGame = ({ user, onLogout }) => {
       // Level 4: 2 bullets from head + 2 from tail (double cannon tail)
       // Level 5: Same as 4 but faster (2 shots/sec)
       
-      // Calculate bullet speed multiplier (2^bulletSpeedLevel)
-      const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
-      const baseBulletSpeed = 8;
-      const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
+      // Velocidad de bala siempre constante (no cambia con bulletSpeedLevel)
+      const bulletSpeed = 8;
       
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
         const headBulletCount = cannonLevel >= 2 ? 2 : 1;
         for (let i = 0; i < headBulletCount; i++) {
           const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-          game.bullets.push({
+        game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
             vx: game.direction.x * bulletSpeed,
             vy: game.direction.y * bulletSpeed,
-            life: 100,
-            owner: 'player'
-          });
-        }
+          life: 100,
+          owner: 'player'
+        });
+      }
       }
       
       if (cannonLevel >= 3 && tail) {
@@ -597,6 +786,9 @@ const SnakeGame = ({ user, onLogout }) => {
         }
       }
     };
+    
+    // Store shootBullet in ref so it can be accessed from JSX
+    shootBulletRef.current = shootBullet;
 
     const checkCollision = (pos1, pos2, distance) => {
       if (!distance) distance = gameRef.current.snakeSize * 2;
@@ -663,20 +855,20 @@ const SnakeGame = ({ user, onLogout }) => {
       });
     };
 
-    const updateEnemies = () => {
+    const updateEnemies = (normalizedDelta) => {
       const game = gameRef.current;
       const enemiesToRemove = [];
       
       game.enemies.forEach((enemy, enemyIndex) => {
-        // Random direction change
-        if (Math.random() < 0.02) {
+        // Random direction change (normalized by delta time)
+        if (Math.random() < 0.02 * normalizedDelta) {
           const angle = Math.random() * Math.PI * 2;
           enemy.direction = { x: Math.cos(angle), y: Math.sin(angle) };
         }
 
         const head = enemy.segments[0];
-        let newX = head.x + enemy.direction.x * enemy.speed;
-        let newY = head.y + enemy.direction.y * enemy.speed;
+        let newX = head.x + enemy.direction.x * enemy.speed * normalizedDelta;
+        let newY = head.y + enemy.direction.y * enemy.speed * normalizedDelta;
 
         // Bounce off world walls
         if (newX < BORDER_WIDTH || newX > WORLD_WIDTH - BORDER_WIDTH) {
@@ -818,7 +1010,8 @@ const SnakeGame = ({ user, onLogout }) => {
           if (checkCollision(playerHead, enemy.segments[i], game.snakeSize + SNAKE_SIZE)) {
             // Player dies - save session and game over
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            // Use game.sessionXP for score because React state (score) may be outdated
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
             setGameState('gameOver');
             return;
@@ -871,9 +1064,9 @@ const SnakeGame = ({ user, onLogout }) => {
       // Update bullets and check collisions
       const enemiesToKill = [];
       game.bullets = game.bullets.filter(bullet => {
-        bullet.x += bullet.vx;
-        bullet.y += bullet.vy;
-        bullet.life--;
+        bullet.x += bullet.vx * normalizedDelta;
+        bullet.y += bullet.vy * normalizedDelta;
+        bullet.life -= normalizedDelta;
         
         // Check collision with enemies (player bullets)
         if (bullet.owner === 'player') {
@@ -931,7 +1124,7 @@ const SnakeGame = ({ user, onLogout }) => {
                 break;
               }
             }
-          } else if (shieldLevel === 2) {
+            } else if (shieldLevel === 2) {
             // Head and tail protected
             const headHit = checkCollision(bullet, playerHead, 15);
             const tailHit = game.snake.length > 1 && checkCollision(bullet, game.snake[game.snake.length - 1], 15);
@@ -956,8 +1149,8 @@ const SnakeGame = ({ user, onLogout }) => {
               return false; // Remove bullet
             } else {
               // No shield - take damage
-              createParticle(bullet.x, bullet.y, '#ff0000', 8);
-              return false; // Remove bullet
+            createParticle(bullet.x, bullet.y, '#ff0000', 8);
+            return false; // Remove bullet
             }
           }
         }
@@ -1008,10 +1201,14 @@ const SnakeGame = ({ user, onLogout }) => {
       });
     };
 
-    const update = () => {
+    const update = (deltaTime) => {
       if (gameState !== 'playing' || shopOpen) return; // Pause when shop is open
 
       const game = gameRef.current;
+      
+      // Sistema de velocidad fija: siempre usar exactamente 1 frame de movimiento
+      // Esto garantiza velocidad constante independiente del framerate
+      const normalizedDelta = 1;
       
       // Check if player is passing through any opening
       if (game.centralRect && game.snake.length > 0) {
@@ -1071,7 +1268,7 @@ const SnakeGame = ({ user, onLogout }) => {
         game.centralRect.openings.forEach(opening => {
           // Only move if not paused
           if (!opening.paused) {
-            opening.position += opening.direction * opening.speed;
+            opening.position += opening.direction * opening.speed * normalizedDelta;
             
             // Bounce at edges
             if (opening.side === 'top' || opening.side === 'bottom') {
@@ -1097,45 +1294,68 @@ const SnakeGame = ({ user, onLogout }) => {
         });
       }
       
-      // Convert mouse position to world coordinates
+      // Get head position (needed for both mobile and desktop)
+      const head = game.snake.length > 0 ? game.snake[0] : { x: 0, y: 0 };
+      
+      // Use joystick direction on mobile, mouse position on desktop
+      let targetDir = { x: 0, y: 0 };
+      let distance = 0;
+      
+      // Check joystick state synchronously using ref
+      const isJoystickActive = joystickRef.current.isActive;
+      const joystickDir = joystickRef.current.direction;
+      
+      if (isMobile && isJoystickActive && (joystickDir.x !== 0 || joystickDir.y !== 0)) {
+        // Mobile: use joystick direction directly from ref (synchronous)
+        targetDir = {
+          x: joystickDir.x,
+          y: joystickDir.y
+        };
+        distance = 1; // Normalized direction, so distance is always 1
+      } else if (!isMobile) {
+        // Desktop: use mouse position
       const worldMouseX = game.mousePos.x + game.camera.x;
       const worldMouseY = game.mousePos.y + game.camera.y;
       
-      // Calculate direction towards mouse
-      const head = game.snake[0];
       const dx = worldMouseX - head.x;
       const dy = worldMouseY - head.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+        distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance > 5) {
+          targetDir = {
+          x: dx / distance,
+          y: dy / distance
+        };
+        }
+      }
       
       // Apply speed improvement when cursor is close (speedLevel: 1-10 = 10% to 100% extra)
+      // Only applies on desktop with mouse
       let currentSpeed = game.baseSpeed;
-      if (speedLevel > 0 && distance < 200) { // Only apply when cursor is within 200 pixels
+      if (!isMobile && speedLevel > 0 && distance < 200) {
         const speedBonus = (speedLevel * 10) / 100; // 10% per level
         currentSpeed = game.baseSpeed * (1 + speedBonus);
       }
       game.speed = currentSpeed;
       
       // Smooth turning - interpolate between current and target direction
-      if (distance > 5) {
-        const targetDir = {
-          x: dx / distance,
-          y: dy / distance
-        };
-        
-        // Lerp factor for smooth turning
-        const smoothFactor = 0.15;
+      if (distance > 0.1 || (isMobile && isJoystickActive)) {
+        // Lerp factor for smooth turning - faster on mobile for better responsiveness
+        const smoothFactor = isMobile ? 0.5 : 0.15; // Much faster response on mobile
         game.direction.x += (targetDir.x - game.direction.x) * smoothFactor;
         game.direction.y += (targetDir.y - game.direction.y) * smoothFactor;
         
         // Normalize to maintain constant speed
         const dirLength = Math.sqrt(game.direction.x * game.direction.x + game.direction.y * game.direction.y);
+        if (dirLength > 0.01) {
         game.direction.x /= dirLength;
         game.direction.y /= dirLength;
+        }
       }
 
       const newHead = {
-        x: head.x + game.direction.x * game.speed,
-        y: head.y + game.direction.y * game.speed
+        x: head.x + game.direction.x * game.speed * normalizedDelta,
+        y: head.y + game.direction.y * game.speed * normalizedDelta
       };
 
       // Check collision with red borders - instant death
@@ -1143,7 +1363,8 @@ const SnakeGame = ({ user, onLogout }) => {
           newHead.y < BORDER_WIDTH || newHead.y > WORLD_HEIGHT - BORDER_WIDTH) {
         // Save game session before game over
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(score || 0, level, game.sessionXP || 0, duration);
+        // Use game.sessionXP for score because React state (score) may be outdated
+        saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
         setGameState('gameOver');
         return;
       }
@@ -1187,14 +1408,14 @@ const SnakeGame = ({ user, onLogout }) => {
             if (headX < opening.x - collisionMargin || headX > opening.x + opening.width + collisionMargin) {
               // Hit the wall, not the opening
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             // No opening, always die if touching wall
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1208,13 +1429,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(bottomOpening);
             if (headX < opening.x - collisionMargin || headX > opening.x + opening.width + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1228,13 +1449,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(leftOpening);
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1248,13 +1469,13 @@ const SnakeGame = ({ user, onLogout }) => {
             const opening = getOpeningPos(rightOpening);
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-              saveGameSession(score, level, game.sessionXP, duration);
+              saveGameSession(game.sessionXP, level, game.sessionXP, duration);
               setGameState('gameOver');
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            saveGameSession(score, level, game.sessionXP, duration);
+            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             setGameState('gameOver');
             return;
           }
@@ -1281,8 +1502,8 @@ const SnakeGame = ({ user, onLogout }) => {
           if (distance < magnetRange && distance > 0) {
             // Attract food towards snake
             const attractionStrength = (1 - distance / magnetRange) * 0.3; // Stronger when closer
-            food.x += (dx / distance) * attractionStrength;
-            food.y += (dy / distance) * attractionStrength;
+            food.x += (dx / distance) * attractionStrength * normalizedDelta;
+            food.y += (dy / distance) * attractionStrength * normalizedDelta;
             
             // Show particle effect when collecting with magnet
             if (distance < game.snakeSize + food.size + 5) {
@@ -1305,10 +1526,10 @@ const SnakeGame = ({ user, onLogout }) => {
           setTotalXP(prev => prev + xpGain);
           setScore(prev => prev + xpGain); // Update score
           
-          // Increase size slightly when eating (speed is handled by speedLevel improvement)
-          game.snakeSize = Math.min(SNAKE_SIZE + game.snake.length * 0.05, SNAKE_SIZE + 4);
+          // El tamaño NO cambia al comer - solo crece la cola
+          // game.snakeSize se mantiene constante
           
-          createParticle(food.x, food.y, food.color, 10);
+          createParticle(food.x, food.y, food.color, 5);
           foodEaten = true;
           return false;
         }
@@ -1323,7 +1544,7 @@ const SnakeGame = ({ user, onLogout }) => {
           game.currentStars += 1;
           setCurrentLevelStars(prev => prev + 1);
           setTotalStars(prev => prev + 1);
-          createParticle(star.x, star.y, '#FFD700', 20);
+          createParticle(star.x, star.y, '#FFD700', 8);
           starCollected = true;
           return false; // Remove star
         }
@@ -1349,18 +1570,18 @@ const SnakeGame = ({ user, onLogout }) => {
       if (game.currentStars >= game.starsNeeded) {
         // Save game session when completing level
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(score, level, game.sessionXP, duration);
+        saveGameSession(game.sessionXP, level, game.sessionXP, duration);
         
         setGameState('levelComplete');
       }
 
-      updateEnemies();
+      updateEnemies(normalizedDelta);
 
       // Update particles
       game.particles = game.particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;
+        p.x += p.vx * normalizedDelta;
+        p.y += p.vy * normalizedDelta;
+        p.life -= 0.02 * normalizedDelta;
         return p.life > 0;
       });
     };
@@ -1638,7 +1859,14 @@ const SnakeGame = ({ user, onLogout }) => {
       });
 
       // Draw enemies
+      if (!game.enemies || game.enemies.length === 0) {
+        console.warn('⚠️ No hay enemigos para dibujar');
+      }
       game.enemies.forEach(enemy => {
+        if (!enemy.segments || enemy.segments.length === 0) {
+          console.warn('⚠️ Enemigo sin segmentos:', enemy);
+          return;
+        }
         enemy.segments.forEach((seg, i) => {
           const screenX = seg.x - camX;
           const screenY = seg.y - camY;
@@ -1732,11 +1960,57 @@ const SnakeGame = ({ user, onLogout }) => {
       });
       ctx.shadowBlur = 0;
 
-      // Draw minimap in top-right corner
+      // Draw HUD - Horizontal level bar at the top (compact)
+      const barHeight = 30;
+      const barPadding = 5;
+      
+      // Background bar (but leave space for minimap on the right)
       const minimapWidth = 120;
-      const minimapHeight = 90;
       const minimapX = CANVAS_WIDTH - minimapWidth - 10;
-      const minimapY = 60; // Below the top bar
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, 0, minimapX - 5, barHeight); // Stop before minimap
+      ctx.fillRect(minimapX + minimapWidth + 5, 0, CANVAS_WIDTH - (minimapX + minimapWidth + 5), barHeight); // After minimap
+      
+      // Level info text
+      ctx.fillStyle = '#33ffff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(`Nivel ${game.level}`, barPadding, 20);
+      
+      // Stars progress (compact and narrow)
+      const barStartX = 100;
+      const barWidth = 200; // Much narrower bar
+      
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
+      ctx.fillRect(barStartX, barPadding + 5, barWidth, barHeight - barPadding * 2 - 5);
+      
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+      ctx.shadowBlur = 3;
+      ctx.shadowColor = 'rgba(255, 215, 0, 0.3)';
+      const progressWidth = (barWidth * game.currentStars) / game.starsNeeded;
+      ctx.fillRect(barStartX, barPadding + 5, progressWidth, barHeight - barPadding * 2 - 5);
+      ctx.shadowBlur = 0;
+      
+      // Stars text on the bar
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px monospace';
+      const starsText = `⭐ ${game.currentStars} / ${game.starsNeeded}`;
+      const textWidth = ctx.measureText(starsText).width;
+      ctx.fillText(starsText, barStartX + barWidth / 2 - textWidth / 2, 22);
+      
+      // Total XP and Stars on the right (but not overlapping minimap)
+      // Minimap starts at CANVAS_WIDTH - 130 (120 width + 10 margin)
+      // Leave space for text width (approx 100px) + margin
+      const statsX = CANVAS_WIDTH - 250; // Well before minimap
+      ctx.fillStyle = '#33ffff';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(`XP: ${totalXP}`, statsX, 15);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(`⭐: ${totalStars}`, statsX, 28);
+      
+      // Draw minimap in top-right corner (after HUD so it's visible)
+      // minimapWidth and minimapX already declared above for HUD spacing
+      const minimapHeight = 90;
+      const minimapY = 10; // Fixed at top-right corner, close to edge
       
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
@@ -1745,60 +2019,47 @@ const SnakeGame = ({ user, onLogout }) => {
       ctx.lineWidth = 2;
       ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
       
-      // Draw player position on minimap
+      // Draw player position on minimap (distinctive marker)
       const playerMinimapX = minimapX + (game.snake[0].x / WORLD_WIDTH) * minimapWidth;
       const playerMinimapY = minimapY + (game.snake[0].y / WORLD_HEIGHT) * minimapHeight;
       
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 10;
+      // Outer ring for player
+      ctx.strokeStyle = '#33ffff';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
       ctx.shadowColor = '#33ffff';
       ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 3, 0, Math.PI * 2);
+      ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Inner filled circle for player
+      ctx.fillStyle = '#33ffff';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Draw HUD - Horizontal level bar at the top
-      const barHeight = 50;
-      const barPadding = 10;
-      
-      // Background bar
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(0, 0, CANVAS_WIDTH, barHeight);
-      
-      // Level info text
-      ctx.fillStyle = '#33ffff';
-      ctx.font = 'bold 18px monospace';
-      ctx.fillText(`Nivel ${game.level}`, barPadding, 28);
-      
-      // Stars progress (replaces XP progress)
-      const barStartX = 120;
-      const barWidth = CANVAS_WIDTH - barStartX - 180;
-      
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
-      ctx.fillRect(barStartX, barPadding, barWidth, barHeight - barPadding * 2);
-      
-      ctx.fillStyle = '#FFD700';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#FFD700';
-      const progressWidth = (barWidth * game.currentStars) / game.starsNeeded;
-      ctx.fillRect(barStartX, barPadding, progressWidth, barHeight - barPadding * 2);
+      // Draw enemy positions on minimap as colored dots
+      game.enemies.forEach(enemy => {
+        if (enemy.segments && enemy.segments.length > 0) {
+          const enemyHead = enemy.segments[0];
+          const enemyMinimapX = minimapX + (enemyHead.x / WORLD_WIDTH) * minimapWidth;
+          const enemyMinimapY = minimapY + (enemyHead.y / WORLD_HEIGHT) * minimapHeight;
+          
+          // Use the enemy's hue color
+          ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
+          ctx.beginPath();
+          ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
+          ctx.fill();
       ctx.shadowBlur = 0;
+        }
+      });
       
-      // Stars text on the bar
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px monospace';
-      const starsText = `⭐ ${game.currentStars} / ${game.starsNeeded}`;
-      const textWidth = ctx.measureText(starsText).width;
-      ctx.fillText(starsText, barStartX + barWidth / 2 - textWidth / 2, 32);
-      
-      // Total XP and Stars on the right
-      ctx.fillStyle = '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(`XP: ${totalXP}`, CANVAS_WIDTH - 200, 20);
-      ctx.fillStyle = '#FFD700';
-      ctx.fillText(`⭐: ${totalStars}`, CANVAS_WIDTH - 200, 40);
-      
-      // Shop hint
+      // Shop hint (only on desktop, not mobile)
+      if (!isMobile) {
       ctx.fillStyle = '#ff00ff';
       ctx.font = 'bold 14px monospace';
       ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
@@ -1807,11 +2068,18 @@ const SnakeGame = ({ user, onLogout }) => {
       if (cannonLevel > 0) {
         ctx.fillStyle = '#ffff00';
         ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
+        }
       }
     };
 
-    const gameLoop = () => {
-      update();
+    const gameLoop = (currentTime) => {
+      // IMPORTANTE: No continuar si el juego no está en estado 'playing'
+      if (gameState !== 'playing') {
+        return; // Detener el loop
+      }
+      
+      // Usamos un timestep fijo para velocidad consistente
+      update(FRAME_TIME);
       draw();
       animationId = requestAnimationFrame(gameLoop);
     };
@@ -1821,21 +2089,41 @@ const SnakeGame = ({ user, onLogout }) => {
       canvas.addEventListener('mousemove', handleMouseMove);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-      window.addEventListener('keydown', handleKeyPress);
-      gameLoop();
+      canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
+      canvas.addEventListener('touchcancel', handleJoystickEnd, { passive: false });
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+      lastTime = performance.now(); // Initialize time tracking
+      gameLoop(performance.now());
     }
 
+    // Un solo cleanup que maneja todo
     return () => {
+      // CRÍTICO: Cancelar el animationFrame para evitar múltiples loops
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      
+      // Limpiar event listeners
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.removeEventListener('mousemove', handleMouseMove);
         canvas.removeEventListener('touchmove', handleTouchMove);
         canvas.removeEventListener('touchstart', handleTouchStart);
+        canvas.removeEventListener('touchend', handleJoystickEnd);
+        canvas.removeEventListener('touchcancel', handleJoystickEnd);
       }
-      window.removeEventListener('keydown', handleKeyPress);
-      if (animationId) cancelAnimationFrame(animationId);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      
+      // Limpiar auto-fire
+      isShootingRef.current = false;
+      if (shootingIntervalRef.current) {
+        clearTimeout(shootingIntervalRef.current);
+        shootingIntervalRef.current = null;
+      }
     };
-  }, [gameState, shieldLevel, headLevel, cannonLevel, totalXP, shopOpen]);
+  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen]); // Quitado totalXP de las dependencias
 
   const startGame = () => {
     gameRef.current.level = level;
@@ -1963,6 +2251,7 @@ const SnakeGame = ({ user, onLogout }) => {
     game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
       return createEnemy(levelConfig);
     });
+    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos`);
     game.particles = [];
     game.stars = []; // Reset stars
     game.currentXP = 0;
@@ -2100,6 +2389,62 @@ const SnakeGame = ({ user, onLogout }) => {
     const game = gameRef.current;
     const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
+    // Compact styles for playing state
+    if (gameState === 'playing') {
+      const compactPadding = isMobile ? '4px 8px' : '6px 12px';
+      const compactFontSize = isMobile ? '11px' : '13px';
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '1px solid #33ffff',
+          padding: compactPadding,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
+          zIndex: 1000
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? '12px' : '20px', 
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff', fontWeight: 'bold' }}>
+              Nivel {game.level}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff' }}>
+              XP: {currentLevelXP}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#FFD700' }}>
+              ⭐ {currentLevelStars} / {game.starsNeeded}
+            </span>
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+              padding: isMobile ? '4px 8px' : '5px 10px',
+              fontSize: isMobile ? '9px' : '11px',
+              cursor: 'pointer',
+              borderRadius: '3px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Salir
+          </button>
+        </div>
+      );
+    }
+    
     // Mobile styles
     const headerPadding = isMobile ? '8px 10px' : '15px 20px';
     const labelFontSize = isMobile ? '8px' : '11px';
@@ -2178,10 +2523,15 @@ const SnakeGame = ({ user, onLogout }) => {
           )}
           <div style={{ 
             display: 'flex', 
-            gap: '8px', 
+            justifyContent: 'space-between',
             alignItems: 'center', 
-            flexWrap: 'wrap',
             width: '100%'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              alignItems: 'center', 
+              flexWrap: 'wrap'
           }}>
             {shieldLevel > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -2212,12 +2562,11 @@ const SnakeGame = ({ user, onLogout }) => {
               background: 'transparent',
               border: '1px solid #ff3366',
               color: '#ff3366',
-              padding: '6px 12px',
-              fontSize: '11px',
+                padding: '4px 8px',
+                fontSize: '10px',
               cursor: 'pointer',
-              borderRadius: '5px',
-              transition: 'all 0.3s',
-              width: '100%'
+                borderRadius: '3px',
+                transition: 'all 0.3s'
             }}
             onMouseEnter={(e) => {
               e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -2226,8 +2575,9 @@ const SnakeGame = ({ user, onLogout }) => {
               e.target.style.background = 'transparent';
             }}
           >
-            Cerrar Sesión
+              Salir
           </button>
+          </div>
         </div>
       );
     }
@@ -2297,20 +2647,20 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             </div>
           )}
+        </div>
           <div style={{ 
             display: 'flex', 
-            gap: '15px', 
-            alignItems: 'center', 
-            marginLeft: 'auto'
+          gap: '12px', 
+          alignItems: 'center'
           }}>
             {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
                 <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
               </div>
             )}
             {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
                 <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
                   {headLevel === 2 ? 'Doble' : 'Triple'}
@@ -2318,27 +2668,25 @@ const SnakeGame = ({ user, onLogout }) => {
               </div>
             )}
             {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
                 <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
                   Cañón {cannonLevel === 2 ? 'x2' : ''}
                 </span>
               </div>
             )}
-          </div>
-        </div>
         <button
           onClick={onLogout}
           style={{
             background: 'transparent',
             border: '1px solid #ff3366',
             color: '#ff3366',
-            padding: '8px 16px',
-            fontSize: '14px',
+                padding: '5px 10px',
+                fontSize: '11px',
             cursor: 'pointer',
-            borderRadius: '5px',
+                borderRadius: '3px',
             transition: 'all 0.3s',
-            marginLeft: '20px'
+                marginLeft: '10px'
           }}
           onMouseEnter={(e) => {
             e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -2347,8 +2695,9 @@ const SnakeGame = ({ user, onLogout }) => {
             e.target.style.background = 'transparent';
           }}
         >
-          Cerrar Sesión
+              Salir
         </button>
+          </div>
       </div>
     );
   };
@@ -2383,95 +2732,122 @@ const SnakeGame = ({ user, onLogout }) => {
       {gameState === 'menu' && (
         <div style={{ 
           display: 'flex',
-          gap: '30px',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '20px',
           width: '100%',
           maxWidth: '1200px',
           padding: '20px',
-          alignItems: 'flex-start'
+          alignItems: isMobile ? 'center' : 'flex-start',
+          justifyContent: 'center'
         }}>
-          {/* Left side: Menu buttons */}
-          <div style={{ 
-            textAlign: 'center',
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: '40px',
-            borderRadius: '10px',
-            border: '2px solid #33ffff',
+          {/* Left side: Main action buttons */}
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.7)',
+            padding: '30px',
+          borderRadius: '10px',
+          border: '2px solid #33ffff',
             boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-            flex: '0 0 400px'
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '0 0 400px'
           }}>
-            <p style={{ fontSize: '20px', marginBottom: '30px' }}>
-              Mueve el mouse/trackpad para controlar tu víbora<br/>
-              Come puntos brillantes para ganar XP<br/>
-              Evita chocar con otras serpientes
-            </p>
-            <button 
-              onClick={startGame}
-              style={{
-                background: 'transparent',
-                border: '2px solid #33ffff',
-                color: '#33ffff',
-                padding: '15px 40px',
-                fontSize: '24px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #33ffff',
-                boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-                marginRight: '10px',
-                width: '100%',
-                marginBottom: '15px'
-              }}
-            >
-              JUGAR
-            </button>
-            <button 
-              onClick={() => setGameState('shop')}
-              style={{
-                background: 'transparent',
-                border: '2px solid #ff00ff',
-                color: '#ff00ff',
-                padding: '15px 40px',
-                fontSize: '24px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #ff00ff',
-                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                width: '100%'
-              }}
-            >
-              TIENDA
-            </button>
+            <h1 style={{ 
+              fontSize: '32px', 
+              color: '#33ffff', 
+              textShadow: '0 0 20px #33ffff',
+              marginBottom: '20px'
+            }}>
+              🐍 VIBORITA
+            </h1>
+            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
+            Mueve el mouse/trackpad para controlar tu víbora<br/>
+            Come puntos brillantes para ganar XP<br/>
+            Evita chocar con otras serpientes
+          </p>
+            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
+          <button 
+            onClick={startGame}
+            style={{
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '15px 40px',
+                  fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #33ffff',
+              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+            }}
+          >
+            JUGAR
+          </button>
+          <button 
+            onClick={() => setGameState('shop')}
+            style={{
+              background: 'transparent',
+              border: '2px solid #ff00ff',
+              color: '#ff00ff',
+              padding: '15px 40px',
+                  fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #ff00ff',
+                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 0, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+            }}
+          >
+            TIENDA
+          </button>
+            </div>
           </div>
 
           {/* Right side: Leaderboard */}
           <div style={{ 
             background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
+            padding: '25px',
             borderRadius: '10px',
             border: '2px solid #FFD700',
             boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            flex: '1',
-            minWidth: '300px'
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '1'
           }}>
             <h2 style={{ 
               color: '#FFD700', 
               textShadow: '0 0 20px #FFD700', 
               textAlign: 'center',
               marginBottom: '20px',
-              fontSize: '24px'
+              fontSize: '22px'
             }}>
               🏆 RANKING
             </h2>
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {leaderboard.length === 0 ? (
                 <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Puntos</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Puntos</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2483,16 +2859,16 @@ const SnakeGame = ({ user, onLogout }) => {
                           backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '10px', color: index < 3 ? '#FFD700' : '#33ffff' }}>
+                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
                           {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
                         </td>
-                        <td style={{ padding: '10px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal' }}>
+                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
                           {entry.username}
                         </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
                           {entry.bestScore?.toLocaleString() || 0}
                         </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
                           {entry.highestLevel || 1}
                         </td>
                       </tr>
@@ -2509,19 +2885,49 @@ const SnakeGame = ({ user, onLogout }) => {
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.95)',
-          padding: '40px',
+          padding: '30px',
           borderRadius: '10px',
           border: '3px solid #ff00ff',
-          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)'
+          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
+          maxWidth: '1400px',
+          width: '100%',
+          margin: '20px auto',
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto',
+          position: 'relative'
         }}>
-          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center' }}>
+          <button
+            onClick={() => setGameState('menu')}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '8px 16px',
+              fontSize: '14px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            VOLVER
+          </button>
+          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
             TIENDA
           </h2>
-          <p style={{ fontSize: '20px', marginBottom: '30px', textAlign: 'center' }}>
+          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
             XP Total: {totalXP} | ⭐ Total: {totalStars}
           </p>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
             {/* Escudo */}
             {(() => {
               const next = getNextUpgrade('shield');
@@ -2529,19 +2935,23 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #6495ed', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Shield size={48} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Shield size={36} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {next ? (
                     <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                         {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
@@ -2552,23 +2962,24 @@ const SnakeGame = ({ user, onLogout }) => {
                           background: 'transparent',
                           border: '2px solid #6495ed',
                           color: '#6495ed',
-                          padding: '10px 20px',
-                          fontSize: '16px',
+                            padding: '8px 16px',
+                            fontSize: '14px',
                           cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
                           opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
-                          marginTop: '10px'
+                            marginTop: 'auto'
                         }}
                       >
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
                   ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
+                  </div>
                 </div>
               );
             })()}
@@ -2580,19 +2991,23 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #00ff88', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Magnet size={48} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Magnet size={36} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {next ? (
                     <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                         {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
@@ -2603,23 +3018,24 @@ const SnakeGame = ({ user, onLogout }) => {
                           background: 'transparent',
                           border: '2px solid #00ff88',
                           color: '#00ff88',
-                          padding: '10px 20px',
-                          fontSize: '16px',
+                            padding: '8px 16px',
+                            fontSize: '14px',
                           cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
                           opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
-                          marginTop: '10px'
+                            marginTop: 'auto'
                         }}
                       >
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
                   ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
+                  </div>
                 </div>
               );
             })()}
@@ -2631,19 +3047,23 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #ffff00', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Sparkles size={48} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Sparkles size={36} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {next ? (
                     <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                         {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
@@ -2654,23 +3074,24 @@ const SnakeGame = ({ user, onLogout }) => {
                           background: 'transparent',
                           border: '2px solid #ffff00',
                           color: '#ffff00',
-                          padding: '10px 20px',
-                          fontSize: '16px',
+                            padding: '8px 16px',
+                            fontSize: '14px',
                           cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
                           opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
-                          marginTop: '10px'
+                            marginTop: 'auto'
                         }}
                       >
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
                   ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
+                  </div>
                 </div>
               );
             })()}
@@ -2682,19 +3103,23 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #ff3366', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Gauge size={48} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Gauge size={36} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {next ? (
                     <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                         {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                       </p>
@@ -2705,23 +3130,24 @@ const SnakeGame = ({ user, onLogout }) => {
                           background: 'transparent',
                           border: '2px solid #ff3366',
                           color: '#ff3366',
-                          padding: '10px 20px',
-                          fontSize: '16px',
+                            padding: '8px 16px',
+                            fontSize: '14px',
                           cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
                           borderRadius: '5px',
                           opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
                           width: '100%',
-                          marginTop: '10px'
+                            marginTop: 'auto'
                         }}
                       >
                         COMPRAR NIVEL {next.level}
                       </button>
                     </>
                   ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
                       Nivel Máximo
                     </p>
                   )}
+                  </div>
                 </div>
               );
             })()}
@@ -2733,65 +3159,55 @@ const SnakeGame = ({ user, onLogout }) => {
               return (
                 <div style={{ 
                   border: '2px solid #00ff00', 
-                  padding: '20px', 
+                  padding: '15px', 
                   borderRadius: '10px',
                   background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '220px'
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}>
-                  <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                  <Sparkles size={36} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
                     VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
                   </h3>
-                  {next ? (
-                    <>
-                      <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                      <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+          <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+            style={{
+              background: 'transparent',
+                            border: '2px solid #00ff00',
+                            color: '#00ff00',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+          </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
                       </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #00ff00',
-                          color: '#00ff00',
-                          padding: '10px 20px',
-                          fontSize: '16px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                          marginTop: '10px'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                    <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })()}
           </div>
-
-          <button 
-            onClick={() => setGameState('menu')}
-            style={{
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '15px 40px',
-              fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px'
-            }}
-          >
-            VOLVER
-          </button>
         </div>
       )}
 
@@ -2805,74 +3221,74 @@ const SnakeGame = ({ user, onLogout }) => {
           alignItems: 'flex-start'
         }}>
           {/* Left side: Level complete info */}
-          <div style={{ 
-            textAlign: 'center',
-            background: 'rgba(0, 0, 0, 0.9)',
-            padding: '40px',
-            borderRadius: '10px',
-            border: '2px solid #00ff88',
-            boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.9)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #00ff88',
+          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
             zIndex: 100,
             flex: '0 0 400px'
-          }}>
-            <Sparkles size={64} style={{ color: '#00ff88' }} />
-            <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
-              ¡NIVEL COMPLETADO!
-            </h2>
-            <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
-            <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
+        }}>
+          <Sparkles size={64} style={{ color: '#00ff88' }} />
+          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
+            ¡NIVEL COMPLETADO!
+          </h2>
+          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
+          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <button 
-                onClick={nextLevel}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #00ff88',
-                  color: '#00ff88',
-                  padding: '15px 40px',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #00ff88',
-                  boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
+          <button 
+            onClick={nextLevel}
+            style={{
+              background: 'transparent',
+              border: '2px solid #00ff88',
+              color: '#00ff88',
+              padding: '15px 40px',
+                fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #00ff88',
+                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
                   transition: 'all 0.3s',
                   width: '100%'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(0, 255, 136, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                }}
-              >
-                SIGUIENTE NIVEL
-              </button>
-              <button 
-                onClick={() => {
-                  setGameState('playing');
-                  setShopOpen(true);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #ff00ff',
-                  color: '#ff00ff',
-                  padding: '15px 40px',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  textShadow: '0 0 10px #ff00ff',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+            }}
+          >
+            SIGUIENTE NIVEL
+          </button>
+            <button 
+              onClick={() => {
+                setGameState('playing');
+                setShopOpen(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #ff00ff',
+                color: '#ff00ff',
+                padding: '15px 40px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #ff00ff',
+                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
                   transition: 'all 0.3s',
                   width: '100%'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 0, 255, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                }}
-              >
-                IR A LA TIENDA
-              </button>
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              IR A LA TIENDA
+          </button>
             </div>
           </div>
 
@@ -3006,148 +3422,123 @@ const SnakeGame = ({ user, onLogout }) => {
             }}
           />
           
-          {/* Botones móviles */}
+          {/* Mobile Controls */}
           {isMobile && gameState === 'playing' && (
             <>
-              {/* Botón de disparo - Abajo a la derecha */}
-              {cannonLevel > 0 && (
-                <button
-                  onClick={() => {
-                    const game = gameRef.current;
-                    if (!game.snake || game.snake.length === 0) return;
-                    
-                    const currentTime = Date.now();
-                    const cooldown = cannonLevel === 5 ? 500 : 1000;
-                    
-                    if (currentTime - game.lastPlayerShot < cooldown) {
-                      return;
-                    }
-                    
-                    game.lastPlayerShot = currentTime;
-                    
-                    const head = game.snake[0];
-                    const tail = game.snake.length > 1 ? game.snake[game.snake.length - 1] : null;
-                    
-                    const headAngle = Math.atan2(game.direction.y, game.direction.x);
-                    const headPerpAngle = headAngle + Math.PI / 2;
-                    
-                    let tailAngle = 0;
-                    let tailPerpAngle = 0;
-                    if (tail) {
-                      const tailDx = head.x - tail.x;
-                      const tailDy = head.y - tail.y;
-                      const tailDist = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
-                      if (tailDist > 0) {
-                        tailAngle = Math.atan2(tailDy, tailDx);
-                        tailPerpAngle = tailAngle + Math.PI / 2;
-                      }
-                    }
-                    
-                    // Calculate bullet speed multiplier (2^bulletSpeedLevel)
-                    const bulletSpeedMultiplier = bulletSpeedLevel > 0 ? Math.pow(2, bulletSpeedLevel) : 1;
-                    const baseBulletSpeed = 8;
-                    const bulletSpeed = baseBulletSpeed * bulletSpeedMultiplier;
-                    
-                    if (cannonLevel >= 1) {
-                      const headBulletCount = cannonLevel >= 2 ? 2 : 1;
-                      for (let i = 0; i < headBulletCount; i++) {
-                        const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-                        game.bullets.push({
-                          x: head.x + Math.cos(headPerpAngle) * offset,
-                          y: head.y + Math.sin(headPerpAngle) * offset,
-                          vx: game.direction.x * bulletSpeed,
-                          vy: game.direction.y * bulletSpeed,
-                          life: 100,
-                          owner: 'player'
-                        });
-                      }
-                    }
-                    
-                    if (cannonLevel >= 3 && tail) {
-                      const tailBulletCount = cannonLevel >= 4 ? 2 : 1;
-                      const tailDir = {
-                        x: -game.direction.x,
-                        y: -game.direction.y
-                      };
-                      
-                      for (let i = 0; i < tailBulletCount; i++) {
-                        const offset = tailBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-                        game.bullets.push({
-                          x: tail.x + Math.cos(tailPerpAngle) * offset,
-                          y: tail.y + Math.sin(tailPerpAngle) * offset,
-                          vx: tailDir.x * bulletSpeed,
-                          vy: tailDir.y * bulletSpeed,
-                          life: 100,
-                          owner: 'player'
-                        });
-                      }
-                    }
-                  }}
-                  style={{
-                    position: 'absolute',
-                    bottom: '20px',
-                    right: '20px',
-                    width: '70px',
-                    height: '70px',
-                    borderRadius: '50%',
-                    background: 'rgba(0, 170, 255, 0.3)',
-                    border: '3px solid #00aaff',
-                    color: '#00aaff',
-                    fontSize: '32px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 20px rgba(0, 170, 255, 0.6)',
-                    zIndex: 999,
-                    touchAction: 'manipulation',
-                    WebkitTapHighlightColor: 'transparent',
-                    userSelect: 'none',
-                    padding: 0
-                  }}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  🔫
-                </button>
-              )}
-              
-              {/* Botón de tienda - Abajo a la izquierda */}
-              <button
-                onClick={() => setShopOpen(prev => !prev)}
+              {/* Joystick - Bottom Right */}
+              <div
                 style={{
                   position: 'absolute',
                   bottom: '20px',
-                  left: '20px',
-                  width: '70px',
-                  height: '70px',
-                  borderRadius: '50%',
-                  background: 'rgba(255, 0, 255, 0.3)',
-                  border: '3px solid #ff00ff',
-                  color: '#ff00ff',
-                  fontSize: '32px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.6)',
-                  zIndex: 999,
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  userSelect: 'none',
-                  padding: 0
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
+                  right: '20px',
+                  width: '120px',
+                  height: '120px',
+                  pointerEvents: 'none',
+                  zIndex: 100
                 }}
               >
-                🛒
-              </button>
+                {/* Joystick Base */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid rgba(51, 255, 255, 0.5)',
+                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.3)',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                />
+                {/* Joystick Handle */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    background: joystickActive 
+                      ? 'rgba(51, 255, 255, 0.9)' 
+                      : 'rgba(51, 255, 255, 0.4)',
+                    border: '2px solid #33ffff',
+                    boxShadow: joystickActive 
+                      ? '0 0 20px rgba(51, 255, 255, 0.8)' 
+                      : '0 0 10px rgba(51, 255, 255, 0.4)',
+                    left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.x * 35}px`
+                      : '50%',
+                    top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.y * 35}px`
+                      : '50%',
+                    transform: 'translate(-50%, -50%)',
+                    transition: joystickActive ? 'none' : 'all 0.2s ease-out',
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Shoot Button - Bottom Left */}
+              {cannonLevel > 0 && (
+                <button
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onTouchCancel={(e) => {
+                    e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  style={{
+                    position: 'absolute',
+                    bottom: '25px',
+                    left: '25px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 51, 102, 0.6)',
+                    border: '2px solid rgba(255, 51, 102, 0.8)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+                    zIndex: 100,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    touchAction: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    transition: 'all 0.1s ease',
+                    fontSize: '0',
+                    padding: '0'
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onMouseLeave={(e) => {
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  title="Disparar (mantener para auto-fire)"
+                />
+              )}
             </>
           )}
           
@@ -3180,10 +3571,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('shield');
                   const currentLevel = shieldLevel;
                   return (
-                    <div style={{ 
-                      border: '2px solid #6495ed', 
+                <div style={{ 
+                  border: '2px solid #6495ed', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3198,24 +3589,24 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
-                              border: '2px solid #6495ed',
-                              color: '#6495ed',
+                    style={{
+                      background: 'transparent',
+                      border: '2px solid #6495ed',
+                      color: '#6495ed',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
@@ -3249,31 +3640,31 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #00ff88',
                               color: '#00ff88',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -3282,10 +3673,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('cannon');
                   const currentLevel = cannonLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #ffff00', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3300,31 +3691,31 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #ffff00',
                               color: '#ffff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -3333,10 +3724,10 @@ const SnakeGame = ({ user, onLogout }) => {
                   const next = getNextUpgrade('speed');
                   const currentLevel = speedLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #ff3366', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -3351,24 +3742,24 @@ const SnakeGame = ({ user, onLogout }) => {
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #ff3366',
                               color: '#ff3366',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
@@ -3426,7 +3817,7 @@ const SnakeGame = ({ user, onLogout }) => {
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
               </div>
