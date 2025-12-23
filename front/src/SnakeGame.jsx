@@ -248,16 +248,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
           { level: 5, xpCost: 0, starsCost: 10, description: 'Protección x 3 todo el cuerpo' }
         ],
         magnet: [
-          { level: 1, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 50px de la cabeza' },
-          { level: 2, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 100px de la cabeza' },
-          { level: 3, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 150px de la cabeza' },
-          { level: 4, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 200px de la cabeza' },
-          { level: 5, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 250px de la cabeza' },
-          { level: 6, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 300px de la cabeza' },
-          { level: 7, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 350px de la cabeza' },
-          { level: 8, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 400px de la cabeza' },
-          { level: 9, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 450px de la cabeza' },
-          { level: 10, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 500px de la cabeza' }
+          { level: 1, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 25px de la cabeza' },
+          { level: 2, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 50px de la cabeza' },
+          { level: 3, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 75px de la cabeza' },
+          { level: 4, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 100px de la cabeza' },
+          { level: 5, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 125px de la cabeza' },
+          { level: 6, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 150px de la cabeza' },
+          { level: 7, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 175px de la cabeza' },
+          { level: 8, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 200px de la cabeza' },
+          { level: 9, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 225px de la cabeza' },
+          { level: 10, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 250px de la cabeza' }
         ],
         cannon: [
           { level: 1, xpCost: 250, starsCost: 10, description: 'Cañón en la cabeza que tira de a 1 bala. Un disparo x segundo' },
@@ -1265,7 +1265,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
         // Aplicar efecto magneto del enemigo para atraer comida
         const enemyMagnetLevel = enemy.magnetLevel || 0;
         if (enemyMagnetLevel > 0) {
-          const magnetRange = 30 * enemyMagnetLevel; // Rango más pequeño que el jugador
+          const magnetRange = 15 * enemyMagnetLevel; // 15px por nivel (menos que el jugador)
           
           game.food.forEach(food => {
             const dx = head.x - food.x;
@@ -1847,10 +1847,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       game.camera.y = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, newHead.y - CANVAS_HEIGHT / 2));
 
       // Apply magnet improvement to attract food towards snake HEAD
-      // magnetLevel 1-5: rango 50, 100, 150, 200, 250 pixels desde la cabeza
+      // magnetLevel 1-10: rango 25, 50, 75... 250 pixels desde la cabeza
       const currentMagnetLevel = game.magnetLevel || 0;
       if (currentMagnetLevel > 0) {
-        const magnetRange = 50 * currentMagnetLevel; // 50px por nivel
+        const magnetRange = 25 * currentMagnetLevel; // 25px por nivel
         const head = game.snake[0];
         
         // Atraer comida hacia la cabeza
