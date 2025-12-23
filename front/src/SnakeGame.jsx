@@ -2756,7 +2756,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         shootingIntervalRef.current = null;
       }
     };
-  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen, showAdminPanel, isAdmin]); // Quitado totalXP de las dependencias
+  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen, showAdminPanel, isAdmin, freeShots]); // Quitado totalXP de las dependencias
 
   const startGame = () => {
     gameRef.current.level = level;

@@ -7,6 +7,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const [freeShots, setFreeShots] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -29,6 +30,7 @@ function App() {
         setUser(data);
         setIsAdmin(data.isAdmin === true || data.isAdmin === 'true');
         setIsBanned(data.isBanned === true || data.isBanned === 'true');
+        setFreeShots(data.freeShots === true || data.freeShots === 'true');
         console.log('isAdmin set to:', data.isAdmin === true || data.isAdmin === 'true');
       })
       .catch(() => {
@@ -43,12 +45,13 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false) => {
+  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, freeShotsStatus = false) => {
     localStorage.setItem('token', token);
     localStorage.setItem('userId', userData.id);
     setUser(userData);
     setIsAdmin(adminStatus);
     setIsBanned(bannedStatus);
+    setFreeShots(freeShotsStatus);
   };
 
   const handleLogout = () => {
@@ -57,6 +60,7 @@ function App() {
     setUser(null);
     setIsAdmin(false);
     setIsBanned(false);
+    setFreeShots(false);
   };
 
   if (loading) {
@@ -80,7 +84,7 @@ function App() {
     return <AuthScreen onLogin={handleLogin} />;
   }
 
-  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} />;
+  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} />;
 }
 
 export default App;

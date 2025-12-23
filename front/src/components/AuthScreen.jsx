@@ -50,7 +50,7 @@ export default function AuthScreen({ onLogin }) {
         throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false);
+      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.freeShots || false);
     } catch (err) {
       setError(err.message || 'Error en la autenticación');
       console.error('Login error:', err);
