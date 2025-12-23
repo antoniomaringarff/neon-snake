@@ -2891,7 +2891,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     const upgrades = shopConfigs[type];
     if (!upgrades) return;
     
-    const upgrade = upgrades.find(u => u.level === level);
+    const upgrade = upgrades.find(u => Number(u.level) === level);
     if (!upgrade) return;
     
     const cost = { xp: upgrade.xpCost, stars: upgrade.starsCost };
