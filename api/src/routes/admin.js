@@ -59,6 +59,7 @@ export default async function adminRoutes(fastify, options) {
           COALESCE(u.total_stars, 0) as total_stars,
           u.is_banned,
           u.is_admin,
+          u.free_shots,
           u.created_at,
           l.best_score,
           l.highest_level,
@@ -96,7 +97,8 @@ export default async function adminRoutes(fastify, options) {
         bulletSpeedLevel: row.bullet_speed_level || 0,
         healthLevel: row.health_level || 0,
         currentLevel: row.current_level || 1,
-        isAdmin: row.is_admin || false
+        isAdmin: row.is_admin || false,
+        freeShots: row.free_shots || false
       }));
     } catch (error) {
       fastify.log.error(error);
@@ -122,7 +124,8 @@ export default async function adminRoutes(fastify, options) {
       healthLevel,
       currentLevel,
       isBanned,
-      isAdmin
+      isAdmin,
+      freeShots
     } = request.body;
 
     try {
@@ -133,9 +136,10 @@ export default async function adminRoutes(fastify, options) {
              total_stars = COALESCE($2, total_stars),
              is_banned = COALESCE($3, is_banned),
              is_admin = COALESCE($4, is_admin),
+             free_shots = COALESCE($5, free_shots),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5`,
-        [totalXp, totalStars, isBanned, isAdmin, id]
+         WHERE id = $6`,
+        [totalXp, totalStars, isBanned, isAdmin, freeShots, id]
       );
 
       // Update user_progress

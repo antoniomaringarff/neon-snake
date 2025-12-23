@@ -485,6 +485,15 @@ const AdminPanel = ({ onClose }) => {
                         />
                         Administrador
                       </label>
+                      <label style={{ color: '#00ff88', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={editingUser.freeShots}
+                          onChange={(e) => setEditingUser(prev => ({ ...prev, freeShots: e.target.checked }))}
+                          style={{ width: '20px', height: '20px' }}
+                        />
+                        Disparos Gratis
+                      </label>
                     </div>
                     <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
                       <Button onClick={() => updateUser(editingUser.id, editingUser)}>

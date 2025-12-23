@@ -109,7 +109,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
   return levelSpecificConfigs[level] || baseConfig;
 };
 
-const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
+const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
@@ -851,13 +851,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     const shootBullet = () => {
       const game = gameRef.current;
       if (!game.snake || game.snake.length === 0) {
-        console.log('❌ No se puede disparar: no hay snake');
         return;
       }
       
       if (cannonLevel === 0) {
-        console.log('❌ No se puede disparar: cannonLevel es 0');
         return;
+      }
+      
+      // Calcular cuántas balas se disparan (costo en XP)
+      // Level 1: 1 bala, Level 2: 2 balas, Level 3: 3 balas, Level 4-5: 4 balas
+      let bulletCount = 1;
+      if (cannonLevel >= 2) bulletCount = 2; // Doble cañón cabeza
+      if (cannonLevel >= 3) bulletCount = 3; // + 1 cola
+      if (cannonLevel >= 4) bulletCount = 4; // + 2 cola
+      
+      // Verificar que hay suficiente XP para disparar (excepto si tiene freeShots)
+      if (!freeShots && game.sessionXP < bulletCount) {
+        return; // No hay suficiente XP
       }
       
       // Initialize lastPlayerShot if not exists
@@ -876,6 +886,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       
       if (currentTime - game.lastPlayerShot < cooldown) {
         return; // Still on cooldown
+      }
+      
+      // Consumir XP por disparo (excepto si tiene freeShots)
+      if (!freeShots) {
+        game.sessionXP -= bulletCount;
+        setScore(game.sessionXP); // Actualizar el score visual
       }
       
       game.lastPlayerShot = currentTime;
@@ -2423,7 +2439,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       // HUD Container with neon border
       const hudX = 8;
       const hudY = 8;
-      const hudWidth = 420;
+      const hudWidth = 520; // Expandido para incluir XP
       const hudHeight = 36;
       const hudRadius = 8;
       
@@ -2531,6 +2547,75 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       const healthTextWidth = ctx.measureText(healthText).width;
       ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 12);
       
+      // === SESSION XP COUNTER (with dynamic color) ===
+      const xpCounterX = healthBarX + healthBarWidth + 15;
+      const xpCounterY = hudY + 10;
+      const xpCounterWidth = 80;
+      const xpCounterHeight = 16;
+      
+      // Calcular color dinámico basado en el XP de sesión
+      // 0-25: Rojo -> Naranja, 25-50: Naranja -> Amarillo, 50-75: Amarillo -> Verde, 75-100+: Verde -> Azul
+      const sessionXP = game.sessionXP || 0;
+      let xpColor;
+      if (sessionXP < 25) {
+        // Rojo a Naranja (0-25)
+        const t = sessionXP / 25;
+        const r = 255;
+        const g = Math.floor(100 * t);
+        const b = 0;
+        xpColor = `rgb(${r}, ${g}, ${b})`;
+      } else if (sessionXP < 50) {
+        // Naranja a Amarillo (25-50)
+        const t = (sessionXP - 25) / 25;
+        const r = 255;
+        const g = Math.floor(100 + 155 * t);
+        const b = 0;
+        xpColor = `rgb(${r}, ${g}, ${b})`;
+      } else if (sessionXP < 75) {
+        // Amarillo a Verde (50-75)
+        const t = (sessionXP - 50) / 25;
+        const r = Math.floor(255 * (1 - t));
+        const g = 255;
+        const b = 0;
+        xpColor = `rgb(${r}, ${g}, ${b})`;
+      } else if (sessionXP < 100) {
+        // Verde a Azul (75-100)
+        const t = (sessionXP - 75) / 25;
+        const r = 0;
+        const g = Math.floor(255 * (1 - t));
+        const b = Math.floor(255 * t);
+        xpColor = `rgb(${r}, ${g}, ${b})`;
+      } else {
+        // Azul (100+)
+        xpColor = '#00aaff';
+      }
+      
+      // XP counter background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.beginPath();
+      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
+      ctx.fill();
+      
+      // XP counter border with dynamic color
+      ctx.strokeStyle = xpColor;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = xpColor;
+      ctx.beginPath();
+      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      
+      // XP text with dynamic color
+      ctx.fillStyle = xpColor;
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = xpColor;
+      ctx.font = 'bold 11px monospace';
+      const xpText = `⚡ ${sessionXP}`;
+      const xpTextWidth = ctx.measureText(xpText).width;
+      ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 12);
+      ctx.shadowBlur = 0;
+      
       // === TOTAL XP/STARS (compact, next to minimap) ===
       const statsX = minimapX - 90;
       ctx.fillStyle = '#33ffff';
@@ -2602,8 +2687,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       
       // Cannon hint (if cannon is equipped)
       if (cannonLevel > 0) {
-        ctx.fillStyle = '#ffff00';
-        ctx.fillText('[ESPACIO] Disparar', 120, CANVAS_HEIGHT - 15);
+        // Calcular cuántas balas consume
+        let bulletCost = 1;
+        if (cannonLevel >= 2) bulletCost = 2;
+        if (cannonLevel >= 3) bulletCost = 3;
+        if (cannonLevel >= 4) bulletCost = 4;
+        
+        if (freeShots) {
+          ctx.fillStyle = '#00ff88';
+          ctx.fillText('[ESPACIO] Disparar (GRATIS)', 120, CANVAS_HEIGHT - 15);
+        } else {
+          const canShootNow = game.sessionXP >= bulletCost;
+          ctx.fillStyle = canShootNow ? '#ffff00' : '#ff4444';
+          ctx.fillText(`[ESPACIO] Disparar (-${bulletCost} XP)`, 120, CANVAS_HEIGHT - 15);
+        }
         }
       }
     };
