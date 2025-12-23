@@ -69,6 +69,7 @@ export default async function adminRoutes(fastify, options) {
           up.magnet_level,
           up.speed_level,
           up.bullet_speed_level,
+          up.health_level,
           up.current_level
         FROM users u
         LEFT JOIN leaderboard l ON u.id = l.user_id
@@ -93,7 +94,9 @@ export default async function adminRoutes(fastify, options) {
         magnetLevel: row.magnet_level || 0,
         speedLevel: row.speed_level || 0,
         bulletSpeedLevel: row.bullet_speed_level || 0,
-        currentLevel: row.current_level || 1
+        healthLevel: row.health_level || 0,
+        currentLevel: row.current_level || 1,
+        isAdmin: row.is_admin || false
       }));
     } catch (error) {
       fastify.log.error(error);
@@ -116,6 +119,7 @@ export default async function adminRoutes(fastify, options) {
       magnetLevel,
       speedLevel,
       bulletSpeedLevel,
+      healthLevel,
       currentLevel,
       isBanned,
       isAdmin
@@ -136,7 +140,8 @@ export default async function adminRoutes(fastify, options) {
 
       // Update user_progress
       if (shieldLevel !== undefined || headLevel !== undefined || cannonLevel !== undefined ||
-          magnetLevel !== undefined || speedLevel !== undefined || bulletSpeedLevel !== undefined || currentLevel !== undefined) {
+          magnetLevel !== undefined || speedLevel !== undefined || bulletSpeedLevel !== undefined || 
+          healthLevel !== undefined || currentLevel !== undefined) {
         await query(
           `UPDATE user_progress 
            SET shield_level = COALESCE($1, shield_level),
@@ -145,10 +150,11 @@ export default async function adminRoutes(fastify, options) {
                magnet_level = COALESCE($4, magnet_level),
                speed_level = COALESCE($5, speed_level),
                bullet_speed_level = COALESCE($6, bullet_speed_level),
-               current_level = COALESCE($7, current_level),
+               health_level = COALESCE($7, health_level),
+               current_level = COALESCE($8, current_level),
                updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $8`,
-          [shieldLevel, headLevel, cannonLevel, magnetLevel, speedLevel, bulletSpeedLevel, currentLevel, id]
+           WHERE user_id = $9`,
+          [shieldLevel, headLevel, cannonLevel, magnetLevel, speedLevel, bulletSpeedLevel, healthLevel, currentLevel, id]
         );
       }
 

@@ -6,6 +6,8 @@ import * as migration004 from './004_add_bullet_speed.js';
 import * as migration005 from './005_admin_features.js';
 import * as migration006 from './006_update_shield_level_to_10.js';
 import * as migration007 from './007_add_is_admin_flag.js';
+import * as migration008 from './008_add_health_level.js';
+import * as migration009 from './009_expand_magnet_to_10.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -14,7 +16,9 @@ const migrations = [
   { name: '004_add_bullet_speed', up: migration004.up, down: migration004.down },
   { name: '005_admin_features', up: migration005.up, down: migration005.down },
   { name: '006_update_shield_level_to_10', up: migration006.up, down: migration006.down },
-  { name: '007_add_is_admin_flag', up: migration007.up, down: migration007.down }
+  { name: '007_add_is_admin_flag', up: migration007.up, down: migration007.down },
+  { name: '008_add_health_level', up: migration008.up, down: migration008.down },
+  { name: '009_expand_magnet_to_10', up: migration009.up, down: migration009.down }
 ];
 
 export async function runMigrations() {

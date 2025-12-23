@@ -35,7 +35,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
     enemyShootCooldown: Math.max(2000, 5000 - (level * 100)),
     xpDensity: 100 + (level * 5),
     hasCentralCell: level >= 2,
-    centralCellOpeningSpeed: 0.002 + (level * 0.0005),
+    centralCellOpeningSpeed: 0.002, // Velocidad fija igual para todos los niveles
   };
 
   const levelSpecificConfigs = {
@@ -63,7 +63,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       enemyShootCooldown: 4500,
       xpDensity: 110,
       hasCentralCell: true,
-      centralCellOpeningSpeed: 0.0025,
+      centralCellOpeningSpeed: 0.002,
     },
     3: {
       starsNeeded: 2,
@@ -76,7 +76,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       enemyShootCooldown: 4000,
       xpDensity: 120,
       hasCentralCell: true,
-      centralCellOpeningSpeed: 0.003,
+      centralCellOpeningSpeed: 0.002,
     },
     4: {
       starsNeeded: 3,
@@ -89,7 +89,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       enemyShootCooldown: 3500,
       xpDensity: 130,
       hasCentralCell: true,
-      centralCellOpeningSpeed: 0.0035,
+      centralCellOpeningSpeed: 0.002,
     },
     5: {
       starsNeeded: 3,
@@ -102,7 +102,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       enemyShootCooldown: 3000,
       xpDensity: 140,
       hasCentralCell: true,
-      centralCellOpeningSpeed: 0.004,
+      centralCellOpeningSpeed: 0.002,
     },
   };
 
@@ -137,7 +137,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
   const [currentLevelStars, setCurrentLevelStars] = useState(0);
   const [currentLevelXP, setCurrentLevelXP] = useState(0);
   const [shieldLevel, setShieldLevel] = useState(0); // 0-10: resistencia visual (ya no afecta vida)
-  const [magnetLevel, setMagnetLevel] = useState(0); // 0 = none, 1-5 = 10%, 20%, 30%, 40%, 50%
+  const [magnetLevel, setMagnetLevel] = useState(0); // 0-10: rango de atracción (50px por nivel)
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
   const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
   const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0 = none, 1-10 = x2, x4, x8, x16, x32, x64, x128, x256, x512, x1024
@@ -173,7 +173,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     sessionXP: 0,
     lastPlayerShot: 0, // For cannon cooldown
     currentHealth: 2, // Vida actual del jugador
-    maxHealth: 2 // Vida máxima del jugador (basada en healthLevel)
+    maxHealth: 2, // Vida máxima del jugador (basada en healthLevel)
+    magnetLevel: 0 // Nivel del imán (se actualiza desde el state)
   });
 
   // Helper function to get auth token
@@ -247,11 +248,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
           { level: 5, xpCost: 0, starsCost: 10, description: 'Protección x 3 todo el cuerpo' }
         ],
         magnet: [
-          { level: 1, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 10% extra' },
-          { level: 2, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 20% extra' },
-          { level: 3, xpCost: 0, starsCost: 5, description: 'Mayor recolección en una área en un 30% extra' },
-          { level: 4, xpCost: 0, starsCost: 10, description: 'Mayor recolección en una área en un 40% extra' },
-          { level: 5, xpCost: 0, starsCost: 10, description: 'Mayor recolección en una área en un 50% extra' }
+          { level: 1, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 50px de la cabeza' },
+          { level: 2, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 100px de la cabeza' },
+          { level: 3, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 150px de la cabeza' },
+          { level: 4, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 200px de la cabeza' },
+          { level: 5, xpCost: 0, starsCost: 5, description: 'Atrae XP y estrellas a 250px de la cabeza' },
+          { level: 6, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 300px de la cabeza' },
+          { level: 7, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 350px de la cabeza' },
+          { level: 8, xpCost: 0, starsCost: 10, description: 'Atrae XP y estrellas a 400px de la cabeza' },
+          { level: 9, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 450px de la cabeza' },
+          { level: 10, xpCost: 0, starsCost: 15, description: 'Atrae XP y estrellas a 500px de la cabeza' }
         ],
         cannon: [
           { level: 1, xpCost: 250, starsCost: 10, description: 'Cañón en la cabeza que tira de a 1 bala. Un disparo x segundo' },
@@ -273,16 +279,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
           { level: 10, xpCost: 1000, starsCost: 0, description: 'Extra velocidad x 100%' }
         ],
         health: [
-          { level: 1, xpCost: 0, starsCost: 3, description: '4 puntos de vida máximos' },
-          { level: 2, xpCost: 0, starsCost: 3, description: '6 puntos de vida máximos' },
-          { level: 3, xpCost: 0, starsCost: 3, description: '8 puntos de vida máximos' },
-          { level: 4, xpCost: 0, starsCost: 5, description: '10 puntos de vida máximos' },
-          { level: 5, xpCost: 0, starsCost: 5, description: '12 puntos de vida máximos' },
-          { level: 6, xpCost: 0, starsCost: 5, description: '14 puntos de vida máximos' },
-          { level: 7, xpCost: 0, starsCost: 8, description: '16 puntos de vida máximos' },
-          { level: 8, xpCost: 0, starsCost: 8, description: '18 puntos de vida máximos' },
-          { level: 9, xpCost: 0, starsCost: 10, description: '20 puntos de vida máximos' },
-          { level: 10, xpCost: 0, starsCost: 10, description: '22 puntos de vida máximos' }
+          { level: 1, xpCost: 150, starsCost: 5, description: '4 puntos de vida máximos' },
+          { level: 2, xpCost: 150, starsCost: 5, description: '6 puntos de vida máximos' },
+          { level: 3, xpCost: 150, starsCost: 5, description: '8 puntos de vida máximos' },
+          { level: 4, xpCost: 150, starsCost: 5, description: '10 puntos de vida máximos' },
+          { level: 5, xpCost: 150, starsCost: 5, description: '12 puntos de vida máximos' },
+          { level: 6, xpCost: 150, starsCost: 5, description: '14 puntos de vida máximos' },
+          { level: 7, xpCost: 150, starsCost: 5, description: '16 puntos de vida máximos' },
+          { level: 8, xpCost: 150, starsCost: 5, description: '18 puntos de vida máximos' },
+          { level: 9, xpCost: 150, starsCost: 5, description: '20 puntos de vida máximos' },
+          { level: 10, xpCost: 150, starsCost: 5, description: '22 puntos de vida máximos' }
         ]
       });
     }
@@ -315,6 +321,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       setHeadLevel(data.headLevel || 1);
       setHealthLevel(data.healthLevel || 0);
       gameRef.current.level = data.currentLevel || 1;
+      gameRef.current.magnetLevel = data.magnetLevel || 0;
       
     } catch (error) {
       console.error('Error loading progress:', error);
@@ -450,6 +457,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
     return () => clearTimeout(timeoutId);
   }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel, healthLevel]);
 
+  // Sincronizar magnetLevel con gameRef para el game loop
+  useEffect(() => {
+    gameRef.current.magnetLevel = magnetLevel;
+  }, [magnetLevel]);
+
   const CANVAS_WIDTH = 800;
   const CANVAS_HEIGHT = 600;
   const WORLD_WIDTH = 6400; // 8x wider
@@ -540,7 +552,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
         cannonLevel: getUpgradeLevel(Math.min(5, Math.ceil(maxUpgradeLevel / 2))),
         speedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
         bulletSpeedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        magnetLevel: getUpgradeLevel(Math.min(5, Math.ceil(maxUpgradeLevel / 2))),
+        magnetLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
         healthLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel))
       };
     };
@@ -1253,9 +1265,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
         // Aplicar efecto magneto del enemigo para atraer comida
         const enemyMagnetLevel = enemy.magnetLevel || 0;
         if (enemyMagnetLevel > 0) {
-          const baseMagnetRange = 100; // Rango base más pequeño que el jugador
-          const magnetBonus = (enemyMagnetLevel * 10) / 100; // 10% por nivel
-          const magnetRange = baseMagnetRange * (1 + magnetBonus);
+          const magnetRange = 30 * enemyMagnetLevel; // Rango más pequeño que el jugador
           
           game.food.forEach(food => {
             const dx = head.x - food.x;
@@ -1263,10 +1273,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < magnetRange && distance > 0) {
-              // Atraer comida hacia el enemigo
-              const attractionStrength = (1 - distance / magnetRange) * 0.2; // Un poco más débil que el jugador
-              food.x += (dx / distance) * attractionStrength * normalizedDelta;
-              food.y += (dy / distance) * attractionStrength * normalizedDelta;
+              const attractionStrength = (1 - distance / magnetRange) * 2.0;
+              food.x += (dx / distance) * attractionStrength;
+              food.y += (dy / distance) * attractionStrength;
             }
           });
         }
@@ -1837,29 +1846,40 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false }) => {
       game.camera.x = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, newHead.x - CANVAS_WIDTH / 2));
       game.camera.y = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, newHead.y - CANVAS_HEIGHT / 2));
 
-      // Apply magnet improvement to attract food (magnetLevel: 1-5 = 10% to 50% extra range)
-      if (magnetLevel > 0) {
-        const baseMagnetRange = 150;
-        const magnetBonus = (magnetLevel * 10) / 100; // 10% per level
-        const magnetRange = baseMagnetRange * (1 + magnetBonus);
+      // Apply magnet improvement to attract food towards snake HEAD
+      // magnetLevel 1-5: rango 50, 100, 150, 200, 250 pixels desde la cabeza
+      const currentMagnetLevel = game.magnetLevel || 0;
+      if (currentMagnetLevel > 0) {
+        const magnetRange = 50 * currentMagnetLevel; // 50px por nivel
+        const head = game.snake[0];
         
+        // Atraer comida hacia la cabeza
         game.food.forEach(food => {
-          const dx = newHead.x - food.x;
-          const dy = newHead.y - food.y;
+          const dx = head.x - food.x;
+          const dy = head.y - food.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
           
           if (distance < magnetRange && distance > 0) {
-            // Attract food towards snake
-            const attractionStrength = (1 - distance / magnetRange) * 0.3; // Stronger when closer
-            food.x += (dx / distance) * attractionStrength * normalizedDelta;
-            food.y += (dy / distance) * attractionStrength * normalizedDelta;
-            
-            // Show particle effect when collecting with magnet
-            if (distance < game.snakeSize + food.size + 5) {
-              createParticle(food.x, food.y, '#00ff88', 3);
-            }
+            const attractionStrength = (1 - distance / magnetRange) * 3.0;
+            food.x += (dx / distance) * attractionStrength;
+            food.y += (dy / distance) * attractionStrength;
           }
         });
+        
+        // También atraer estrellas
+        if (game.stars) {
+          game.stars.forEach(star => {
+            const dx = head.x - star.x;
+            const dy = head.y - star.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < magnetRange && distance > 0) {
+              const attractionStrength = (1 - distance / magnetRange) * 3.0;
+              star.x += (dx / distance) * attractionStrength;
+              star.y += (dy / distance) * attractionStrength;
+            }
+          });
+        }
       }
 
       // Check food collision

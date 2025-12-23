@@ -442,7 +442,7 @@ const AdminPanel = ({ onClose }) => {
                         value={editingUser.magnetLevel}
                         onChange={(val) => setEditingUser(prev => ({ ...prev, magnetLevel: val }))}
                         min={0}
-                        max={5}
+                        max={10}
                       />
                       <InputField
                         label="Velocidad"
@@ -455,6 +455,13 @@ const AdminPanel = ({ onClose }) => {
                         label="Velocidad Bala"
                         value={editingUser.bulletSpeedLevel}
                         onChange={(val) => setEditingUser(prev => ({ ...prev, bulletSpeedLevel: val }))}
+                        min={0}
+                        max={10}
+                      />
+                      <InputField
+                        label="Vida"
+                        value={editingUser.healthLevel}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, healthLevel: val }))}
                         min={0}
                         max={10}
                       />
