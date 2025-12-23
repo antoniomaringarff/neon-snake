@@ -1,4 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+// Componentes fuera del componente principal para evitar recreación
+const InputField = React.memo(({ label, value, onChange, type = 'number', min, max }) => {
+  const handleChange = useCallback((e) => {
+    const newValue = type === 'number' ? (parseInt(e.target.value) || 0) : e.target.value;
+    onChange(newValue);
+  }, [type, onChange]);
+
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <label style={{ display: 'block', color: '#33ffff', fontSize: '12px', marginBottom: '4px' }}>
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value ?? ''}
+        onChange={handleChange}
+        min={min}
+        max={max}
+        style={{
+          width: '100%',
+          padding: '6px',
+          background: 'rgba(0, 0, 0, 0.7)',
+          border: '1px solid #33ffff',
+          color: '#33ffff',
+          borderRadius: '4px',
+          fontSize: '14px'
+        }}
+      />
+    </div>
+  );
+});
+
+const Button = React.memo(({ onClick, children, style = {} }) => (
+  <button
+    onClick={onClick}
+    style={{
+      padding: '8px 16px',
+      background: 'transparent',
+      border: '2px solid #33ffff',
+      color: '#33ffff',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      transition: 'all 0.3s',
+      ...style
+    }}
+    onMouseEnter={(e) => {
+      e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+    }}
+    onMouseLeave={(e) => {
+      e.target.style.background = 'transparent';
+    }}
+  >
+    {children}
+  </button>
+));
 
 const AdminPanel = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState('jugadores');
@@ -164,54 +221,6 @@ const AdminPanel = ({ onClose }) => {
     }
   };
 
-  const InputField = ({ label, value, onChange, type = 'number', min, max }) => (
-    <div style={{ marginBottom: '10px' }}>
-      <label style={{ display: 'block', color: '#33ffff', fontSize: '12px', marginBottom: '4px' }}>
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
-        min={min}
-        max={max}
-        style={{
-          width: '100%',
-          padding: '6px',
-          background: 'rgba(0, 0, 0, 0.7)',
-          border: '1px solid #33ffff',
-          color: '#33ffff',
-          borderRadius: '4px',
-          fontSize: '14px'
-        }}
-      />
-    </div>
-  );
-
-  const Button = ({ onClick, children, style = {} }) => (
-    <button
-      onClick={onClick}
-      style={{
-        padding: '8px 16px',
-        background: 'transparent',
-        border: '2px solid #33ffff',
-        color: '#33ffff',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontSize: '14px',
-        transition: 'all 0.3s',
-        ...style
-      }}
-      onMouseEnter={(e) => {
-        e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-      }}
-      onMouseLeave={(e) => {
-        e.target.style.background = 'transparent';
-      }}
-    >
-      {children}
-    </button>
-  );
 
   if (loading) {
     return (
@@ -390,62 +399,62 @@ const AdminPanel = ({ onClose }) => {
                       <InputField
                         label="XP Total"
                         value={editingUser.totalXp}
-                        onChange={(val) => setEditingUser({ ...editingUser, totalXp: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, totalXp: val }))}
                       />
                       <InputField
                         label="Estrellas Total"
                         value={editingUser.totalStars}
-                        onChange={(val) => setEditingUser({ ...editingUser, totalStars: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, totalStars: val }))}
                       />
                       <InputField
                         label="Mejor Score"
                         value={editingUser.bestScore}
-                        onChange={(val) => setEditingUser({ ...editingUser, bestScore: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, bestScore: val }))}
                       />
                       <InputField
                         label="Nivel Actual"
                         value={editingUser.currentLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, currentLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, currentLevel: val }))}
                       />
                       <InputField
                         label="Escudo"
                         value={editingUser.shieldLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, shieldLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, shieldLevel: val }))}
                         min={0}
-                        max={5}
+                        max={10}
                       />
                       <InputField
                         label="Cabeza"
                         value={editingUser.headLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, headLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, headLevel: val }))}
                         min={1}
                         max={3}
                       />
                       <InputField
                         label="Cañón"
                         value={editingUser.cannonLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, cannonLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, cannonLevel: val }))}
                         min={0}
                         max={5}
                       />
                       <InputField
                         label="Imán"
                         value={editingUser.magnetLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, magnetLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, magnetLevel: val }))}
                         min={0}
                         max={5}
                       />
                       <InputField
                         label="Velocidad"
                         value={editingUser.speedLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, speedLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, speedLevel: val }))}
                         min={0}
                         max={10}
                       />
                       <InputField
                         label="Velocidad Bala"
                         value={editingUser.bulletSpeedLevel}
-                        onChange={(val) => setEditingUser({ ...editingUser, bulletSpeedLevel: val })}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, bulletSpeedLevel: val }))}
                         min={0}
                         max={10}
                       />
@@ -455,7 +464,7 @@ const AdminPanel = ({ onClose }) => {
                         <input
                           type="checkbox"
                           checked={editingUser.isBanned}
-                          onChange={(e) => setEditingUser({ ...editingUser, isBanned: e.target.checked })}
+                          onChange={(e) => setEditingUser(prev => ({ ...prev, isBanned: e.target.checked }))}
                           style={{ width: '20px', height: '20px' }}
                         />
                         Baneado
@@ -464,7 +473,7 @@ const AdminPanel = ({ onClose }) => {
                         <input
                           type="checkbox"
                           checked={editingUser.isAdmin}
-                          onChange={(e) => setEditingUser({ ...editingUser, isAdmin: e.target.checked })}
+                          onChange={(e) => setEditingUser(prev => ({ ...prev, isAdmin: e.target.checked }))}
                           style={{ width: '20px', height: '20px' }}
                         />
                         Administrador
@@ -552,63 +561,63 @@ const AdminPanel = ({ onClose }) => {
                       <InputField
                         label="Número de Nivel"
                         value={editingLevel.levelNumber}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, levelNumber: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, levelNumber: val }))}
                       />
                       <InputField
                         label="Estrellas Necesarias"
                         value={editingLevel.starsNeeded}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, starsNeeded: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, starsNeeded: val }))}
                       />
                       <InputField
                         label="Velocidad Jugador"
                         value={editingLevel.playerSpeed}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, playerSpeed: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, playerSpeed: val }))}
                         type="number"
                       />
                       <InputField
                         label="Velocidad Enemigos"
                         value={editingLevel.enemySpeed}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemySpeed: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemySpeed: val }))}
                         type="number"
                       />
                       <InputField
                         label="Cantidad Enemigos"
                         value={editingLevel.enemyCount}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemyCount: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyCount: val }))}
                       />
                       <InputField
                         label="Densidad Enemigos"
                         value={editingLevel.enemyDensity}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemyDensity: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyDensity: val }))}
                       />
                       <InputField
                         label="% Enemigos Disparan"
                         value={editingLevel.enemyShootPercentage}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemyShootPercentage: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyShootPercentage: val }))}
                         min={0}
                         max={100}
                       />
                       <InputField
                         label="% Enemigos con Escudo"
                         value={editingLevel.enemyShieldPercentage}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemyShieldPercentage: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyShieldPercentage: val }))}
                         min={0}
                         max={100}
                       />
                       <InputField
                         label="Cooldown Disparo (ms)"
                         value={editingLevel.enemyShootCooldown}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, enemyShootCooldown: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyShootCooldown: val }))}
                       />
                       <InputField
                         label="Densidad XP"
                         value={editingLevel.xpDensity}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, xpDensity: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, xpDensity: val }))}
                       />
                       <InputField
                         label="Tipo de Fondo"
                         value={editingLevel.backgroundType}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, backgroundType: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, backgroundType: val }))}
                         type="text"
                       />
                       <div style={{ marginBottom: '10px' }}>
@@ -617,7 +626,7 @@ const AdminPanel = ({ onClose }) => {
                         </label>
                         <select
                           value={editingLevel.structureId || ''}
-                          onChange={(e) => setEditingLevel({ ...editingLevel, structureId: e.target.value ? parseInt(e.target.value) : null })}
+                          onChange={(e) => setEditingLevel(prev => ({ ...prev, structureId: e.target.value ? parseInt(e.target.value) : null }))}
                           style={{
                             width: '100%',
                             padding: '6px',
@@ -639,7 +648,7 @@ const AdminPanel = ({ onClose }) => {
                           <input
                             type="checkbox"
                             checked={editingLevel.hasCentralCell}
-                            onChange={(e) => setEditingLevel({ ...editingLevel, hasCentralCell: e.target.checked })}
+                            onChange={(e) => setEditingLevel(prev => ({ ...prev, hasCentralCell: e.target.checked }))}
                             style={{ width: '20px', height: '20px' }}
                           />
                           Tiene Celda Central
@@ -648,7 +657,7 @@ const AdminPanel = ({ onClose }) => {
                       <InputField
                         label="Velocidad Apertura Celda"
                         value={editingLevel.centralCellOpeningSpeed}
-                        onChange={(val) => setEditingLevel({ ...editingLevel, centralCellOpeningSpeed: val })}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, centralCellOpeningSpeed: val }))}
                         type="number"
                       />
                     </div>
@@ -743,12 +752,12 @@ const AdminPanel = ({ onClose }) => {
                     <InputField
                       label="Costo XP"
                       value={editingUpgrade.xpCost}
-                      onChange={(val) => setEditingUpgrade({ ...editingUpgrade, xpCost: val })}
+                      onChange={(val) => setEditingUpgrade(prev => ({ ...prev, xpCost: val }))}
                     />
                     <InputField
                       label="Costo Estrellas"
                       value={editingUpgrade.starsCost}
-                      onChange={(val) => setEditingUpgrade({ ...editingUpgrade, starsCost: val })}
+                      onChange={(val) => setEditingUpgrade(prev => ({ ...prev, starsCost: val }))}
                     />
                     <div style={{ marginBottom: '10px' }}>
                       <label style={{ display: 'block', color: '#33ffff', fontSize: '12px', marginBottom: '4px' }}>
@@ -756,7 +765,7 @@ const AdminPanel = ({ onClose }) => {
                       </label>
                       <textarea
                         value={editingUpgrade.description}
-                        onChange={(e) => setEditingUpgrade({ ...editingUpgrade, description: e.target.value })}
+                        onChange={(e) => setEditingUpgrade(prev => ({ ...prev, description: e.target.value }))}
                         rows={4}
                         style={{
                           width: '100%',
