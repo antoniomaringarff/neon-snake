@@ -514,36 +514,57 @@ const AdminPanel = ({ onClose }) => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h2 style={{ color: '#33ffff', margin: 0 }}>Gestión de Niveles</h2>
-                <Button onClick={() => setEditingLevel({ levelNumber: levels.length + 1, starsNeeded: 1, playerSpeed: 2.0, enemySpeed: 2.0, enemyCount: 5, enemyDensity: 15, enemyShootPercentage: 0, enemyShieldPercentage: 0, enemyShootCooldown: 5000, xpDensity: 100, backgroundType: 'default', structureId: null, hasCentralCell: false, centralCellOpeningSpeed: 0.002 })}>
+                <Button onClick={() => setEditingLevel({ levelNumber: levels.length + 1, starsNeeded: 1, playerSpeed: 2.0, enemySpeed: 2.0, enemyCount: 5, enemyDensity: 15, enemyShootPercentage: 0, enemyShieldPercentage: 0, enemyShootCooldown: 5000, xpDensity: 100, xpPoints: 100, mapSize: 10, structuresCount: 0, killerSawCount: 0, floatingCannonCount: 0, resentfulSnakeCount: 0, healthBoxCount: 0, backgroundType: 'default', structureId: null, hasCentralCell: false, centralCellOpeningSpeed: 0.002 })}>
                   Crear Nuevo Nivel
                 </Button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
-                {levels.map(level => (
-                  <div
-                    key={level.id}
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.5)',
-                      border: '2px solid #33ffff',
-                      borderRadius: '8px',
-                      padding: '15px'
-                    }}
-                  >
-                    <h3 style={{ color: '#33ffff', marginTop: 0 }}>Nivel {level.levelNumber}</h3>
-                    <p style={{ color: '#888', fontSize: '12px', margin: '5px 0' }}>
-                      Enemigos: {level.enemyCount} | Estrellas: {level.starsNeeded}
-                    </p>
-                    <p style={{ color: '#888', fontSize: '12px', margin: '5px 0' }}>
-                      Estructura: {level.structureName || 'Ninguna'}
-                    </p>
-                    <Button
-                      onClick={() => setEditingLevel(level)}
-                      style={{ marginTop: '10px', width: '100%' }}
-                    >
-                      Editar
-                    </Button>
-                  </div>
-                ))}
+              <div style={{
+                overflowX: 'auto',
+                background: 'rgba(0, 0, 0, 0.5)',
+                borderRadius: '8px',
+                padding: '15px'
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', color: '#33ffff', minWidth: '1400px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #33ffff' }}>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Nivel</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>XP Points</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Enemigos</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Tamano Mapa</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Objetivo</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Estructuras</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Sierras</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Canones</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Viboras Resentidas</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Cajas Vida</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {levels.map(level => (
+                      <tr key={level.id} style={{ borderBottom: '1px solid rgba(51, 255, 255, 0.2)' }}>
+                        <td style={{ padding: '10px' }}>{level.levelNumber}</td>
+                        <td style={{ padding: '10px' }}>{level.xpPoints ?? level.xpDensity}</td>
+                        <td style={{ padding: '10px' }}>{level.enemyCount}</td>
+                        <td style={{ padding: '10px' }}>{level.mapSize ?? 10}</td>
+                        <td style={{ padding: '10px' }}>{level.starsNeeded}</td>
+                        <td style={{ padding: '10px' }}>{level.structuresCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>{level.killerSawCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>{level.floatingCannonCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>{level.resentfulSnakeCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>{level.healthBoxCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>
+                          <Button
+                            onClick={() => setEditingLevel(level)}
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                          >
+                            Editar
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
               {/* Edit Level Modal */}
@@ -580,9 +601,49 @@ const AdminPanel = ({ onClose }) => {
                         onChange={(val) => setEditingLevel(prev => ({ ...prev, levelNumber: val }))}
                       />
                       <InputField
-                        label="Estrellas Necesarias"
+                        label="Objetivo (Estrellas)"
                         value={editingLevel.starsNeeded}
                         onChange={(val) => setEditingLevel(prev => ({ ...prev, starsNeeded: val }))}
+                      />
+                      <InputField
+                        label="XP Points"
+                        value={editingLevel.xpPoints ?? editingLevel.xpDensity}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, xpPoints: val, xpDensity: val }))}
+                      />
+                      <InputField
+                        label="Cantidad Enemigos"
+                        value={editingLevel.enemyCount}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyCount: val }))}
+                      />
+                      <InputField
+                        label="Tamano Mapa"
+                        value={editingLevel.mapSize ?? 10}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, mapSize: val }))}
+                      />
+                      <InputField
+                        label="Estructuras"
+                        value={editingLevel.structuresCount ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, structuresCount: val }))}
+                      />
+                      <InputField
+                        label="Sierras Asesinas"
+                        value={editingLevel.killerSawCount ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, killerSawCount: val }))}
+                      />
+                      <InputField
+                        label="Canones Flotantes"
+                        value={editingLevel.floatingCannonCount ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, floatingCannonCount: val }))}
+                      />
+                      <InputField
+                        label="Viboras Resentidas"
+                        value={editingLevel.resentfulSnakeCount ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, resentfulSnakeCount: val }))}
+                      />
+                      <InputField
+                        label="Cajas de Vida"
+                        value={editingLevel.healthBoxCount ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, healthBoxCount: val }))}
                       />
                       <InputField
                         label="Velocidad Jugador"
@@ -595,11 +656,6 @@ const AdminPanel = ({ onClose }) => {
                         value={editingLevel.enemySpeed}
                         onChange={(val) => setEditingLevel(prev => ({ ...prev, enemySpeed: val }))}
                         type="number"
-                      />
-                      <InputField
-                        label="Cantidad Enemigos"
-                        value={editingLevel.enemyCount}
-                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyCount: val }))}
                       />
                       <InputField
                         label="Densidad Enemigos"

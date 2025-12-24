@@ -200,6 +200,13 @@ export default async function adminRoutes(fastify, options) {
           gl.enemy_shield_percentage,
           gl.enemy_shoot_cooldown,
           gl.xp_density,
+          gl.xp_points,
+          gl.map_size,
+          gl.structures_count,
+          gl.killer_saw_count,
+          gl.floating_cannon_count,
+          gl.resentful_snake_count,
+          gl.health_box_count,
           gl.background_type,
           gl.structure_id,
           gl.has_central_cell,
@@ -222,6 +229,13 @@ export default async function adminRoutes(fastify, options) {
         enemyShieldPercentage: row.enemy_shield_percentage,
         enemyShootCooldown: row.enemy_shoot_cooldown,
         xpDensity: row.xp_density,
+        xpPoints: row.xp_points,
+        mapSize: row.map_size,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         structureName: row.structure_name,
@@ -250,6 +264,13 @@ export default async function adminRoutes(fastify, options) {
       enemyShieldPercentage,
       enemyShootCooldown,
       xpDensity,
+      xpPoints,
+      mapSize,
+      structuresCount,
+      killerSawCount,
+      floatingCannonCount,
+      resentfulSnakeCount,
+      healthBoxCount,
       backgroundType,
       structureId,
       hasCentralCell,
@@ -269,18 +290,26 @@ export default async function adminRoutes(fastify, options) {
              enemy_shield_percentage = COALESCE($8, enemy_shield_percentage),
              enemy_shoot_cooldown = COALESCE($9, enemy_shoot_cooldown),
              xp_density = COALESCE($10, xp_density),
-             background_type = COALESCE($11, background_type),
-             structure_id = $12,
-             has_central_cell = COALESCE($13, has_central_cell),
-             central_cell_opening_speed = COALESCE($14, central_cell_opening_speed),
+             xp_points = COALESCE($11, xp_points),
+             map_size = COALESCE($12, map_size),
+             structures_count = COALESCE($13, structures_count),
+             killer_saw_count = COALESCE($14, killer_saw_count),
+             floating_cannon_count = COALESCE($15, floating_cannon_count),
+             resentful_snake_count = COALESCE($16, resentful_snake_count),
+             health_box_count = COALESCE($17, health_box_count),
+             background_type = COALESCE($18, background_type),
+             structure_id = $19,
+             has_central_cell = COALESCE($20, has_central_cell),
+             central_cell_opening_speed = COALESCE($21, central_cell_opening_speed),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $15
+         WHERE id = $22
          RETURNING *`,
         [
           levelNumber, starsNeeded, playerSpeed, enemySpeed, enemyCount,
           enemyDensity, enemyShootPercentage, enemyShieldPercentage,
-          enemyShootCooldown, xpDensity, backgroundType, structureId,
-          hasCentralCell, centralCellOpeningSpeed, id
+          enemyShootCooldown, xpDensity, xpPoints, mapSize, structuresCount,
+          killerSawCount, floatingCannonCount, resentfulSnakeCount, healthBoxCount,
+          backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed, id
         ]
       );
 
@@ -301,6 +330,13 @@ export default async function adminRoutes(fastify, options) {
         enemyShieldPercentage: row.enemy_shield_percentage,
         enemyShootCooldown: row.enemy_shoot_cooldown,
         xpDensity: row.xp_density,
+        xpPoints: row.xp_points,
+        mapSize: row.map_size,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         hasCentralCell: row.has_central_cell,
@@ -330,6 +366,13 @@ export default async function adminRoutes(fastify, options) {
       enemyShieldPercentage = 0,
       enemyShootCooldown = 5000,
       xpDensity = 100,
+      xpPoints = 100,
+      mapSize = 10,
+      structuresCount = 0,
+      killerSawCount = 0,
+      floatingCannonCount = 0,
+      resentfulSnakeCount = 0,
+      healthBoxCount = 0,
       backgroundType = 'default',
       structureId = null,
       hasCentralCell = false,
@@ -345,15 +388,17 @@ export default async function adminRoutes(fastify, options) {
         `INSERT INTO game_levels (
           level_number, stars_needed, player_speed, enemy_speed, enemy_count,
           enemy_density, enemy_shoot_percentage, enemy_shield_percentage,
-          enemy_shoot_cooldown, xp_density, background_type, structure_id,
-          has_central_cell, central_cell_opening_speed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          enemy_shoot_cooldown, xp_density, xp_points, map_size, structures_count,
+          killer_saw_count, floating_cannon_count, resentful_snake_count, health_box_count,
+          background_type, structure_id, has_central_cell, central_cell_opening_speed
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         RETURNING *`,
         [
           levelNumber, starsNeeded, playerSpeed, enemySpeed, enemyCount,
           enemyDensity, enemyShootPercentage, enemyShieldPercentage,
-          enemyShootCooldown, xpDensity, backgroundType, structureId,
-          hasCentralCell, centralCellOpeningSpeed
+          enemyShootCooldown, xpDensity, xpPoints, mapSize, structuresCount,
+          killerSawCount, floatingCannonCount, resentfulSnakeCount, healthBoxCount,
+          backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed
         ]
       );
 
@@ -370,6 +415,13 @@ export default async function adminRoutes(fastify, options) {
         enemyShieldPercentage: row.enemy_shield_percentage,
         enemyShootCooldown: row.enemy_shoot_cooldown,
         xpDensity: row.xp_density,
+        xpPoints: row.xp_points,
+        mapSize: row.map_size,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         hasCentralCell: row.has_central_cell,

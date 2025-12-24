@@ -12,6 +12,9 @@ import * as migration010 from './010_fix_magnet_constraint.js';
 import * as migration011 from './011_fix_magnet_constraint_v2.js';
 import * as migration012 from './012_update_magnet_descriptions.js';
 import * as migration013 from './013_add_free_shots_flag.js';
+import * as migration014 from './014_level_system_v2.js';
+import * as migration015 from './015_update_record_level25.js';
+import * as migration016 from './016_reset_all_progress.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -26,7 +29,10 @@ const migrations = [
   { name: '010_fix_magnet_constraint', up: migration010.up, down: migration010.down },
   { name: '011_fix_magnet_constraint_v2', up: migration011.up, down: migration011.down },
   { name: '012_update_magnet_descriptions', up: migration012.up, down: migration012.down },
-  { name: '013_add_free_shots_flag', up: migration013.up, down: migration013.down }
+  { name: '013_add_free_shots_flag', up: migration013.up, down: migration013.down },
+  { name: '014_level_system_v2', up: migration014.up, down: migration014.down },
+  { name: '015_update_record_level25', up: migration015.up, down: migration015.down },
+  { name: '016_reset_all_progress', up: migration016.up, down: migration016.down }
 ];
 
 export async function runMigrations() {
