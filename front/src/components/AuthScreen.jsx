@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
-export default function AuthScreen({ onLogin }) {
-  const [isLogin, setIsLogin] = useState(true);
+export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
+  // Si hay cuenta existente en este navegador, mostrar login por defecto
+  // Si no, mostrar registro por defecto
+  const [isLogin, setIsLogin] = useState(hasExistingAccount);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,7 +18,7 @@ export default function AuthScreen({ onLogin }) {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     const body = isLogin 
       ? { username, password }
-      : { username, email, password };
+      : { username, email: email || undefined, password }; // Email opcional
 
     try {
       const response = await fetch(endpoint, {
@@ -32,18 +34,15 @@ export default function AuthScreen({ onLogin }) {
         try {
           data = await response.json();
         } catch (jsonError) {
-          // Si falla el parseo JSON, leer como texto
           const text = await response.text();
           throw new Error(text || `Error ${response.status}: ${response.statusText}`);
         }
       } else {
-        // Si no es JSON, leer como texto
         const text = await response.text();
         throw new Error(text || `Error ${response.status}: ${response.statusText}`);
       }
 
       if (!response.ok) {
-        // Check if user is banned
         if (data.isBanned) {
           throw new Error('Tu cuenta ha sido suspendida. Por favor contacta al administrador.');
         }
@@ -53,7 +52,7 @@ export default function AuthScreen({ onLogin }) {
       onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.freeShots || false);
     } catch (err) {
       setError(err.message || 'Error en la autenticación');
-      console.error('Login error:', err);
+      console.error('Auth error:', err);
     } finally {
       setLoading(false);
     }
@@ -93,8 +92,20 @@ export default function AuthScreen({ onLogin }) {
           marginBottom: '30px',
           fontSize: '24px'
         }}>
-          {isLogin ? 'INICIAR SESIÓN' : 'REGISTRARSE'}
+          {isLogin ? 'INICIAR SESIÓN' : 'CREAR CUENTA'}
         </h2>
+
+        {!isLogin && (
+          <p style={{
+            textAlign: 'center',
+            marginBottom: '20px',
+            fontSize: '14px',
+            color: '#aaa',
+            lineHeight: '1.5'
+          }}>
+            ¡Bienvenido! Crea tu cuenta para empezar a jugar.
+          </p>
+        )}
 
         {error && (
           <div style={{
@@ -116,13 +127,14 @@ export default function AuthScreen({ onLogin }) {
               marginBottom: '8px',
               color: '#33ffff'
             }}>
-              Usuario
+              Usuario <span style={{ color: '#ff3366' }}>*</span>
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
+              placeholder="Elegí tu nombre de usuario"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -130,7 +142,8 @@ export default function AuthScreen({ onLogin }) {
                 border: '1px solid #33ffff',
                 borderRadius: '5px',
                 color: '#fff',
-                fontSize: '16px'
+                fontSize: '16px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -142,23 +155,32 @@ export default function AuthScreen({ onLogin }) {
                 marginBottom: '8px',
                 color: '#33ffff'
               }}>
-                Email
+                Email <span style={{ color: '#888', fontWeight: 'normal', fontSize: '12px' }}>(opcional)</span>
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
+                placeholder="Solo para recuperar tu cuenta"
                 style={{
                   width: '100%',
                   padding: '12px',
                   background: 'rgba(51, 255, 255, 0.1)',
-                  border: '1px solid #33ffff',
+                  border: '1px solid #555',
                   borderRadius: '5px',
                   color: '#fff',
-                  fontSize: '16px'
+                  fontSize: '16px',
+                  boxSizing: 'border-box'
                 }}
               />
+              <p style={{
+                margin: '8px 0 0 0',
+                fontSize: '11px',
+                color: '#666',
+                fontStyle: 'italic'
+              }}>
+                📧 Si perdés acceso a tu cuenta, el email te permite recuperarla.
+              </p>
             </div>
           )}
 
@@ -168,7 +190,7 @@ export default function AuthScreen({ onLogin }) {
               marginBottom: '8px',
               color: '#33ffff'
             }}>
-              Contraseña
+              Contraseña <span style={{ color: '#ff3366' }}>*</span>
             </label>
             <input
               type="password"
@@ -176,6 +198,7 @@ export default function AuthScreen({ onLogin }) {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              placeholder="Mínimo 6 caracteres"
               style={{
                 width: '100%',
                 padding: '12px',
@@ -183,7 +206,8 @@ export default function AuthScreen({ onLogin }) {
                 border: '1px solid #33ffff',
                 borderRadius: '5px',
                 color: '#fff',
-                fontSize: '16px'
+                fontSize: '16px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -194,7 +218,7 @@ export default function AuthScreen({ onLogin }) {
             style={{
               width: '100%',
               padding: '15px',
-              background: 'transparent',
+              background: isLogin ? 'transparent' : 'rgba(51, 255, 255, 0.2)',
               border: '2px solid #33ffff',
               borderRadius: '5px',
               color: '#33ffff',
@@ -202,10 +226,11 @@ export default function AuthScreen({ onLogin }) {
               cursor: loading ? 'not-allowed' : 'pointer',
               textShadow: '0 0 10px #33ffff',
               boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-              opacity: loading ? 0.5 : 1
+              opacity: loading ? 0.5 : 1,
+              transition: 'all 0.2s ease'
             }}
           >
-            {loading ? 'CARGANDO...' : (isLogin ? 'ENTRAR' : 'CREAR CUENTA')}
+            {loading ? 'CARGANDO...' : (isLogin ? 'ENTRAR' : '¡CREAR CUENTA Y JUGAR!')}
           </button>
         </form>
 
@@ -227,7 +252,7 @@ export default function AuthScreen({ onLogin }) {
               fontSize: '14px'
             }}
           >
-            {isLogin ? '¿No tenés cuenta? Registrate' : '¿Ya tenés cuenta? Iniciá sesión'}
+            {isLogin ? '¿Primera vez? Creá tu cuenta' : '¿Ya tenés cuenta? Iniciá sesión'}
           </button>
         </div>
       </div>

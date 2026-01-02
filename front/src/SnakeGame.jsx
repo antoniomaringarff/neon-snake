@@ -143,7 +143,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const shootingIntervalRef = useRef(null);
   const startAutoFireRef = useRef(null);
   const stopAutoFireRef = useRef(null);
-  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
+  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [totalXP, setTotalXP] = useState(0);
@@ -163,6 +163,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [levelConfigs, setLevelConfigs] = useState({}); // Configuraciones de niveles desde la DB
+  const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
+  const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
+  const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
   
   // Constants for canvas and world size
   const CANVAS_WIDTH = 800;
@@ -357,6 +360,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       setBulletSpeedLevel(data.bulletSpeedLevel || 0);
       setHeadLevel(data.headLevel || 1);
       setHealthLevel(data.healthLevel || 0);
+      setRebirthCount(data.rebirthCount || 0);
+      setCurrentSeries(data.currentSeries || 1);
       gameRef.current.level = data.currentLevel || 1;
       gameRef.current.magnetLevel = data.magnetLevel || 0;
       
@@ -474,9 +479,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     loadUserProgress();
   }, [user?.id]);
 
-  // Load leaderboard when in menu or level complete
+  // Load leaderboard when in menu, level complete or game complete
   useEffect(() => {
-    if (gameState === 'menu' || gameState === 'levelComplete') {
+    if (gameState === 'menu' || gameState === 'levelComplete' || gameState === 'gameComplete') {
       loadLeaderboard();
     }
   }, [gameState]);
@@ -980,6 +985,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       }
     };
 
+    const handleMouseDown = (e) => {
+      // Don't handle mouse if admin panel is open or shop is open
+      if (showAdminPanel || shopOpen) return;
+      
+      // Solo botón izquierdo (button === 0) y solo si tiene cañón
+      if (e.button === 0 && cannonLevel > 0) {
+        e.preventDefault();
+        if (!isShootingRef.current) {
+          isShootingRef.current = true;
+          shootBullet(); // Disparo inmediato
+          startAutoFire(); // Iniciar auto-fire
+        }
+      }
+    };
+
+    const handleMouseUp = (e) => {
+      if (e.button === 0) {
+        e.preventDefault();
+        stopAutoFire();
+      }
+    };
+
     const shootBullet = () => {
       const game = gameRef.current;
       if (!game.snake || game.snake.length === 0) {
@@ -1475,16 +1502,48 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
 
         // Check collision: Player head vs Enemy body (excluding enemy head)
-        // If player head hits enemy body, PLAYER dies
+        // Si el jugador choca con el cuerpo de un enemigo, recibe daño (no muerte instantánea)
         for (let i = 1; i < enemy.segments.length; i++) {
           if (checkCollision(playerHead, enemy.segments[i], game.snakeSize + SNAKE_SIZE)) {
-            // Player dies - save session and game over
-            const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            // Use game.sessionXP for score because React state (score) may be outdated
-            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-            createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
-            setGameState('gameOver');
-            return;
+            // Sistema de escudo: probabilidad de esquivar
+            let dodged = false;
+            if (shieldLevel > 0) {
+              const dodgeChance = (shieldLevel - 1) / shieldLevel;
+              dodged = Math.random() < dodgeChance;
+            }
+            
+            if (!dodged) {
+              // No esquivó - recibe daño
+              const damage = 3;
+              game.currentHealth -= damage;
+              
+              // Efecto visual rojo
+              createParticle(playerHead.x, playerHead.y, '#ff3366', 12);
+              
+              // Si la vida llega a 0 o menos, el jugador muere
+              if (game.currentHealth <= 0) {
+                const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+                createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
+                setGameState('gameOver');
+                return;
+              }
+            } else {
+              // Esquivó - efecto visual azul brillante
+              createParticle(playerHead.x, playerHead.y, '#00ffff', 12);
+            }
+            
+            // Empujar al jugador hacia atrás para evitar múltiples colisiones seguidas (siempre)
+            const dx = playerHead.x - enemy.segments[i].x;
+            const dy = playerHead.y - enemy.segments[i].y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 0) {
+              const pushForce = 30;
+              playerHead.x += (dx / distance) * pushForce;
+              playerHead.y += (dy / distance) * pushForce;
+            }
+            
+            break; // Solo una colisión por frame
           }
         }
 
@@ -1614,12 +1673,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           }
           
           if (hitHead || hitBody) {
-            // Sistema de vida: cabeza -2, cuerpo -1
+            // Sistema de escudo: probabilidad de esquivar
+            // Nivel 2: 1 de 2 balas afectan (50% esquivar)
+            // Nivel 3: 1 de 3 balas afectan (66.6% esquivar)
+            // Nivel 10: 1 de 10 balas afectan (90% esquivar)
+            let dodged = false;
+            if (shieldLevel > 0) {
+              const dodgeChance = (shieldLevel - 1) / shieldLevel;
+              dodged = Math.random() < dodgeChance;
+            }
+            
+            if (dodged) {
+              // Esquivó el ataque - efecto visual azul brillante
+              createParticle(bullet.x, bullet.y, '#00ffff', 12);
+              return false; // Remove bullet sin hacer daño
+            }
+            
+            // No esquivó - recibe daño completo
             const damage = hitHead ? 2 : 1;
             game.currentHealth -= damage;
             
-            // Efecto visual
-              createParticle(bullet.x, bullet.y, shieldLevel > 0 ? '#6495ed' : '#ff0000', 8);
+            // Efecto visual - rojo porque recibió daño
+            createParticle(bullet.x, bullet.y, '#ff0000', 8);
               
             // Si la vida llega a 0 o menos, el jugador muere
             if (game.currentHealth <= 0) {
@@ -1873,15 +1948,42 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         y: head.y + game.direction.y * game.speed * normalizedDelta
       };
 
-      // Check collision with red borders - instant death
+      // Check collision with red borders - aplica daño con escudo
       if (newHead.x < BORDER_WIDTH || newHead.x > game.worldWidth - BORDER_WIDTH ||
           newHead.y < BORDER_WIDTH || newHead.y > game.worldHeight - BORDER_WIDTH) {
-        // Save game session before game over
-        const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        // Use game.sessionXP for score because React state (score) may be outdated
-        saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-        setGameState('gameOver');
-        return;
+        
+        // Sistema de escudo: probabilidad de esquivar
+        let dodged = false;
+        if (shieldLevel > 0) {
+          const dodgeChance = (shieldLevel - 1) / shieldLevel;
+          dodged = Math.random() < dodgeChance;
+        }
+        
+        if (!dodged) {
+          // No esquivó - recibe daño
+          const damage = 5;
+          game.currentHealth -= damage;
+          
+          // Efecto visual rojo
+          createParticle(newHead.x, newHead.y, '#ff0000', 15);
+          
+          // Si la vida llega a 0, game over
+          if (game.currentHealth <= 0) {
+            const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+            saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+            setGameState('gameOver');
+            return;
+          }
+        } else {
+          // Esquivó - efecto visual azul brillante
+          createParticle(newHead.x, newHead.y, '#00ffff', 15);
+        }
+        
+        // Rebotar hacia el centro para no quedar pegado al borde (siempre)
+        if (newHead.x < BORDER_WIDTH) newHead.x = BORDER_WIDTH + 5;
+        if (newHead.x > game.worldWidth - BORDER_WIDTH) newHead.x = game.worldWidth - BORDER_WIDTH - 5;
+        if (newHead.y < BORDER_WIDTH) newHead.y = BORDER_WIDTH + 5;
+        if (newHead.y > game.worldHeight - BORDER_WIDTH) newHead.y = game.worldHeight - BORDER_WIDTH - 5;
       }
 
       // Check collision with central rectangle walls - instant death
@@ -2112,7 +2214,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
         saveGameSession(game.sessionXP, level, game.sessionXP, duration);
         
-        setGameState('levelComplete');
+        // Si es el nivel 25, mostrar pantalla especial de victoria
+        if (level === 25) {
+          // Obtener datos del ranking del usuario
+          fetch(`/api/leaderboard/rank/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+              const previousBestScore = data.bestScore || 0;
+              
+              setVictoryData({
+                score: game.sessionXP,
+                previousBestScore: previousBestScore,
+                position: data.rank || '?',
+                isNewRecord: game.sessionXP > previousBestScore,
+                series: currentSeries
+              });
+              setGameState('gameComplete');
+            })
+            .catch(err => {
+              console.error('Error obteniendo ranking:', err);
+              // Fallback si falla el endpoint
+              setVictoryData({
+                score: game.sessionXP,
+                previousBestScore: 0,
+                position: '?',
+                isNewRecord: true,
+                series: currentSeries
+              });
+              setGameState('gameComplete');
+            });
+        } else {
+          setGameState('levelComplete');
+        }
       }
 
       updateEnemies(normalizedDelta);
@@ -2867,6 +3000,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     if (gameState === 'playing') {
       const canvas = canvasRef.current;
       canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mousedown', handleMouseDown);
+      canvas.addEventListener('mouseup', handleMouseUp);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
       canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
@@ -2888,6 +3023,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mousedown', handleMouseDown);
+        canvas.removeEventListener('mouseup', handleMouseUp);
         canvas.removeEventListener('touchmove', handleTouchMove);
         canvas.removeEventListener('touchstart', handleTouchStart);
         canvas.removeEventListener('touchend', handleJoystickEnd);
@@ -3126,6 +3263,52 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     initGame();
     setShopOpen(false);
     setGameState('playing');
+  };
+
+  const handleRebirth = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/users/${user.id}/rebirth`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({}) // Body vacío requerido por Fastify con Content-Type JSON
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al hacer rebirth');
+      }
+      
+      const data = await response.json();
+      
+      // Actualizar estados locales
+      setRebirthCount(data.rebirthCount);
+      setCurrentSeries(data.currentSeries);
+      setLevel(1);
+      setTotalXP(0);
+      setTotalStars(0);
+      setCurrentLevelXP(0);
+      setCurrentLevelStars(0);
+      
+      // Actualizar niveles de tienda según rebirth
+      const baseLevel = data.rebirthCount;
+      setShieldLevel(baseLevel);
+      setCannonLevel(baseLevel);
+      setMagnetLevel(baseLevel);
+      setSpeedLevel(baseLevel);
+      setBulletSpeedLevel(baseLevel);
+      setHealthLevel(baseLevel);
+      setHeadLevel(1 + baseLevel);
+      
+      // Volver al menú
+      setGameState('menu');
+      setVictoryData(null);
+      
+      console.log(`🔄 Rebirth completado! Serie ${data.currentSeries}, Base Level: ${baseLevel}`);
+    } catch (error) {
+      console.error('Error en rebirth:', error);
+      alert('Error al hacer rebirth. Intenta de nuevo.');
+    }
   };
 
   const buyItem = (item) => {
@@ -3374,6 +3557,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 {level}
               </div>
             </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+                {currentSeries}
+              </div>
+            </div>
+            {rebirthCount > 0 && (
+              <div>
+                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
+                  ♻️ {rebirthCount}
+                </div>
+              </div>
+            )}
           </div>
           {gameState === 'playing' && (
             <div style={{ width: '100%' }}>
@@ -3544,6 +3741,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               {level}
             </div>
           </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+              {currentSeries}
+            </div>
+          </div>
+          {rebirthCount > 0 && (
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
+                ♻️ {rebirthCount}
+              </div>
+            </div>
+          )}
           {gameState === 'playing' && (
             <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
               <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
@@ -4419,6 +4630,233 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'gameComplete' && victoryData && (
+        <div style={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: '800px',
+          padding: '40px',
+          gap: '30px'
+        }}>
+          {/* Pantalla de Victoria */}
+          <div style={{ 
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
+            padding: '60px',
+            borderRadius: '20px',
+            border: '3px solid #FFD700',
+            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
+            width: '100%'
+          }}>
+            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
+            <h1 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 30px #FFD700, 0 0 50px #ff00ff',
+              fontSize: '48px',
+              marginBottom: '20px',
+              fontWeight: 'bold',
+              letterSpacing: '2px'
+            }}>
+              ¡FELICITACIONES!
+            </h1>
+            <h2 style={{ 
+              color: '#00ff88', 
+              textShadow: '0 0 20px #00ff88',
+              fontSize: '32px',
+              marginBottom: '20px'
+            }}>
+              ¡Completaste los 25 niveles!
+            </h2>
+            
+            {/* Serie Actual */}
+            <div style={{ 
+              fontSize: '20px', 
+              color: '#ff00ff', 
+              marginBottom: '30px',
+              textShadow: '0 0 10px #ff00ff'
+            }}>
+              ⚡ Serie {victoryData.series} Completada ⚡
+            </div>
+            
+            {/* Puntuación */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '30px',
+              borderRadius: '15px',
+              marginBottom: '30px',
+              border: '2px solid #33ffff'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Tu Puntuación Final
+              </div>
+              <div style={{ 
+                fontSize: '56px', 
+                color: '#33ffff', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #33ffff',
+                marginBottom: '20px'
+              }}>
+                {victoryData.score.toLocaleString()} XP
+              </div>
+              
+              {victoryData.isNewRecord ? (
+                <div style={{
+                  fontSize: '28px',
+                  color: '#FFD700',
+                  textShadow: '0 0 20px #FFD700',
+                  fontWeight: 'bold',
+                  marginTop: '15px'
+                }}>
+                  ✨ ¡NUEVO RÉCORD PERSONAL! ✨
+                </div>
+              ) : (
+                <div style={{ fontSize: '18px', color: '#888', marginTop: '10px' }}>
+                  Tu récord anterior: {victoryData.previousBestScore.toLocaleString()} XP
+                </div>
+              )}
+            </div>
+            
+            {/* Posición en Ranking */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '25px',
+              borderRadius: '15px',
+              border: '2px solid #FFD700'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Ranking Mundial
+              </div>
+              <div style={{ 
+                fontSize: '48px', 
+                color: '#FFD700', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #FFD700'
+              }}>
+                {victoryData.position === 1 && '🥇 '}
+                {victoryData.position === 2 && '🥈 '}
+                {victoryData.position === 3 && '🥉 '}
+                Posición #{victoryData.position}
+              </div>
+            </div>
+            
+            {/* Caja de Rebirth */}
+            <div style={{
+              background: 'rgba(255, 0, 0, 0.2)',
+              padding: '25px',
+              borderRadius: '15px',
+              marginTop: '30px',
+              border: '2px solid #ff3366',
+              boxShadow: '0 0 20px rgba(255, 51, 102, 0.4)'
+            }}>
+              <div style={{ 
+                fontSize: '32px', 
+                marginBottom: '15px',
+                filter: 'drop-shadow(0 0 10px rgba(255, 51, 102, 0.8))'
+              }}>
+                ♻️
+              </div>
+              <h3 style={{ 
+                color: '#ff3366', 
+                fontSize: '24px',
+                marginBottom: '15px',
+                textShadow: '0 0 15px #ff3366'
+              }}>
+                ¿Querés mejorar tu marca?
+              </h3>
+              <p style={{ 
+                color: '#fff', 
+                fontSize: '16px',
+                marginBottom: '10px',
+                lineHeight: '1.6'
+              }}>
+                Hacé <strong>Rebirth</strong> para volver a nivel 1
+              </p>
+              <p style={{ 
+                color: '#00ff88', 
+                fontSize: '18px',
+                marginBottom: '20px',
+                fontWeight: 'bold',
+                textShadow: '0 0 10px #00ff88'
+              }}>
+                ✨ Ventaja: Todos los upgrades empiezan en nivel {rebirthCount + 1} ✨
+              </p>
+            </div>
+            
+            {/* Botones */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '20px', 
+              justifyContent: 'center',
+              marginTop: '40px',
+              flexWrap: 'wrap'
+            }}>
+              <button 
+                onClick={handleRebirth}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #ff3366',
+                  color: '#ff3366',
+                  padding: '20px 40px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #ff3366',
+                  boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 51, 102, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                <span style={{ fontSize: '28px' }}>♻️</span> REBIRTH
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameState('menu');
+                  setVictoryData(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '20px 50px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #FFD700',
+                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 215, 0, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                VOLVER AL MENÚ
+              </button>
             </div>
           </div>
         </div>

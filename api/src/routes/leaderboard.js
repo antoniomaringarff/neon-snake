@@ -16,8 +16,12 @@ export default async function leaderboardRoutes(fastify, options) {
       case 'sessions':
         orderBy = 'total_sessions';
         break;
+      case 'level25':
+        orderBy = 'level_25_score';
+        break;
       default:
-        orderBy = 'best_score';
+        // Por defecto usamos level_25_score (ranking principal)
+        orderBy = 'level_25_score';
     }
 
     try {
@@ -29,6 +33,9 @@ export default async function leaderboardRoutes(fastify, options) {
           l.highest_level,
           l.total_xp,
           l.total_sessions,
+          COALESCE(l.level_25_score, 0) as level_25_score,
+          COALESCE(l.level_25_kills, 0) as level_25_kills,
+          COALESCE(l.level_25_series, 0) as level_25_series,
           l.last_updated
          FROM leaderboard l
          JOIN users u ON l.user_id = u.id
@@ -44,6 +51,9 @@ export default async function leaderboardRoutes(fastify, options) {
         highestLevel: row.highest_level,
         totalXp: row.total_xp,
         totalSessions: row.total_sessions,
+        level25Score: row.level_25_score,
+        level25Kills: row.level_25_kills,
+        level25Series: row.level_25_series,
         lastUpdated: row.last_updated
       }));
     } catch (error) {
@@ -67,8 +77,12 @@ export default async function leaderboardRoutes(fastify, options) {
       case 'sessions':
         orderBy = 'total_sessions';
         break;
+      case 'level25':
+        orderBy = 'level_25_score';
+        break;
       default:
-        orderBy = 'best_score';
+        // Por defecto usamos level_25_score (ranking principal)
+        orderBy = 'level_25_score';
     }
 
     try {
@@ -79,15 +93,21 @@ export default async function leaderboardRoutes(fastify, options) {
           best_score,
           highest_level,
           total_xp,
-          total_sessions
+          total_sessions,
+          level_25_score,
+          level_25_kills,
+          level_25_series
          FROM (
            SELECT 
-             ROW_NUMBER() OVER (ORDER BY l.${orderBy} DESC) as rank,
+             ROW_NUMBER() OVER (ORDER BY COALESCE(l.${orderBy}, 0) DESC) as rank,
              u.username,
              l.best_score,
              l.highest_level,
              l.total_xp,
              l.total_sessions,
+             COALESCE(l.level_25_score, 0) as level_25_score,
+             COALESCE(l.level_25_kills, 0) as level_25_kills,
+             COALESCE(l.level_25_series, 0) as level_25_series,
              l.user_id
            FROM leaderboard l
            JOIN users u ON l.user_id = u.id
@@ -108,7 +128,10 @@ export default async function leaderboardRoutes(fastify, options) {
         bestScore: data.best_score,
         highestLevel: data.highest_level,
         totalXp: data.total_xp,
-        totalSessions: data.total_sessions
+        totalSessions: data.total_sessions,
+        level25Score: data.level_25_score,
+        level25Kills: data.level_25_kills,
+        level25Series: data.level_25_series
       };
     } catch (error) {
       throw error;
