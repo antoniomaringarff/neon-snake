@@ -207,6 +207,7 @@ export default async function adminRoutes(fastify, options) {
           gl.floating_cannon_count,
           gl.resentful_snake_count,
           gl.health_box_count,
+          COALESCE(gl.enemy_upgrade_level, 0) as enemy_upgrade_level,
           gl.background_type,
           gl.structure_id,
           gl.has_central_cell,
@@ -236,6 +237,7 @@ export default async function adminRoutes(fastify, options) {
         floatingCannonCount: row.floating_cannon_count,
         resentfulSnakeCount: row.resentful_snake_count,
         healthBoxCount: row.health_box_count,
+        enemyUpgradeLevel: row.enemy_upgrade_level,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         structureName: row.structure_name,
@@ -271,6 +273,7 @@ export default async function adminRoutes(fastify, options) {
       floatingCannonCount,
       resentfulSnakeCount,
       healthBoxCount,
+      enemyUpgradeLevel,
       backgroundType,
       structureId,
       hasCentralCell,
@@ -297,19 +300,20 @@ export default async function adminRoutes(fastify, options) {
              floating_cannon_count = COALESCE($15, floating_cannon_count),
              resentful_snake_count = COALESCE($16, resentful_snake_count),
              health_box_count = COALESCE($17, health_box_count),
-             background_type = COALESCE($18, background_type),
-             structure_id = $19,
-             has_central_cell = COALESCE($20, has_central_cell),
-             central_cell_opening_speed = COALESCE($21, central_cell_opening_speed),
+             enemy_upgrade_level = COALESCE($18, enemy_upgrade_level),
+             background_type = COALESCE($19, background_type),
+             structure_id = $20,
+             has_central_cell = COALESCE($21, has_central_cell),
+             central_cell_opening_speed = COALESCE($22, central_cell_opening_speed),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $22
+         WHERE id = $23
          RETURNING *`,
         [
           levelNumber, starsNeeded, playerSpeed, enemySpeed, enemyCount,
           enemyDensity, enemyShootPercentage, enemyShieldPercentage,
           enemyShootCooldown, xpDensity, xpPoints, mapSize, structuresCount,
           killerSawCount, floatingCannonCount, resentfulSnakeCount, healthBoxCount,
-          backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed, id
+          enemyUpgradeLevel, backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed, id
         ]
       );
 
@@ -337,6 +341,7 @@ export default async function adminRoutes(fastify, options) {
         floatingCannonCount: row.floating_cannon_count,
         resentfulSnakeCount: row.resentful_snake_count,
         healthBoxCount: row.health_box_count,
+        enemyUpgradeLevel: row.enemy_upgrade_level || 0,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         hasCentralCell: row.has_central_cell,
@@ -373,6 +378,7 @@ export default async function adminRoutes(fastify, options) {
       floatingCannonCount = 0,
       resentfulSnakeCount = 0,
       healthBoxCount = 0,
+      enemyUpgradeLevel = 0,
       backgroundType = 'default',
       structureId = null,
       hasCentralCell = false,
@@ -390,15 +396,15 @@ export default async function adminRoutes(fastify, options) {
           enemy_density, enemy_shoot_percentage, enemy_shield_percentage,
           enemy_shoot_cooldown, xp_density, xp_points, map_size, structures_count,
           killer_saw_count, floating_cannon_count, resentful_snake_count, health_box_count,
-          background_type, structure_id, has_central_cell, central_cell_opening_speed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          enemy_upgrade_level, background_type, structure_id, has_central_cell, central_cell_opening_speed
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         RETURNING *`,
         [
           levelNumber, starsNeeded, playerSpeed, enemySpeed, enemyCount,
           enemyDensity, enemyShootPercentage, enemyShieldPercentage,
           enemyShootCooldown, xpDensity, xpPoints, mapSize, structuresCount,
           killerSawCount, floatingCannonCount, resentfulSnakeCount, healthBoxCount,
-          backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed
+          enemyUpgradeLevel, backgroundType, structureId, hasCentralCell, centralCellOpeningSpeed
         ]
       );
 
@@ -422,6 +428,7 @@ export default async function adminRoutes(fastify, options) {
         floatingCannonCount: row.floating_cannon_count,
         resentfulSnakeCount: row.resentful_snake_count,
         healthBoxCount: row.health_box_count,
+        enemyUpgradeLevel: row.enemy_upgrade_level || 0,
         backgroundType: row.background_type,
         structureId: row.structure_id,
         hasCentralCell: row.has_central_cell,

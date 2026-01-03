@@ -25,6 +25,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       floatingCannonCount: dbConfig.floatingCannonCount ?? 0,
       resentfulSnakeCount: dbConfig.resentfulSnakeCount ?? 0,
       healthBoxCount: dbConfig.healthBoxCount ?? 0,
+      enemyUpgradeLevel: dbConfig.enemyUpgradeLevel ?? Math.floor((level - 1) * 10 / 24),
       hasCentralCell: dbConfig.hasCentralCell,
       centralCellOpeningSpeed: dbConfig.centralCellOpeningSpeed,
     };
@@ -48,6 +49,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
     floatingCannonCount: 0,
     resentfulSnakeCount: 0,
     healthBoxCount: 0,
+    enemyUpgradeLevel: Math.floor((level - 1) * 10 / 24), // 0-10 basado en nivel
     hasCentralCell: level >= 2,
     centralCellOpeningSpeed: 0.002, // Velocidad fija igual para todos los niveles
   };
@@ -566,44 +568,43 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const baseLength = 15 + Math.random() * 20;
     const initialXP = Math.floor(baseLength * 2); // Initial XP based on length
     
-    // Sistema de mejoras progresivo según nivel del juego (1-25)
-    // Nivel 1: sin mejoras, Nivel 25: mezcla de todo
-    const getEnemyUpgrades = (level) => {
-      if (level === 1) {
-        // Nivel 1: sin mejoras
+    // Sistema de mejoras progresivo según enemyUpgradeLevel del admin (0-10)
+    // Este valor se puede controlar desde el admin panel para ecualizar la dificultad
+    const getEnemyUpgrades = (level, configUpgradeLevel) => {
+      // Usar el valor del admin si está definido, sino calcular del nivel
+      const maxUpgradeLevel = configUpgradeLevel ?? Math.min(10, Math.ceil(level / 2.5));
+      
+      if (maxUpgradeLevel === 0) {
+        // Sin mejoras
         return { shieldLevel: 0, cannonLevel: 0, speedLevel: 0, bulletSpeedLevel: 0, magnetLevel: 0, healthLevel: 0 };
       }
       
-      // Probabilidad base de tener mejoras: aumenta con el nivel
-      // Nivel 2: 10%, Nivel 25: 100%
-      const upgradeChance = Math.min(1, (level - 1) / 24);
-      
-      // Nivel máximo de mejoras disponible: aumenta con el nivel
-      // Nivel 2-5: max 1-2, Nivel 6-10: max 3-4, Nivel 11-15: max 5-6, etc.
-      const maxUpgradeLevel = Math.min(10, Math.ceil(level / 2.5));
+      // Probabilidad base de tener mejoras: basada en maxUpgradeLevel
+      // upgradeLevel 0-1: 20-30%, upgradeLevel 10: 100%
+      const upgradeChance = Math.min(1, 0.2 + (maxUpgradeLevel * 0.08));
       
       // Función para determinar el nivel de una mejora
+      // Genera valores aleatorios en rango [maxUpgradeLevel-4, maxUpgradeLevel+4] limitados a [0, maxPossible]
       const getUpgradeLevel = (maxPossible) => {
         if (Math.random() > upgradeChance) return 0;
-        // En niveles altos, algunos enemigos tienen mejoras al máximo
-        if (level >= 20 && Math.random() < 0.2) {
-          return maxPossible; // 20% chance de tener al máximo en niveles 20+
-        }
-        // Random entre 0 y el máximo disponible para este nivel
-        return Math.floor(Math.random() * (maxPossible + 1));
+        // Generar valor en torno al maxUpgradeLevel ±4
+        const variance = Math.floor(Math.random() * 9) - 4; // -4 a +4
+        const targetLevel = maxUpgradeLevel + variance;
+        // Limitar a [0, maxPossible]
+        return Math.max(0, Math.min(maxPossible, targetLevel));
       };
       
       return {
-        shieldLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        cannonLevel: getUpgradeLevel(Math.min(5, Math.ceil(maxUpgradeLevel / 2))),
-        speedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        bulletSpeedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        magnetLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        healthLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel))
+        shieldLevel: getUpgradeLevel(10),
+        cannonLevel: getUpgradeLevel(5),
+        speedLevel: getUpgradeLevel(10),
+        bulletSpeedLevel: getUpgradeLevel(10),
+        magnetLevel: getUpgradeLevel(10),
+        healthLevel: getUpgradeLevel(10)
       };
     };
     
-    const upgrades = getEnemyUpgrades(gameLevel);
+    const upgrades = getEnemyUpgrades(gameLevel, levelConfig.enemyUpgradeLevel);
     
     // Vida basada en healthLevel: nivel 0 = 2, nivel 1 = 4, nivel 2 = 6... nivel 10 = 22
     const enemyMaxHealth = 2 + (upgrades.healthLevel * 2);
@@ -2502,6 +2503,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         star.rotation += star.rotationSpeed;
         star.pulse += star.pulseSpeed;
         
+        // Las estrellas siempre se mueven hacia el jugador (atracción automática)
+        const playerHead = game.snake[0];
+        if (playerHead) {
+          const dx = playerHead.x - star.x;
+          const dy = playerHead.y - star.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // Velocidad de atracción: más rápido cuando está lejos, desacelera al acercarse
+          // Rango máximo de atracción: 800px, velocidad base: 2
+          if (distance > 20 && distance < 800) {
+            const speed = Math.min(4, 2 + (distance / 200)); // Entre 2 y 4 de velocidad
+            star.x += (dx / distance) * speed;
+            star.y += (dy / distance) * speed;
+          }
+        }
+        
         const screenX = star.x - camX;
         const screenY = star.y - camY;
         
@@ -2959,6 +2976,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       });
       
+      // Draw stars on minimap as small golden dots
+      if (game.stars && game.stars.length > 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.shadowBlur = 3;
+        ctx.shadowColor = '#FFD700';
+        game.stars.forEach(star => {
+          const starMinimapX = minimapX + (star.x / game.worldWidth) * minimapWidth;
+          const starMinimapY = minimapY + (star.y / game.worldHeight) * minimapHeight;
+          ctx.beginPath();
+          ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.shadowBlur = 0;
+      }
+      
       // Shop hint (only on desktop, not mobile)
       if (!isMobile) {
       ctx.fillStyle = '#ff00ff';
@@ -3352,7 +3384,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         setHealthLevel(level);
       }
       
-      setShopOpen(false);
+      // NO cerrar la tienda al comprar - el usuario puede querer seguir comprando
+      // setShopOpen(false);
       
       // Save progress after purchase
       setTimeout(() => saveUserProgress(), 100);
@@ -3566,8 +3599,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             {rebirthCount > 0 && (
               <div>
                 <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
-                  ♻️ {rebirthCount}
+                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
                 </div>
               </div>
             )}
@@ -3750,8 +3783,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           {rebirthCount > 0 && (
             <div>
               <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
-                ♻️ {rebirthCount}
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
               </div>
             </div>
           )}
@@ -4757,11 +4790,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               boxShadow: '0 0 20px rgba(255, 51, 102, 0.4)'
             }}>
               <div style={{ 
-                fontSize: '32px', 
                 marginBottom: '15px',
                 filter: 'drop-shadow(0 0 10px rgba(255, 51, 102, 0.8))'
               }}>
-                ♻️
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '48px', height: '48px' }} />
               </div>
               <h3 style={{ 
                 color: '#ff3366', 

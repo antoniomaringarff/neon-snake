@@ -18,6 +18,7 @@ import * as migration016 from './016_reset_all_progress.js';
 import * as migration017 from './017_email_optional.js';
 import * as migration018 from './018_rebirth_and_series.js';
 import * as migration019 from './019_update_leaderboard_level25.js';
+import * as migration020 from './020_enemy_upgrade_level.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -38,7 +39,8 @@ const migrations = [
   { name: '016_reset_all_progress', up: migration016.up, down: migration016.down },
   { name: '017_email_optional', up: migration017.up, down: migration017.down },
   { name: '018_rebirth_and_series', up: migration018.up, down: migration018.down },
-  { name: '019_update_leaderboard_level25', up: migration019.up, down: migration019.down }
+  { name: '019_update_leaderboard_level25', up: migration019.up, down: migration019.down },
+  { name: '020_enemy_upgrade_level', up: migration020.up, down: migration020.down }
 ];
 
 export async function runMigrations() {

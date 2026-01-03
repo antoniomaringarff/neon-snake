@@ -514,7 +514,7 @@ const AdminPanel = ({ onClose }) => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h2 style={{ color: '#33ffff', margin: 0 }}>Gestión de Niveles</h2>
-                <Button onClick={() => setEditingLevel({ levelNumber: levels.length + 1, starsNeeded: 1, playerSpeed: 2.0, enemySpeed: 2.0, enemyCount: 5, enemyDensity: 15, enemyShootPercentage: 0, enemyShieldPercentage: 0, enemyShootCooldown: 5000, xpDensity: 100, xpPoints: 100, mapSize: 10, structuresCount: 0, killerSawCount: 0, floatingCannonCount: 0, resentfulSnakeCount: 0, healthBoxCount: 0, backgroundType: 'default', structureId: null, hasCentralCell: false, centralCellOpeningSpeed: 0.002 })}>
+                <Button onClick={() => setEditingLevel({ levelNumber: levels.length + 1, starsNeeded: 1, playerSpeed: 2.0, enemySpeed: 2.0, enemyCount: 5, enemyDensity: 15, enemyShootPercentage: 0, enemyShieldPercentage: 0, enemyShootCooldown: 5000, xpDensity: 100, xpPoints: 100, mapSize: 10, structuresCount: 0, killerSawCount: 0, floatingCannonCount: 0, resentfulSnakeCount: 0, healthBoxCount: 0, enemyUpgradeLevel: 0, backgroundType: 'default', structureId: null, hasCentralCell: false, centralCellOpeningSpeed: 0.002 })}>
                   Crear Nuevo Nivel
                 </Button>
               </div>
@@ -537,6 +537,7 @@ const AdminPanel = ({ onClose }) => {
                       <th style={{ padding: '10px', textAlign: 'left' }}>Canones</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Viboras Resentidas</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Cajas Vida</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Lvl Mejoras</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Acciones</th>
                     </tr>
                   </thead>
@@ -553,6 +554,7 @@ const AdminPanel = ({ onClose }) => {
                         <td style={{ padding: '10px' }}>{level.floatingCannonCount ?? 0}</td>
                         <td style={{ padding: '10px' }}>{level.resentfulSnakeCount ?? 0}</td>
                         <td style={{ padding: '10px' }}>{level.healthBoxCount ?? 0}</td>
+                        <td style={{ padding: '10px' }}>{level.enemyUpgradeLevel ?? 0}</td>
                         <td style={{ padding: '10px' }}>
                           <Button
                             onClick={() => setEditingLevel(level)}
@@ -644,6 +646,12 @@ const AdminPanel = ({ onClose }) => {
                         label="Cajas de Vida"
                         value={editingLevel.healthBoxCount ?? 0}
                         onChange={(val) => setEditingLevel(prev => ({ ...prev, healthBoxCount: val }))}
+                      />
+                      <InputField
+                        label="Nivel Mejoras Enemigos (0-10)"
+                        value={editingLevel.enemyUpgradeLevel ?? 0}
+                        onChange={(val) => setEditingLevel(prev => ({ ...prev, enemyUpgradeLevel: Math.max(0, Math.min(10, parseInt(val) || 0)) }))}
+                        type="number"
                       />
                       <InputField
                         label="Velocidad Jugador"
