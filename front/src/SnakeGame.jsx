@@ -207,7 +207,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     maxHealth: 2, // Vida máxima del jugador (basada en healthLevel)
     magnetLevel: 0, // Nivel del imán (se actualiza desde el state)
     worldWidth: BASE_UNIT * 10, // Dynamic world width based on level
-    worldHeight: BASE_UNIT * 10 // Dynamic world height based on level
+    worldHeight: BASE_UNIT * 10, // Dynamic world height based on level
+    // Efectos visuales
+    damageFlash: 0, // Tiempo de flash rojo cuando recibe daño
+    healFlash: 0, // Tiempo de flash verde cuando se cura
+    invulnerable: 0 // Tiempo de invulnerabilidad después de recibir daño
   });
 
   // Helper function to get auth token
@@ -748,6 +752,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       }
     };
 
+    // Función para aplicar daño con efectos visuales
+    const applyDamage = (damage, x, y) => {
+      const game = gameRef.current;
+      
+      // Si está invulnerable, no recibe daño
+      if (game.invulnerable > 0) {
+        createParticle(x, y, '#00ffff', 5); // Efecto de escudo
+        return false;
+      }
+      
+      game.currentHealth -= damage;
+      game.damageFlash = 30; // 30 frames de flash rojo (~0.5 segundos)
+      game.invulnerable = 60; // 60 frames de invulnerabilidad (~1 segundo)
+      
+      createParticle(x, y, '#ff0000', 12);
+      
+      return game.currentHealth <= 0; // Retorna true si murió
+    };
+
+    // Función para aplicar curación con efectos visuales
+    const applyHeal = (amount, x, y) => {
+      const game = gameRef.current;
+      const previousHealth = game.currentHealth;
+      game.currentHealth = Math.min(game.currentHealth + amount, game.maxHealth);
+      
+      if (game.currentHealth > previousHealth) {
+        game.healFlash = 20; // 20 frames de flash verde (~0.33 segundos)
+        createParticle(x, y, '#00ff00', 10);
+        return true;
+      }
+      return false;
+    };
+
     const initGame = () => {
       const game = gameRef.current;
       const levelConfig = getLevelConfig(game.level, levelConfigs);
@@ -781,6 +818,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
       game.maxHealth = 2 + (healthLevel * 2);
       game.currentHealth = game.maxHealth;
+      // Reset efectos visuales
+      game.damageFlash = 0;
+      game.healFlash = 0;
+      game.invulnerable = 0;
       // Aplicar velocidad del nivel
       game.speed = levelConfig.playerSpeed;
       game.baseSpeed = levelConfig.playerSpeed;
@@ -1097,16 +1138,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const snakeSpeed = game.speed || 2; // Velocidad actual de la víbora
         for (let i = 0; i < headBulletCount; i++) {
           const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-          game.bullets.push({
+        game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
             // Sumar velocidad de la víbora para que la bala salga adelante
             vx: game.direction.x * (bulletSpeed + snakeSpeed),
             vy: game.direction.y * (bulletSpeed + snakeSpeed),
-            life: 100,
-            owner: 'player'
-          });
-        }
+          life: 100,
+          owner: 'player'
+        });
+      }
       }
       
       if (cannonLevel >= 3 && tail) {
@@ -1513,20 +1554,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             }
             
             if (!dodged) {
-              // No esquivó - recibe daño
+              // No esquivó - recibe daño con efectos visuales
               const damage = 3;
-              game.currentHealth -= damage;
-              
-              // Efecto visual rojo
-              createParticle(playerHead.x, playerHead.y, '#ff3366', 12);
+              const died = applyDamage(damage, playerHead.x, playerHead.y);
               
               // Si la vida llega a 0 o menos, el jugador muere
-              if (game.currentHealth <= 0) {
-                const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+              if (died) {
+            const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-                createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
-                setGameState('gameOver');
-                return;
+            createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
+            setGameState('gameOver');
+            return;
               }
             } else {
               // Esquivó - efecto visual azul brillante
@@ -1653,8 +1691,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           if (hit) return false; // Remove bullet if it hit
         }
         
-        // Check collision with player (enemy bullets)
-        if (bullet.owner === 'enemy' && game.snake.length > 0) {
+        // Check collision with player (enemy and cannon bullets)
+        if ((bullet.owner === 'enemy' || bullet.owner === 'cannon') && game.snake.length > 0) {
           const playerHead = game.snake[0];
           let hitHead = false;
           let hitBody = false;
@@ -1689,15 +1727,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               return false; // Remove bullet sin hacer daño
             }
             
-            // No esquivó - recibe daño completo
+            // No esquivó - recibe daño con efectos visuales
             const damage = hitHead ? 2 : 1;
-            game.currentHealth -= damage;
-            
-            // Efecto visual - rojo porque recibió daño
-            createParticle(bullet.x, bullet.y, '#ff0000', 8);
+            const died = applyDamage(damage, bullet.x, bullet.y);
               
             // Si la vida llega a 0 o menos, el jugador muere
-            if (game.currentHealth <= 0) {
+            if (died) {
                 const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
                 createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
@@ -1969,10 +2004,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           
           // Si la vida llega a 0, game over
           if (game.currentHealth <= 0) {
-            const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+        const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-            setGameState('gameOver');
-            return;
+        setGameState('gameOver');
+        return;
           }
         } else {
           // Esquivó - efecto visual azul brillante
@@ -2179,12 +2214,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           setCurrentLevelStars(prev => prev + 1);
           setTotalStars(prev => prev + 1);
           
-          // Recuperar vida al comer estrella (hasta el máximo)
-          const previousHealth = game.currentHealth;
-          game.currentHealth = Math.min(game.currentHealth + game.maxHealth, game.maxHealth);
-          if (game.currentHealth > previousHealth) {
-            console.log(`❤️ Vida recuperada: ${previousHealth} → ${game.currentHealth}/${game.maxHealth}`);
-          }
+          // Recuperar vida al comer estrella (hasta el máximo) con efectos visuales
+          applyHeal(game.maxHealth, star.x, star.y);
           
           createParticle(star.x, star.y, '#FFD700', 8);
           starCollected = true;
@@ -2244,11 +2275,254 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               setGameState('gameComplete');
             });
         } else {
-          setGameState('levelComplete');
+        setGameState('levelComplete');
         }
       }
 
       updateEnemies(normalizedDelta);
+
+      // Update Killer Saws
+      if (game.killerSaws && game.killerSaws.length > 0) {
+        game.killerSaws.forEach(saw => {
+          // Rotate
+          saw.rotation += saw.rotationSpeed * normalizedDelta;
+          
+          // Move
+          saw.x += saw.velocity.x * saw.speed * normalizedDelta;
+          saw.y += saw.velocity.y * saw.speed * normalizedDelta;
+          
+          // Bounce off walls
+          if (saw.x - saw.radius < BORDER_WIDTH || saw.x + saw.radius > game.worldWidth - BORDER_WIDTH) {
+            saw.velocity.x *= -1;
+            saw.x = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldWidth - BORDER_WIDTH - saw.radius, saw.x));
+          }
+          if (saw.y - saw.radius < BORDER_WIDTH || saw.y + saw.radius > game.worldHeight - BORDER_WIDTH) {
+            saw.velocity.y *= -1;
+            saw.y = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldHeight - BORDER_WIDTH - saw.radius, saw.y));
+          }
+          
+          // Check collision with player
+          const head = game.snake[0];
+          if (head) {
+            const dx = head.x - saw.x;
+            const dy = head.y - saw.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const collisionDist = saw.radius + game.snakeSize + 5; // Extra margen para mejor detección
+            
+            if (dist < collisionDist) {
+              // Player hit by saw! - empujar siempre para evitar quedarse pegado
+              const pushForce = 50;
+              if (dist > 0) {
+                head.x += (dx / dist) * pushForce;
+                head.y += (dy / dist) * pushForce;
+              }
+              
+              let damage = saw.damage || 2; // Default damage si no está definido
+              
+              // Check shield protection
+              if (shieldLevel >= 4) {
+                damage = 0; // Full protection
+              } else if (shieldLevel >= 1) {
+                damage = Math.ceil(damage / 2); // Partial protection
+              }
+              
+              if (damage > 0) {
+                const died = applyDamage(damage, head.x, head.y);
+                if (died) {
+                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+                  setGameState('gameOver');
+                  return;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Update Floating Cannons
+      if (game.floatingCannons && game.floatingCannons.length > 0) {
+        const currentTime = Date.now();
+        game.floatingCannons.forEach(cannon => {
+          // Aim at player
+          const head = game.snake[0];
+          if (head) {
+            const dx = head.x - cannon.x;
+            const dy = head.y - cannon.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Only aim if player is in range
+            if (dist < cannon.range) {
+              const targetAngle = Math.atan2(dy, dx);
+              // Smooth rotation towards player
+              const angleDiff = targetAngle - cannon.angle;
+              cannon.angle += angleDiff * 0.05 * normalizedDelta;
+              
+              // Shoot if cooldown is ready
+              if (currentTime - cannon.shootCooldown > cannon.shootInterval) {
+                cannon.shootCooldown = currentTime;
+                
+                // Create bullet
+                game.bullets.push({
+                  x: cannon.x + Math.cos(cannon.angle) * 35,
+                  y: cannon.y + Math.sin(cannon.angle) * 35,
+                  vx: Math.cos(cannon.angle) * cannon.bulletSpeed,
+                  vy: Math.sin(cannon.angle) * cannon.bulletSpeed,
+                  life: 150,
+                  owner: 'cannon'
+                });
+              }
+            }
+          }
+        });
+      }
+
+      // Update Resentful Snakes
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        const currentTime = Date.now();
+        game.resentfulSnakes.forEach(snake => {
+          if (!snake.segments || snake.segments.length === 0) return;
+          
+          const snakeHead = snake.segments[0];
+          const playerHead = game.snake[0];
+          
+          if (playerHead) {
+            const dx = playerHead.x - snakeHead.x;
+            const dy = playerHead.y - snakeHead.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Chase player if in range
+            if (dist < snake.chaseRange) {
+              // Aim at player
+              const targetDir = { x: dx / dist, y: dy / dist };
+              
+              // Smooth turning
+              snake.direction.x += (targetDir.x - snake.direction.x) * 0.1 * normalizedDelta;
+              snake.direction.y += (targetDir.y - snake.direction.y) * 0.1 * normalizedDelta;
+              
+              // Normalize
+              const dirLen = Math.sqrt(snake.direction.x * snake.direction.x + snake.direction.y * snake.direction.y);
+              if (dirLen > 0) {
+                snake.direction.x /= dirLen;
+                snake.direction.y /= dirLen;
+              }
+              
+              // Shoot at player
+              if (currentTime - snake.lastShotTime > snake.shootCooldown) {
+                snake.lastShotTime = currentTime;
+                game.bullets.push({
+                  x: snakeHead.x + snake.direction.x * 15,
+                  y: snakeHead.y + snake.direction.y * 15,
+                  vx: snake.direction.x * 6,
+                  vy: snake.direction.y * 6,
+                  life: 100,
+                  owner: 'enemy'
+                });
+              }
+            } else {
+              // Random movement when not chasing
+              if (Math.random() < 0.02 * normalizedDelta) {
+                snake.direction = {
+                  x: Math.cos(Math.random() * Math.PI * 2),
+                  y: Math.sin(Math.random() * Math.PI * 2)
+                };
+              }
+            }
+            
+            // Move snake
+            const newX = snakeHead.x + snake.direction.x * snake.speed * normalizedDelta;
+            const newY = snakeHead.y + snake.direction.y * snake.speed * normalizedDelta;
+            
+            // Bounce off walls
+            if (newX > BORDER_WIDTH && newX < game.worldWidth - BORDER_WIDTH &&
+                newY > BORDER_WIDTH && newY < game.worldHeight - BORDER_WIDTH) {
+              snake.segments.unshift({ x: newX, y: newY });
+              
+              // Maintain length
+              while (snake.segments.length > snake.length) {
+                snake.segments.pop();
+              }
+            } else {
+              // Bounce
+              if (newX <= BORDER_WIDTH || newX >= game.worldWidth - BORDER_WIDTH) {
+                snake.direction.x *= -1;
+              }
+              if (newY <= BORDER_WIDTH || newY >= game.worldHeight - BORDER_WIDTH) {
+                snake.direction.y *= -1;
+              }
+            }
+            
+            // Check collision with player
+            if (dist < game.snakeSize * 2) {
+              // Player hit by resentful snake! - Empujar al jugador
+              const pushForce = 40;
+              if (dist > 0) {
+                playerHead.x += (dx / dist) * pushForce;
+                playerHead.y += (dy / dist) * pushForce;
+              }
+              
+              let damage = 3;
+              
+              if (shieldLevel >= 4) {
+                damage = 0; // Full protection
+              } else if (shieldLevel >= 1) {
+                damage = Math.ceil(damage / 2);
+              }
+              
+              if (damage > 0) {
+                const died = applyDamage(damage, playerHead.x, playerHead.y);
+                
+                // ¡CORTAR LA VÍBORA! - Quitar segmentos según el daño
+                if (game.snake.length > 1) {
+                  const segmentsToCut = Math.min(damage * 3, game.snake.length - 1); // Cortar 3 segmentos por punto de daño
+                  for (let cut = 0; cut < segmentsToCut; cut++) {
+                    const removedSegment = game.snake.pop();
+                    if (removedSegment) {
+                      // Crear partículas rojas donde se cortó
+                      createParticle(removedSegment.x, removedSegment.y, '#ff3366', 5);
+                    }
+                  }
+                }
+                
+                if (died) {
+                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+                  setGameState('gameOver');
+                  return;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Update Health Boxes
+      if (game.healthBoxes && game.healthBoxes.length > 0) {
+        game.healthBoxes = game.healthBoxes.filter(box => {
+          // Animate pulse
+          box.pulse += box.pulseSpeed * normalizedDelta;
+          
+          // Check collision with player
+          const head = game.snake[0];
+          if (head) {
+            const dx = head.x - box.x;
+            const dy = head.y - box.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < box.size + game.snakeSize) {
+              // Collect health box!
+              applyHeal(box.healthPoints, box.x, box.y);
+              return false; // Remove health box
+            }
+          }
+          return true;
+        });
+      }
+
+      // Update visual effect timers
+      if (game.damageFlash > 0) game.damageFlash -= normalizedDelta;
+      if (game.healFlash > 0) game.healFlash -= normalizedDelta;
+      if (game.invulnerable > 0) game.invulnerable -= normalizedDelta;
 
       // Update particles
       game.particles = game.particles.filter(p => {
@@ -2580,10 +2854,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         { r: 255, g: 0, b: 255 }     // Rosa/Magenta
       ];
       
+      // Check if snake should blink (invulnerable)
+      const isBlinking = game.invulnerable > 0 && Math.floor(game.invulnerable / 4) % 2 === 0;
+      
+      // Skip drawing if blinking (creates flash effect)
+      if (!isBlinking) {
       game.snake.forEach((seg, i) => {
         const screenX = seg.x - camX;
         const screenY = seg.y - camY;
-        const alpha = 1 - (i / game.snake.length) * 0.2;
+        let alpha = 1 - (i / game.snake.length) * 0.2;
         
         // Calculate color based on position in snake (gradient)
         const colorProgress = Math.min(i / Math.max(game.snake.length - 1, 1), 1);
@@ -2592,9 +2871,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const colorHigh = Math.min(colorLow + 1, snakeColors.length - 1);
         const colorMix = colorIndex - colorLow;
         
-        const r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
-        const g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
-        const b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+        let r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
+        let g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
+        let b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+        
+        // Apply damage flash (red tint)
+        if (game.damageFlash > 0) {
+          const flashIntensity = game.damageFlash / 30;
+          r = Math.min(255, r + Math.round(100 * flashIntensity));
+          g = Math.round(g * (1 - flashIntensity * 0.5));
+          b = Math.round(b * (1 - flashIntensity * 0.5));
+        }
+        
+        // Apply heal flash (green tint)
+        if (game.healFlash > 0) {
+          const healIntensity = game.healFlash / 20;
+          g = Math.min(255, g + Math.round(100 * healIntensity));
+        }
         
         const segmentColor = `rgb(${r}, ${g}, ${b})`;
         
@@ -2608,10 +2901,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.stroke();
         }
         
+        // Invulnerability glow effect
+        if (game.invulnerable > 0) {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * (game.invulnerable / 60)})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, game.snakeSize + 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
         // Draw segment with gradient color
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = segmentColor;
+        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : 12);
+        ctx.shadowColor = game.damageFlash > 0 ? '#ff0000' : (game.healFlash > 0 ? '#00ff00' : segmentColor);
         ctx.beginPath();
         ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
         ctx.fill();
@@ -2672,6 +2974,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.fill();
         }
       });
+      } // End of isBlinking check
       ctx.shadowBlur = 0;
 
       // Draw bullets
@@ -2707,6 +3010,167 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.fill();
       });
       ctx.shadowBlur = 0;
+
+      // Draw Killer Saws
+      if (game.killerSaws && game.killerSaws.length > 0) {
+        game.killerSaws.forEach(saw => {
+          const screenX = saw.x - camX;
+          const screenY = saw.y - camY;
+          
+          if (screenX > -100 && screenX < CANVAS_WIDTH + 100 && 
+              screenY > -100 && screenY < CANVAS_HEIGHT + 100) {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(saw.rotation);
+            
+            // Outer glow
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = saw.color;
+            
+            // Draw saw body
+            ctx.fillStyle = saw.color;
+            ctx.beginPath();
+            ctx.arc(0, 0, saw.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw saw teeth
+            const teethCount = 12;
+            ctx.fillStyle = '#333';
+            for (let i = 0; i < teethCount; i++) {
+              const angle = (Math.PI * 2 * i) / teethCount;
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(angle) * saw.radius * 0.5, Math.sin(angle) * saw.radius * 0.5);
+              ctx.lineTo(Math.cos(angle + 0.15) * saw.radius * 1.1, Math.sin(angle + 0.15) * saw.radius * 1.1);
+              ctx.lineTo(Math.cos(angle - 0.15) * saw.radius * 1.1, Math.sin(angle - 0.15) * saw.radius * 1.1);
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Center circle
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(0, 0, saw.radius * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+            ctx.shadowBlur = 0;
+          }
+        });
+      }
+
+      // Draw Floating Cannons
+      if (game.floatingCannons && game.floatingCannons.length > 0) {
+        game.floatingCannons.forEach(cannon => {
+          const screenX = cannon.x - camX;
+          const screenY = cannon.y - camY;
+          
+          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(cannon.angle);
+            
+            // Cannon body
+            ctx.fillStyle = '#555';
+      ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff6600';
+      ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill();
+            
+            // Cannon barrel
+            ctx.fillStyle = '#333';
+            ctx.fillRect(10, -5, 25, 10);
+            
+            // Cannon glow indicator
+            ctx.fillStyle = '#ff6600';
+            ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+      ctx.shadowBlur = 0;
+          }
+        });
+      }
+
+      // Draw Resentful Snakes (special red enemies that chase player)
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        game.resentfulSnakes.forEach(snake => {
+          if (!snake.segments || snake.segments.length === 0) return;
+          
+          snake.segments.forEach((seg, i) => {
+            const screenX = seg.x - camX;
+            const screenY = seg.y - camY;
+            
+            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+              const alpha = 1 - (i / snake.segments.length) * 0.5;
+              
+              // Red color for resentful snakes
+              ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+              ctx.shadowBlur = 15;
+              ctx.shadowColor = '#ff0000';
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Angry eyes on head
+              if (i === 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(screenX - 3, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.arc(screenX + 3, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(screenX - 3, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.arc(screenX + 3, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          });
+          ctx.shadowBlur = 0;
+        });
+      }
+
+      // Draw Health Boxes
+      if (game.healthBoxes && game.healthBoxes.length > 0) {
+        game.healthBoxes.forEach(box => {
+          const screenX = box.x - camX;
+          const screenY = box.y - camY;
+          
+          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            const pulseSize = box.size + Math.sin(box.pulse) * 3;
+            
+            // Glow effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00ff00';
+            
+            // Box body
+            ctx.fillStyle = '#00aa00';
+            ctx.fillRect(screenX - pulseSize/2, screenY - pulseSize/2, pulseSize, pulseSize);
+            
+            // White cross
+            ctx.fillStyle = '#ffffff';
+            const crossWidth = pulseSize * 0.25;
+            const crossLength = pulseSize * 0.7;
+            ctx.fillRect(screenX - crossWidth/2, screenY - crossLength/2, crossWidth, crossLength);
+            ctx.fillRect(screenX - crossLength/2, screenY - crossWidth/2, crossLength, crossWidth);
+            
+            // Health points indicator
+            ctx.font = 'bold 12px monospace';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(`+${box.healthPoints}`, screenX, screenY + pulseSize/2 + 15);
+            ctx.textAlign = 'left';
+            
+            ctx.shadowBlur = 0;
+          }
+        });
+      }
 
       // Draw HUD - Horizontal level bar at the top (compact)
       const barHeight = 30;
@@ -2771,9 +3235,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Stars bar fill with glow
       const starsPercent = Math.min(game.currentStars / game.starsNeeded, 1);
       if (starsPercent > 0) {
-        ctx.fillStyle = '#FFD700';
+      ctx.fillStyle = '#FFD700';
         ctx.shadowBlur = 6;
-        ctx.shadowColor = '#FFD700';
+      ctx.shadowColor = '#FFD700';
         ctx.beginPath();
         ctx.roundRect(starsBarX + 2, starsBarY + 2, (starsBarWidth - 4) * starsPercent, starsBarHeight - 4, 3);
         ctx.fill();
@@ -3239,6 +3703,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
     game.maxHealth = 2 + (healthLevel * 2);
     game.currentHealth = game.maxHealth;
+    // Reset efectos visuales
+    game.damageFlash = 0;
+    game.healFlash = 0;
+    game.invulnerable = 0;
     game.camera = { 
       x: game.worldWidth / 2 - CANVAS_WIDTH / 2, 
       y: game.worldHeight / 2 - CANVAS_HEIGHT / 2 
@@ -3671,27 +4139,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 Admin
               </button>
             )}
-            <button
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ff3366',
-                color: '#ff3366',
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
                   padding: '4px 8px',
                   fontSize: '10px',
-                cursor: 'pointer',
+              cursor: 'pointer',
                   borderRadius: '3px',
                   transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
                 Salir
-            </button>
+          </button>
           </div>
           </div>
         </div>
@@ -3847,28 +4315,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               Admin
             </button>
           )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'transparent',
+            border: '1px solid #ff3366',
+            color: '#ff3366',
                   padding: '5px 10px',
                   fontSize: '11px',
-              cursor: 'pointer',
+            cursor: 'pointer',
                   borderRadius: '3px',
-              transition: 'all 0.3s',
+            transition: 'all 0.3s',
                   marginLeft: '10px'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'transparent';
+          }}
+        >
                 Salir
-          </button>
+        </button>
         </div>
           </div>
       </div>
@@ -4427,7 +4895,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                         Nivel Máximo
                       </p>
                     )}
-                  </div>
+          </div>
                 </div>
               );
             })()}
@@ -4459,11 +4927,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                           {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                         </p>
-                        <button 
+          <button 
                           onClick={() => buyItem(next.item)}
                           disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
+            style={{
+              background: 'transparent',
                             border: '2px solid #ff5050',
                             color: '#ff5050',
                             padding: '8px 16px',
@@ -5273,7 +5741,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -5282,10 +5750,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   const next = getNextUpgrade('bullet_speed');
                   const currentLevel = bulletSpeedLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #00ff00', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -5300,24 +5768,24 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #00ff00',
                               color: '#00ff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
