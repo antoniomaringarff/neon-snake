@@ -129,6 +129,35 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
+  // Calculate canvas dimensions based on screen size
+  // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
+  // En desktop: usar tamaño fijo 800x600
+  const getCanvasDimensions = () => {
+    if (window.innerWidth <= 768) {
+      // Mobile: usar todo el ancho y casi toda la altura
+      const width = window.innerWidth - 4; // Pequeño margen para el borde
+      const height = window.innerHeight - 80; // Solo dejar espacio mínimo para header
+      return { width: Math.floor(width), height: Math.floor(height) };
+    }
+    return { width: 800, height: 600 };
+  };
+  
+  const [canvasDimensions, setCanvasDimensions] = useState(getCanvasDimensions());
+  
+  // Update dimensions on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setCanvasDimensions(getCanvasDimensions());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Dynamic canvas dimensions
+  const CANVAS_WIDTH = canvasDimensions.width;
+  const CANVAS_HEIGHT = canvasDimensions.height;
+  
   // Mobile controls state
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
@@ -169,10 +198,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
   const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
   const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
-  
-  // Constants for canvas and world size
-  const CANVAS_WIDTH = 800;
-  const CANVAS_HEIGHT = 600;
   // BASE_UNIT es el tamaño de la pantalla visible (canvas), no la ventana completa
   const BASE_UNIT = Math.max(CANVAS_WIDTH, CANVAS_HEIGHT);
   const SNAKE_SIZE = 8;
@@ -5668,18 +5693,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           width: '100%',
           height: '100%',
           display: 'flex',
-          alignItems: 'stretch',
-          justifyContent: 'stretch',
+          alignItems: 'center',
+          justifyContent: 'center',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          backgroundColor: '#0a0a0a'
         }}>
           <canvas 
             ref={canvasRef} 
             width={CANVAS_WIDTH} 
             height={CANVAS_HEIGHT}
             style={{
-              width: '100%',
-              height: '100%',
+              width: isMobile ? '100%' : '100%',
+              height: isMobile ? '100%' : '100%',
               border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
               boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
