@@ -63,7 +63,7 @@ export default async function authRoutes(fastify, options) {
     try {
       // Find user by username or email
       const result = await query(
-        'SELECT id, username, email, password_hash, COALESCE(total_xp, 0) as total_xp, COALESCE(total_stars, 0) as total_stars, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin, COALESCE(free_shots, false) as free_shots FROM users WHERE username = $1 OR email = $1',
+        'SELECT id, username, email, password_hash, COALESCE(total_xp, 0) as total_xp, COALESCE(total_stars, 0) as total_stars, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin, COALESCE(free_shots, false) as free_shots, COALESCE(is_immune, false) as is_immune FROM users WHERE username = $1 OR email = $1',
         [username]
       );
 
@@ -105,7 +105,8 @@ export default async function authRoutes(fastify, options) {
         token,
         isAdmin: user.is_admin === true || user.is_admin === 'true' || user.is_admin === 1,
         isBanned: false,
-        freeShots: user.free_shots === true || user.free_shots === 'true' || user.free_shots === 1
+        freeShots: user.free_shots === true || user.free_shots === 'true' || user.free_shots === 1,
+        isImmune: user.is_immune === true || user.is_immune === 'true' || user.is_immune === 1
       };
     } catch (error) {
       console.error('Login error:', error);
@@ -124,7 +125,7 @@ export default async function authRoutes(fastify, options) {
   }, async (request, reply) => {
     try {
       const result = await query(
-        'SELECT id, username, email, total_xp, created_at, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin, COALESCE(free_shots, false) as free_shots FROM users WHERE id = $1',
+        'SELECT id, username, email, total_xp, created_at, COALESCE(is_banned, false) as is_banned, COALESCE(is_admin, false) as is_admin, COALESCE(free_shots, false) as free_shots, COALESCE(is_immune, false) as is_immune FROM users WHERE id = $1',
         [request.user.id]
       );
 
@@ -142,7 +143,8 @@ export default async function authRoutes(fastify, options) {
         createdAt: user.created_at,
         isBanned: user.is_banned || false,
         isAdmin: user.is_admin === true || user.is_admin === 'true' || user.is_admin === 1,
-        freeShots: user.free_shots === true || user.free_shots === 'true' || user.free_shots === 1
+        freeShots: user.free_shots === true || user.free_shots === 'true' || user.free_shots === 1,
+        isImmune: user.is_immune === true || user.is_immune === 'true' || user.is_immune === 1
       };
     } catch (error) {
       throw error;

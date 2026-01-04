@@ -60,6 +60,7 @@ export default async function adminRoutes(fastify, options) {
           u.is_banned,
           u.is_admin,
           u.free_shots,
+          u.is_immune,
           u.created_at,
           l.best_score,
           l.highest_level,
@@ -98,7 +99,8 @@ export default async function adminRoutes(fastify, options) {
         healthLevel: row.health_level || 0,
         currentLevel: row.current_level || 1,
         isAdmin: row.is_admin || false,
-        freeShots: row.free_shots || false
+        freeShots: row.free_shots || false,
+        isImmune: row.is_immune || false
       }));
     } catch (error) {
       fastify.log.error(error);
@@ -125,7 +127,8 @@ export default async function adminRoutes(fastify, options) {
       currentLevel,
       isBanned,
       isAdmin,
-      freeShots
+      freeShots,
+      isImmune
     } = request.body;
 
     try {
@@ -137,9 +140,10 @@ export default async function adminRoutes(fastify, options) {
              is_banned = COALESCE($3, is_banned),
              is_admin = COALESCE($4, is_admin),
              free_shots = COALESCE($5, free_shots),
+             is_immune = COALESCE($6, is_immune),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $6`,
-        [totalXp, totalStars, isBanned, isAdmin, freeShots, id]
+         WHERE id = $7`,
+        [totalXp, totalStars, isBanned, isAdmin, freeShots, isImmune, id]
       );
 
       // Update user_progress

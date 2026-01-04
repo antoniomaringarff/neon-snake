@@ -49,7 +49,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
         throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.freeShots || false);
+      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.freeShots || false, data.isImmune || false);
     } catch (err) {
       setError(err.message || 'Error en la autenticación');
       console.error('Auth error:', err);

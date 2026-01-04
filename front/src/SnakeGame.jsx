@@ -123,7 +123,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
   return levelSpecificConfigs[level] || baseConfig;
 };
 
-const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false }) => {
+const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
@@ -760,7 +760,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const applyDamage = (damage, x, y) => {
       const game = gameRef.current;
       
-      // Si está invulnerable, no recibe daño
+      // Si tiene inmunidad (admin), no recibe daño - efecto visual especial
+      if (isImmune) {
+        createParticle(x, y, '#00ffff', 8); // Efecto de inmunidad (cyan)
+        return false;
+      }
+      
+      // Si está invulnerable temporalmente, no recibe daño
       if (game.invulnerable > 0) {
         createParticle(x, y, '#00ffff', 5); // Efecto de escudo
         return false;
@@ -3327,9 +3333,24 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Health icon and text
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 11px monospace';
-      const healthText = `❤️ ${game.currentHealth}/${game.maxHealth}`;
+      const healthText = isImmune ? `🛡️ INMUNE` : `❤️ ${game.currentHealth}/${game.maxHealth}`;
       const healthTextWidth = ctx.measureText(healthText).width;
       ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 12);
+      
+      // Special status indicators
+      if (isImmune || freeShots) {
+        ctx.font = 'bold 10px monospace';
+        let statusY = hudY + 30;
+        if (isImmune) {
+          ctx.fillStyle = '#00ffff';
+          ctx.fillText('🛡️ INMUNIDAD', healthBarX, statusY);
+          statusY += 12;
+        }
+        if (freeShots) {
+          ctx.fillStyle = '#00ff88';
+          ctx.fillText('🔫 BALAS GRATIS', healthBarX, statusY);
+        }
+      }
       
       // === SESSION XP COUNTER (with dynamic color) ===
       const xpCounterX = healthBarX + healthBarWidth + 15;

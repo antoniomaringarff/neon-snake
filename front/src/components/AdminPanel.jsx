@@ -494,6 +494,15 @@ const AdminPanel = ({ onClose }) => {
                         />
                         Disparos Gratis
                       </label>
+                      <label style={{ color: '#00ffff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={editingUser.isImmune}
+                          onChange={(e) => setEditingUser(prev => ({ ...prev, isImmune: e.target.checked }))}
+                          style={{ width: '20px', height: '20px' }}
+                        />
+                        Inmunidad (No recibe daño)
+                      </label>
                     </div>
                     <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
                       <Button onClick={() => updateUser(editingUser.id, editingUser)}>

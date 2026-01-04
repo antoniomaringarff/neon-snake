@@ -8,6 +8,7 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [freeShots, setFreeShots] = useState(false);
+  const [isImmune, setIsImmune] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -31,6 +32,7 @@ function App() {
         setIsAdmin(data.isAdmin === true || data.isAdmin === 'true');
         setIsBanned(data.isBanned === true || data.isBanned === 'true');
         setFreeShots(data.freeShots === true || data.freeShots === 'true');
+        setIsImmune(data.isImmune === true || data.isImmune === 'true');
         console.log('isAdmin set to:', data.isAdmin === true || data.isAdmin === 'true');
       })
       .catch(() => {
@@ -45,7 +47,7 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, freeShotsStatus = false) => {
+  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, freeShotsStatus = false, isImmuneStatus = false) => {
     localStorage.setItem('token', token);
     localStorage.setItem('userId', userData.id);
     localStorage.setItem('viborita_registered', 'true'); // Marcar que este navegador tiene cuenta
@@ -53,6 +55,7 @@ function App() {
     setIsAdmin(adminStatus);
     setIsBanned(bannedStatus);
     setFreeShots(freeShotsStatus);
+    setIsImmune(isImmuneStatus);
   };
 
   const handleLogout = () => {
@@ -62,6 +65,7 @@ function App() {
     setIsAdmin(false);
     setIsBanned(false);
     setFreeShots(false);
+    setIsImmune(false);
   };
 
   if (loading) {
@@ -87,7 +91,7 @@ function App() {
     return <AuthScreen onLogin={handleLogin} hasExistingAccount={hasExistingAccount} />;
   }
 
-  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} />;
+  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} isImmune={isImmune} />;
 }
 
 export default App;
