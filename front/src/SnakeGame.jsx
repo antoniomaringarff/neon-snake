@@ -204,158 +204,188 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const FOOD_SIZE = 6;
   const BORDER_WIDTH = 20;
   
-  // Mensajes de intro por nivel
-  const levelIntroMessages = {
-    1: {
-      title: "Primeros Pasos",
-      objective: 5,
-      dangers: ["15 víboras enemigas", "Bordes del mapa"],
-      tip: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada."
-    },
-    2: {
-      title: "Calentando",
-      objective: 8,
-      dangers: ["15 víboras enemigas", "Bordes del mapa"],
-      tip: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas"
-    },
-    3: {
-      title: "Nuevos Obstáculos",
-      objective: 11,
-      dangers: ["20 víboras enemigas", "Si buscas XP, encuentra las estructuras", "Dos disparan"],
-      tip: "Cuidado! Algunos enemigos ahora disparan"
-    },
-    4: {
-      title: "Territorio Hostil",
-      objective: 14,
-      dangers: ["25 víboras enemigas", "Las estructuras esconden tesoros de XP", "Dos o tres tienen escudo"],
-      tip: "Los enemigos con escudo brillan azul"
-    },
-    5: {
-      title: "Zona de Guerra",
-      objective: 17,
-      dangers: ["30 víboras enemigas", "Seis disparan", "Seis tienen escudo"],
-      tip: "Busca las cajas verdes con vida extra"
-    },
-    6: {
-      title: "Sin Tregua",
-      objective: 20,
-      dangers: ["35 víboras enemigas", "Siete disparan", "Siete tienen escudo"],
-      tip: "Tu escudo te da chance de esquivar balas"
-    },
-    7: {
-      title: "Supervivencia",
-      objective: 23,
-      dangers: ["40 víboras enemigas", "Doce disparan", "Doce tienen escudo"],
-      tip: "Mejora tu velocidad de bala en la tienda"
-    },
-    8: {
-      title: "Último Respiro",
-      objective: 26,
-      dangers: ["45 víboras enemigas", "Unos trece disparan", "Unos trece tienen escudo"],
-      tip: "El imán atrae XP y estrellas hacia ti"
-    },
-    9: {
-      title: "Sierras Asesinas",
-      objective: 29,
-      dangers: ["50 víboras enemigas", "5 sierras asesinas", "2 cañones flotantes", "Veinte disparan", "Veinte tienen escudo"],
-      tip: "Las sierras rebotan por el mapa. Evítalas!"
-    },
-    10: {
-      title: "La Resentida",
-      objective: 32,
-      dangers: ["55 víboras enemigas", "Sierras", "1 víbora resentida", "Veintidós disparan", "Veintidós tienen escudo"],
-      tip: "La víbora arcoíris te persigue. Es un duelo!"
-    },
-    11: {
-      title: "Infierno",
-      objective: 35,
-      dangers: ["60 víboras enemigas", "5 sierras asesinas", "4 cañones flotantes", "1 víbora resentida", "Treinta disparan", "Treinta tienen escudo"],
-      tip: "Los cañones flotantes disparan doble"
-    },
-    12: {
-      title: "Sin Escape",
-      objective: 38,
-      dangers: ["65 víboras enemigas", "7 sierras asesinas", "4 cañones flotantes", "2 víboras resentidas", "Unos treinta y dos disparan", "Unos treinta y dos tienen escudo"],
-      tip: "Las sierras grandes hacen más daño"
-    },
-    13: {
-      title: "Velocidad Mortal",
-      objective: 41,
-      dangers: ["70 víboras enemigas", "Enemigos MÁS RÁPIDOS", "Treinta y cinco disparan", "Treinta y cinco tienen escudo"],
-      tip: "Los enemigos ahora son más rápidos"
-    },
-    14: {
-      title: "Emboscada",
-      objective: 44,
-      dangers: ["75 víboras enemigas", "3 víboras resentidas", "Cuarenta y cinco disparan", "Cuarenta y cinco tienen escudo"],
-      tip: "Tocar a la resentida la mata y reaparece"
-    },
-    15: {
-      title: "Campo Abierto",
-      objective: 47,
-      dangers: ["80 víboras enemigas", "Sin estructuras", "Sierras", "Cañones", "Cuarenta y ocho disparan", "Cuarenta y ocho tienen escudo"],
-      tip: "Sin estructuras donde esconderte"
-    },
-    16: {
-      title: "Fuego Cruzado",
-      objective: 50,
-      dangers: ["85 víboras enemigas", "8 cañones flotantes", "4 víboras resentidas", "Cincuenta y uno disparan", "Cincuenta y uno tienen escudo"],
-      tip: "Las resentidas dejan caja de vida al morir"
-    },
-    17: {
-      title: "Tormenta",
-      objective: 53,
-      dangers: ["90 víboras enemigas", "8 sierras asesinas", "Sesenta y tres disparan", "Sesenta y tres tienen escudo"],
-      tip: "Dispara con click izquierdo o ESPACIO"
-    },
-    18: {
-      title: "Jugador Rápido",
-      objective: 56,
-      dangers: ["95 víboras enemigas", "TU velocidad aumenta", "Unos sesenta y seis disparan", "Unos sesenta y seis tienen escudo"],
-      tip: "Aprovecha tu mayor velocidad"
-    },
-    19: {
-      title: "Resistencia",
-      objective: 59,
-      dangers: ["100 víboras enemigas", "Todo al máximo", "Setenta disparan", "Setenta tienen escudo"],
-      tip: "Cada estrella del mismo enemigo cura 1 vez"
-    },
-    20: {
-      title: "Elite",
-      objective: 62,
-      dangers: ["105 víboras enemigas", "5 víboras resentidas", "Unos setenta y tres disparan", "Unos setenta y tres tienen escudo"],
-      tip: "Las resentidas disparan doble y rápido"
-    },
-    21: {
-      title: "Veterano",
-      objective: 65,
-      dangers: ["110 víboras enemigas", "10 sierras asesinas", "Setenta y siete disparan", "Setenta y siete tienen escudo"],
-      tip: "Mira el minimapa para ubicar enemigos"
-    },
-    22: {
-      title: "Enemigos Veloces",
-      objective: 68,
-      dangers: ["115 víboras enemigas", "Enemigos MÁS rápidos", "Unos ochenta disparan", "Unos ochenta tienen escudo"],
-      tip: "Los enemigos ahora corren a tu velocidad"
-    },
-    23: {
-      title: "Penúltimo",
-      objective: 71,
-      dangers: ["120 víboras enemigas", "6 víboras resentidas", "Ochenta y cuatro disparan", "Ochenta y cuatro tienen escudo"],
-      tip: "Ya casi! Un nivel más!"
-    },
-    24: {
-      title: "La Antesala",
-      objective: 74,
-      dangers: ["125 víboras enemigas", "15 cañones flotantes", "Cien disparan", "Cien tienen escudo"],
-      tip: "Prepara todo para el nivel final"
-    },
-    25: {
-      title: "EL FINAL",
-      objective: 100,
-      dangers: ["130 víboras enemigas", "Mapa GIGANTE", "TODO", "Ciento cuatro disparan", "Ciento cuatro tienen escudo"],
-      tip: "100 estrellas. Esto es todo. Buena suerte!"
+  // Función helper para convertir números a texto en español
+  const numberToSpanish = (num) => {
+    if (num <= 0) return 'cero';
+    if (num === 1) return 'Una';
+    if (num === 2) return 'Dos';
+    if (num === 3) return 'Tres';
+    if (num === 4) return 'Cuatro';
+    if (num === 5) return 'Cinco';
+    if (num === 6) return 'Seis';
+    if (num === 7) return 'Siete';
+    if (num === 8) return 'Ocho';
+    if (num === 9) return 'Nueve';
+    if (num === 10) return 'Diez';
+    if (num === 11) return 'Once';
+    if (num === 12) return 'Doce';
+    if (num === 13) return 'Trece';
+    if (num === 14) return 'Catorce';
+    if (num === 15) return 'Quince';
+    if (num === 16) return 'Dieciséis';
+    if (num === 17) return 'Diecisiete';
+    if (num === 18) return 'Dieciocho';
+    if (num === 19) return 'Diecinueve';
+    if (num === 20) return 'Veinte';
+    if (num <= 30) return `Unos ${num}`;
+    // Para números redondos mayores
+    if (num % 10 === 0 && num <= 100) {
+      const tens = num / 10;
+      const tensWords = ['', '', 'Veinte', 'Treinta', 'Cuarenta', 'Cincuenta', 'Sesenta', 'Setenta', 'Ochenta', 'Noventa', 'Cien'];
+      return tensWords[tens];
     }
+    // Para otros números, usar "Unos X"
+    return `Unos ${num}`;
+  };
+  
+  // Función para generar mensajes de intro dinámicamente desde la DB
+  const getLevelIntroMessage = (levelNum, levelConfigsFromDB) => {
+    const levelConfig = getLevelConfig(levelNum, levelConfigsFromDB);
+    
+    // Si no hay configuración, retornar null (no mostrar intro)
+    if (!levelConfig || !levelConfig.enemyCount) {
+      return null;
+    }
+    
+    // Títulos y tips hardcodeados (texto descriptivo)
+    const titles = {
+      1: "Primeros Pasos", 2: "Calentando", 3: "Nuevos Obstáculos", 4: "Territorio Hostil",
+      5: "Zona de Guerra", 6: "Sin Tregua", 7: "Supervivencia", 8: "Último Respiro",
+      9: "Sierras Asesinas", 10: "La Resentida", 11: "Infierno", 12: "Sin Escape",
+      13: "Velocidad Mortal", 14: "Emboscada", 15: "Campo Abierto", 16: "Fuego Cruzado",
+      17: "Tormenta", 18: "Jugador Rápido", 19: "Resistencia", 20: "Elite",
+      21: "Veterano", 22: "Enemigos Veloces", 23: "Penúltimo", 24: "La Antesala",
+      25: "EL FINAL"
+    };
+    
+    const tips = {
+      1: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada.",
+      2: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas",
+      3: "Cuidado! Algunos enemigos ahora disparan",
+      4: "Los enemigos con escudo brillan azul",
+      5: "Busca las cajas verdes con vida extra",
+      6: "Tu escudo te da chance de esquivar balas",
+      7: "Mejora tu velocidad de bala en la tienda",
+      8: "El imán atrae XP y estrellas hacia ti",
+      9: "Las sierras rebotan por el mapa. Evítalas!",
+      10: "La víbora arcoíris te persigue. Es un duelo!",
+      11: "Los cañones flotantes disparan doble",
+      12: "Las sierras grandes hacen más daño",
+      13: "Los enemigos ahora son más rápidos",
+      14: "Tocar a la resentida la mata y reaparece",
+      15: "Sin estructuras donde esconderte",
+      16: "Las resentidas dejan caja de vida al morir",
+      17: "Dispara con click izquierdo o ESPACIO",
+      18: "Aprovecha tu mayor velocidad",
+      19: "Cada estrella del mismo enemigo cura 1 vez",
+      20: "Las resentidas disparan doble y rápido",
+      21: "Mira el minimapa para ubicar enemigos",
+      22: "Los enemigos ahora corren a tu velocidad",
+      23: "Ya casi! Un nivel más!",
+      24: "Prepara todo para el nivel final",
+      25: "100 estrellas. Esto es todo. Buena suerte!"
+    };
+    
+    // Generar peligros dinámicamente desde la DB
+    const dangers = [];
+    
+    // Víboras enemigas (siempre presente)
+    dangers.push(`${levelConfig.enemyCount} víboras enemigas`);
+    
+    // Estructuras
+    if (levelConfig.structuresCount > 0) {
+      if (levelNum === 3) {
+        dangers.push("Si buscas XP, encuentra las estructuras");
+      } else if (levelNum === 4) {
+        dangers.push("Las estructuras esconden tesoros de XP");
+      } else {
+        dangers.push(`${levelConfig.structuresCount} estructuras`);
+      }
+    } else if (levelNum === 15) {
+      dangers.push("Sin estructuras");
+    }
+    
+    // Sierras asesinas
+    if (levelConfig.killerSawCount > 0) {
+      dangers.push(`${levelConfig.killerSawCount} sierras asesinas`);
+    } else if (levelConfig.killerSawCount === 0 && levelNum >= 9) {
+      dangers.push("Sierras");
+    }
+    
+    // Cañones flotantes
+    if (levelConfig.floatingCannonCount > 0) {
+      dangers.push(`${levelConfig.floatingCannonCount} cañones flotantes`);
+    } else if (levelConfig.floatingCannonCount === 0 && levelNum >= 9) {
+      dangers.push("Cañones");
+    }
+    
+    // Víboras resentidas
+    if (levelConfig.resentfulSnakeCount > 0) {
+      if (levelConfig.resentfulSnakeCount === 1) {
+        dangers.push("1 víbora resentida");
+      } else {
+        dangers.push(`${levelConfig.resentfulSnakeCount} víboras resentidas`);
+      }
+    } else if (levelConfig.resentfulSnakeCount === 0 && levelNum >= 10) {
+      dangers.push("VIBORA RESENTIDA");
+    }
+    
+    // Enemigos que disparan (calcular desde porcentaje)
+    const shootPercentage = levelConfig.enemyShootPercentage || 0;
+    if (shootPercentage > 0) {
+      const enemiesThatShoot = Math.round((levelConfig.enemyCount * shootPercentage) / 100);
+      const spanishNum = numberToSpanish(enemiesThatShoot);
+      if (enemiesThatShoot === 1) {
+        dangers.push(`${spanishNum} dispara`);
+      } else {
+        dangers.push(`${spanishNum} disparan`);
+      }
+    }
+    
+    // Enemigos con escudo (calcular desde porcentaje)
+    const shieldPercentage = levelConfig.enemyShieldPercentage || 0;
+    if (shieldPercentage > 0) {
+      const enemiesWithShield = Math.round((levelConfig.enemyCount * shieldPercentage) / 100);
+      // Caso especial: si es 2 o 3, decir "Dos o tres"
+      if (enemiesWithShield === 2 || enemiesWithShield === 3) {
+        dangers.push("Dos o tres tienen escudo");
+      } else {
+        const spanishNum = numberToSpanish(enemiesWithShield);
+        if (enemiesWithShield === 1) {
+          dangers.push(`${spanishNum} tiene escudo`);
+        } else {
+          dangers.push(`${spanishNum} tienen escudo`);
+        }
+      }
+    }
+    
+    // Velocidad de enemigos (solo para algunos niveles)
+    if (levelNum === 13 || levelNum === 22) {
+      dangers.push("Enemigos MÁS RÁPIDOS");
+    }
+    
+    // Velocidad del jugador
+    if (levelNum === 18) {
+      dangers.push("TU velocidad aumenta");
+    }
+    
+    // Mapa gigante y todo
+    if (levelNum === 25) {
+      dangers.push("Mapa GIGANTE");
+      dangers.push("TODO");
+    }
+    
+    // Bordes del mapa (solo niveles iniciales)
+    if (levelNum <= 2) {
+      dangers.push("Bordes del mapa");
+    }
+    
+    return {
+      title: titles[levelNum] || `Nivel ${levelNum}`,
+      objective: levelConfig.starsNeeded,
+      dangers: dangers,
+      tip: tips[levelNum] || "Buena suerte!"
+    };
   };
   
   const gameRef = useRef({
@@ -5447,7 +5477,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         </div>
       )}
 
-      {gameState === 'levelIntro' && levelIntroMessages[level] && (
+      {gameState === 'levelIntro' && (() => {
+        const introMessage = getLevelIntroMessage(level, levelConfigs);
+        if (!introMessage) return null;
+        
+        return (
         <div style={{ 
           display: 'flex',
           alignItems: 'center',
@@ -5481,7 +5515,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               fontSize: isMobile ? '20px' : '24px',
               fontStyle: 'italic'
             }}>
-              "{levelIntroMessages[level].title}"
+              "{introMessage.title}"
             </h2>
 
             {/* Objetivo */}
@@ -5504,7 +5538,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 color: '#ffffff', 
                 fontSize: isMobile ? '18px' : '20px'
               }}>
-                Recolecta {levelIntroMessages[level].objective} estrellas ⭐
+                Recolecta {introMessage.objective} estrellas ⭐
               </p>
             </div>
 
@@ -5524,7 +5558,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }}>
                 PELIGROS:
               </p>
-              {levelIntroMessages[level].dangers.map((danger, idx) => (
+              {introMessage.dangers.map((danger, idx) => (
                 <p key={idx} style={{ 
                   color: '#ffaaaa', 
                   fontSize: isMobile ? '14px' : '16px',
@@ -5558,7 +5592,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 lineHeight: '1.5',
                 textAlign: 'left'
               }}>
-                {levelIntroMessages[level].tip}
+                {introMessage.tip}
               </p>
             </div>
 
@@ -5592,7 +5626,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {gameState === 'levelComplete' && (
         <div style={{ 
