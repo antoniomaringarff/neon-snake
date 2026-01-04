@@ -1,6 +1,71 @@
 import { query } from '../config/database.js';
 
 export default async function usersRoutes(fastify, options) {
+  // Rebirth - reiniciar progreso con ventajas
+  fastify.post('/:id/rebirth', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    
+    // Verificar que el usuario puede hacer rebirth
+    // Debe haber completado el nivel 25 al menos una vez (highest_level >= 25)
+    const leaderboardResult = await query(
+      'SELECT highest_level FROM leaderboard WHERE user_id = $1',
+      [id]
+    );
+    
+    if (leaderboardResult.rows.length === 0 || leaderboardResult.rows[0].highest_level < 25) {
+      return reply.code(400).send({ error: 'Debes completar el nivel 25 para hacer rebirth' });
+    }
+    
+    try {
+      // Incrementar rebirth_count y series
+      await query(`
+        UPDATE users 
+        SET rebirth_count = rebirth_count + 1,
+            current_series = current_series + 1,
+            total_xp = 0,
+            total_stars = 0,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `, [id]);
+      
+      // Obtener el nuevo rebirth_count
+      const rebirthResult = await query(
+        'SELECT rebirth_count, current_series FROM users WHERE id = $1',
+        [id]
+      );
+      const rebirthCount = rebirthResult.rows[0].rebirth_count;
+      const currentSeries = rebirthResult.rows[0].current_series;
+      
+      // Resetear progreso a nivel 1, pero con los upgrades según rebirth_count
+      // Los niveles base de la tienda serán rebirth_count (0->1->2->3...)
+      await query(`
+        UPDATE user_progress
+        SET current_level = 1,
+            shield_level = $2,
+            head_level = 1 + $2,
+            cannon_level = $2,
+            magnet_level = $2,
+            speed_level = $2,
+            bullet_speed_level = $2,
+            health_level = $2,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1
+      `, [id, rebirthCount]);
+      
+      return {
+        message: 'Rebirth completado',
+        rebirthCount: rebirthCount,
+        currentSeries: currentSeries,
+        startingLevel: rebirthCount
+      };
+    } catch (error) {
+      console.error('Error en rebirth:', error);
+      return reply.code(500).send({ error: 'Error al procesar rebirth' });
+    }
+  });
+
   // Get user progress
   fastify.get('/:id/progress', {
     onRequest: [fastify.authenticate]
@@ -25,6 +90,8 @@ export default async function usersRoutes(fastify, options) {
           up.current_level,
           u.total_xp,
           COALESCE(u.total_stars, 0) as total_stars,
+          COALESCE(u.rebirth_count, 0) as rebirth_count,
+          COALESCE(u.current_series, 1) as current_series,
           up.updated_at
         FROM user_progress up
         JOIN users u ON up.user_id = u.id
@@ -49,6 +116,8 @@ export default async function usersRoutes(fastify, options) {
         currentLevel: progress.current_level,
         totalXp: progress.total_xp || 0,
         totalStars: progress.total_stars || 0,
+        rebirthCount: progress.rebirth_count || 0,
+        currentSeries: progress.current_series || 1,
         updatedAt: progress.updated_at
       };
     } catch (error) {

@@ -48,6 +48,7 @@ function App() {
   const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, freeShotsStatus = false) => {
     localStorage.setItem('token', token);
     localStorage.setItem('userId', userData.id);
+    localStorage.setItem('viborita_registered', 'true'); // Marcar que este navegador tiene cuenta
     setUser(userData);
     setIsAdmin(adminStatus);
     setIsBanned(bannedStatus);
@@ -81,7 +82,9 @@ function App() {
   }
 
   if (!user) {
-    return <AuthScreen onLogin={handleLogin} />;
+    // Si hay token en localStorage, es un usuario que ya se registró antes
+    const hasExistingAccount = localStorage.getItem('viborita_registered') === 'true';
+    return <AuthScreen onLogin={handleLogin} hasExistingAccount={hasExistingAccount} />;
   }
 
   return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} />;

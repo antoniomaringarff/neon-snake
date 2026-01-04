@@ -18,6 +18,14 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       enemyShieldPercentage: dbConfig.enemyShieldPercentage,
       enemyShootCooldown: dbConfig.enemyShootCooldown,
       xpDensity: dbConfig.xpDensity,
+      xpPoints: dbConfig.xpPoints ?? dbConfig.xpDensity,
+      mapSize: dbConfig.mapSize ?? 10,
+      structuresCount: dbConfig.structuresCount ?? 0,
+      killerSawCount: dbConfig.killerSawCount ?? 0,
+      floatingCannonCount: dbConfig.floatingCannonCount ?? 0,
+      resentfulSnakeCount: dbConfig.resentfulSnakeCount ?? 0,
+      healthBoxCount: dbConfig.healthBoxCount ?? 0,
+      enemyUpgradeLevel: dbConfig.enemyUpgradeLevel ?? Math.floor((level - 1) * 10 / 24),
       hasCentralCell: dbConfig.hasCentralCell,
       centralCellOpeningSpeed: dbConfig.centralCellOpeningSpeed,
     };
@@ -34,6 +42,14 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
     enemyShieldPercentage: Math.min(0 + (level * 3), 50),
     enemyShootCooldown: Math.max(2000, 5000 - (level * 100)),
     xpDensity: 100 + (level * 5),
+    xpPoints: 100 + (level * 5),
+    mapSize: 10 + level,
+    structuresCount: 0,
+    killerSawCount: 0,
+    floatingCannonCount: 0,
+    resentfulSnakeCount: 0,
+    healthBoxCount: 0,
+    enemyUpgradeLevel: Math.floor((level - 1) * 10 / 24), // 0-10 basado en nivel
     hasCentralCell: level >= 2,
     centralCellOpeningSpeed: 0.002, // Velocidad fija igual para todos los niveles
   };
@@ -122,14 +138,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     centerY: 0, 
     radius: 0, 
     isActive: false,
-    direction: { x: 0, y: 0 } // Store direction synchronously
+    direction: { x: 0, y: 0 }, // Store direction synchronously
+    intensity: 0 // 0-1, qué tan lejos está el dedo del centro (para aceleración)
   });
   const shootBulletRef = useRef(null);
   const isShootingRef = useRef(false);
   const shootingIntervalRef = useRef(null);
   const startAutoFireRef = useRef(null);
   const stopAutoFireRef = useRef(null);
-  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameOver, shop
+  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [totalXP, setTotalXP] = useState(0);
@@ -140,7 +157,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [magnetLevel, setMagnetLevel] = useState(0); // 0-10: rango de atracción (50px por nivel)
   const [cannonLevel, setCannonLevel] = useState(0); // 0 = none, 1-5 = diferentes configuraciones
   const [speedLevel, setSpeedLevel] = useState(0); // 0 = none, 1-10 = 10% a 100%
-  const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0 = none, 1-10 = x2, x4, x8, x16, x32, x64, x128, x256, x512, x1024
+  const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0-10: velocidad suma 2 por nivel, máximo 20
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
   const [healthLevel, setHealthLevel] = useState(0); // 0-10: puntos de vida (0=2, 1=4, 2=6... 10=22)
   const [shopOpen, setShopOpen] = useState(false);
@@ -149,6 +166,18 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [levelConfigs, setLevelConfigs] = useState({}); // Configuraciones de niveles desde la DB
+  const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
+  const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
+  const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
+  
+  // Constants for canvas and world size
+  const CANVAS_WIDTH = 800;
+  const CANVAS_HEIGHT = 600;
+  // BASE_UNIT es el tamaño de la pantalla visible (canvas), no la ventana completa
+  const BASE_UNIT = Math.max(CANVAS_WIDTH, CANVAS_HEIGHT);
+  const SNAKE_SIZE = 8;
+  const FOOD_SIZE = 6;
+  const BORDER_WIDTH = 20;
   
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
@@ -159,6 +188,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     enemies: [],
     particles: [],
     bullets: [],
+    killerSaws: [], // Sierras asesinas
+    floatingCannons: [], // Canones flotantes
+    resentfulSnakes: [], // Viboras resentidas
+    healthBoxes: [], // Cajas de vida
+    structures: [], // Estructuras con puertas moviles
     speed: 2, // Start slower
     baseSpeed: 2,
     snakeSize: 8,
@@ -174,7 +208,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     lastPlayerShot: 0, // For cannon cooldown
     currentHealth: 2, // Vida actual del jugador
     maxHealth: 2, // Vida máxima del jugador (basada en healthLevel)
-    magnetLevel: 0 // Nivel del imán (se actualiza desde el state)
+    magnetLevel: 0, // Nivel del imán (se actualiza desde el state)
+    worldWidth: BASE_UNIT * 10, // Dynamic world width based on level
+    worldHeight: BASE_UNIT * 10, // Dynamic world height based on level
+    // Efectos visuales
+    damageFlash: 0, // Tiempo de flash rojo cuando recibe daño
+    healFlash: 0, // Tiempo de flash verde cuando se cura
+    invulnerable: 0 // Tiempo de invulnerabilidad después de recibir daño
   });
 
   // Helper function to get auth token
@@ -215,6 +255,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             enemyShieldPercentage: level.enemyShieldPercentage,
             enemyShootCooldown: level.enemyShootCooldown,
             xpDensity: level.xpDensity,
+            xpPoints: level.xpPoints ?? level.xpDensity,
+            mapSize: level.mapSize ?? 10,
+            structuresCount: level.structuresCount ?? 0,
+            killerSawCount: level.killerSawCount ?? 0,
+            floatingCannonCount: level.floatingCannonCount ?? 0,
+            resentfulSnakeCount: level.resentfulSnakeCount ?? 0,
+            healthBoxCount: level.healthBoxCount ?? 0,
             hasCentralCell: level.hasCentralCell,
             centralCellOpeningSpeed: level.centralCellOpeningSpeed,
           };
@@ -320,6 +367,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       setBulletSpeedLevel(data.bulletSpeedLevel || 0);
       setHeadLevel(data.headLevel || 1);
       setHealthLevel(data.healthLevel || 0);
+      setRebirthCount(data.rebirthCount || 0);
+      setCurrentSeries(data.currentSeries || 1);
       gameRef.current.level = data.currentLevel || 1;
       gameRef.current.magnetLevel = data.magnetLevel || 0;
       
@@ -335,11 +384,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     if (user?.id) {
       loadShopConfigs();
       loadUserProgress();
-      if (isAdmin) {
-        loadLevelConfigs();
-      }
+      loadLevelConfigs(); // Cargar configs de niveles para TODOS los usuarios
     }
-  }, [user?.id, isAdmin]);
+  }, [user?.id]);
 
   // Handle ESC key to close admin panel
   useEffect(() => {
@@ -439,9 +486,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     loadUserProgress();
   }, [user?.id]);
 
-  // Load leaderboard when in menu or level complete
+  // Load leaderboard when in menu, level complete or game complete
   useEffect(() => {
-    if (gameState === 'menu' || gameState === 'levelComplete') {
+    if (gameState === 'menu' || gameState === 'levelComplete' || gameState === 'gameComplete') {
       loadLeaderboard();
     }
   }, [gameState]);
@@ -462,25 +509,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     gameRef.current.magnetLevel = magnetLevel;
   }, [magnetLevel]);
 
-  const CANVAS_WIDTH = 800;
-  const CANVAS_HEIGHT = 600;
-  const WORLD_WIDTH = 6400; // 8x wider
-  const WORLD_HEIGHT = 3600; // 6x taller
-  const SNAKE_SIZE = 8;
-  const FOOD_SIZE = 6;
-  const BORDER_WIDTH = 20;
+  // Helper function to calculate world size based on map size
+  const getWorldSize = (mapSize) => {
+    return BASE_UNIT * mapSize;
+  };
 
   // Create food function - moved outside useEffect to be accessible everywhere
     const createFood = (forceColor = null, forceValue = null) => {
+      const game = gameRef.current;
       // Rainbow colors: violet (most XP) -> red (least XP)
       const colorTiers = [
-        { color: '#9400D3', hue: 280, xp: 10, name: 'violet' },    // Violet - 10 XP
-        { color: '#4B0082', hue: 275, xp: 8, name: 'indigo' },     // Indigo - 8 XP  
-        { color: '#0000FF', hue: 240, xp: 7, name: 'blue' },       // Blue - 7 XP
-        { color: '#00FF00', hue: 120, xp: 5, name: 'green' },      // Green - 5 XP
-        { color: '#FFFF00', hue: 60, xp: 4, name: 'yellow' },      // Yellow - 4 XP
-        { color: '#FFA500', hue: 39, xp: 3, name: 'orange' },      // Orange - 3 XP
-        { color: '#FF0000', hue: 0, xp: 2, name: 'red' }           // Red - 2 XP
+        { color: '#9400D3', hue: 280, xp: 7, name: 'violet' },    // Violet - 7 XP (smallest)
+        { color: '#4B0082', hue: 275, xp: 6, name: 'indigo' },     // Indigo - 6 XP  
+        { color: '#0000FF', hue: 240, xp: 5, name: 'blue' },       // Blue - 5 XP
+        { color: '#00FF00', hue: 120, xp: 4, name: 'green' },      // Green - 4 XP
+        { color: '#FFFF00', hue: 60, xp: 3, name: 'yellow' },      // Yellow - 3 XP
+        { color: '#FFA500', hue: 39, xp: 2, name: 'orange' },      // Orange - 2 XP
+        { color: '#FF0000', hue: 0, xp: 1, name: 'red' }           // Red - 1 XP (smallest)
       ];
       
       let tier;
@@ -498,66 +543,73 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         else tier = colorTiers[6]; // 25% red
       }
       
-      // Size multiplier: 0.7x to 1.5x
-      const sizeMultiplier = 0.7 + Math.random() * 0.8;
-      const xpValue = forceValue || Math.round(tier.xp * sizeMultiplier);
+      // 5 sizes: 1 (smallest) to 5 (largest)
+      // XP ranges: red 1-5, orange 2-6, yellow 3-7, green 4-9, blue 5-10, indigo 6-11, violet 7-12
+      const sizeIndex = Math.floor(Math.random() * 5); // 0-4
+      const sizeMultiplier = 0.6 + (sizeIndex * 0.2); // 0.6, 0.8, 1.0, 1.2, 1.4
+      
+      // Calculate XP based on color base XP and size
+      // Smallest size (0): base XP, Largest size (4): base XP + 4
+      const baseXP = tier.xp;
+      const xpValue = forceValue || (baseXP + sizeIndex);
       
       return {
-        x: Math.random() * (WORLD_WIDTH - 40) + 20,
-        y: Math.random() * (WORLD_HEIGHT - 40) + 20,
+        x: Math.random() * (game.worldWidth - 40) + 20,
+        y: Math.random() * (game.worldHeight - 40) + 20,
         value: xpValue,
         color: tier.color,
         hue: tier.hue,
-        size: FOOD_SIZE * sizeMultiplier
+        size: FOOD_SIZE * sizeMultiplier,
+        sizeIndex: sizeIndex // Store size index for reference
       };
     };
 
   // Helper function to create enemies - must be outside useEffect to be accessible
     const createEnemy = (levelConfig, gameLevel = 1) => {
-      const x = Math.random() * WORLD_WIDTH;
-      const y = Math.random() * WORLD_HEIGHT;
+      const game = gameRef.current;
+      const x = Math.random() * game.worldWidth;
+      const y = Math.random() * game.worldHeight;
       const angle = Math.random() * Math.PI * 2;
     const baseLength = 15 + Math.random() * 20;
     const initialXP = Math.floor(baseLength * 2); // Initial XP based on length
     
-    // Sistema de mejoras progresivo según nivel del juego (1-25)
-    // Nivel 1: sin mejoras, Nivel 25: mezcla de todo
-    const getEnemyUpgrades = (level) => {
-      if (level === 1) {
-        // Nivel 1: sin mejoras
+    // Sistema de mejoras progresivo según enemyUpgradeLevel del admin (0-10)
+    // Este valor se puede controlar desde el admin panel para ecualizar la dificultad
+    const getEnemyUpgrades = (level, configUpgradeLevel) => {
+      // Usar el valor del admin si está definido, sino calcular del nivel
+      const maxUpgradeLevel = configUpgradeLevel ?? Math.min(10, Math.ceil(level / 2.5));
+      
+      if (maxUpgradeLevel === 0) {
+        // Sin mejoras
         return { shieldLevel: 0, cannonLevel: 0, speedLevel: 0, bulletSpeedLevel: 0, magnetLevel: 0, healthLevel: 0 };
       }
       
-      // Probabilidad base de tener mejoras: aumenta con el nivel
-      // Nivel 2: 10%, Nivel 25: 100%
-      const upgradeChance = Math.min(1, (level - 1) / 24);
-      
-      // Nivel máximo de mejoras disponible: aumenta con el nivel
-      // Nivel 2-5: max 1-2, Nivel 6-10: max 3-4, Nivel 11-15: max 5-6, etc.
-      const maxUpgradeLevel = Math.min(10, Math.ceil(level / 2.5));
+      // Probabilidad base de tener mejoras: basada en maxUpgradeLevel
+      // upgradeLevel 0-1: 20-30%, upgradeLevel 10: 100%
+      const upgradeChance = Math.min(1, 0.2 + (maxUpgradeLevel * 0.08));
       
       // Función para determinar el nivel de una mejora
+      // Genera valores aleatorios en rango [maxUpgradeLevel-4, maxUpgradeLevel+4] limitados a [0, maxPossible]
       const getUpgradeLevel = (maxPossible) => {
         if (Math.random() > upgradeChance) return 0;
-        // En niveles altos, algunos enemigos tienen mejoras al máximo
-        if (level >= 20 && Math.random() < 0.2) {
-          return maxPossible; // 20% chance de tener al máximo en niveles 20+
-        }
-        // Random entre 0 y el máximo disponible para este nivel
-        return Math.floor(Math.random() * (maxPossible + 1));
+        // Generar valor en torno al maxUpgradeLevel ±4
+        const variance = Math.floor(Math.random() * 9) - 4; // -4 a +4
+        const targetLevel = maxUpgradeLevel + variance;
+        // Limitar a [0, maxPossible]
+        return Math.max(0, Math.min(maxPossible, targetLevel));
       };
       
       return {
-        shieldLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        cannonLevel: getUpgradeLevel(Math.min(5, Math.ceil(maxUpgradeLevel / 2))),
-        speedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        bulletSpeedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        magnetLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        healthLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel))
+        shieldLevel: getUpgradeLevel(10),
+        cannonLevel: getUpgradeLevel(5),
+        speedLevel: getUpgradeLevel(10),
+        bulletSpeedLevel: getUpgradeLevel(10),
+        magnetLevel: getUpgradeLevel(10),
+        healthLevel: getUpgradeLevel(10)
       };
     };
     
-    const upgrades = getEnemyUpgrades(gameLevel);
+    const upgrades = getEnemyUpgrades(gameLevel, levelConfig.enemyUpgradeLevel);
     
     // Vida basada en healthLevel: nivel 0 = 2, nivel 1 = 4, nivel 2 = 6... nivel 10 = 22
     const enemyMaxHealth = 2 + (upgrades.healthLevel * 2);
@@ -601,6 +653,85 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
   };
 
+  // Helper function to create Killer Saw
+  const createKillerSaw = (levelConfig) => {
+    const game = gameRef.current;
+    // Tamaños: más grande = más daño
+    const sizes = [20, 30, 40, 50, 60];
+    const sizeDamages = [1, 2, 3, 4, 5]; // Daño según tamaño: pequeña=1, grande=5
+    const colors = ['#ffdd00', '#ffaa00', '#ff6600', '#ff3300', '#ff0000']; // Amarillo (débil) a Rojo (fuerte)
+    
+    const sizeIndex = Math.floor(Math.random() * sizes.length);
+    const size = sizes[sizeIndex];
+    const damage = sizeDamages[sizeIndex]; // Daño basado en tamaño (1-5)
+    const color = colors[sizeIndex]; // Color también basado en tamaño
+    
+    return {
+      x: Math.random() * (game.worldWidth - size * 2) + size,
+      y: Math.random() * (game.worldHeight - size * 2) + size,
+      radius: size,
+      color: color,
+      damage: damage, // 1-5 según tamaño
+      rotation: 0,
+      rotationSpeed: 0.05 + Math.random() * 0.05,
+      velocity: {
+        x: (Math.random() - 0.5) * 2,
+        y: (Math.random() - 0.5) * 2
+      },
+      speed: 1 + Math.random()
+    };
+  };
+
+  // Helper function to create Floating Cannon
+  const createFloatingCannon = (levelConfig) => {
+    const game = gameRef.current;
+    return {
+      x: Math.random() * (game.worldWidth - 100) + 50,
+      y: Math.random() * (game.worldHeight - 100) + 50,
+      angle: Math.random() * Math.PI * 2,
+      shootCooldown: 0,
+      shootInterval: 2000 + Math.random() * 1000,
+      range: 400,
+      bulletSpeed: 5
+    };
+  };
+
+  // Helper function to create Resentful Snake
+  const createResentfulSnake = (levelConfig) => {
+    const game = gameRef.current;
+    const x = Math.random() * game.worldWidth;
+    const y = Math.random() * game.worldHeight;
+    const angle = Math.random() * Math.PI * 2;
+    
+    return {
+      segments: [{ x, y }],
+      direction: { x: Math.cos(angle), y: Math.sin(angle) },
+      speed: levelConfig.enemySpeed * 1.2,
+      length: 20 + Math.random() * 15,
+      hue: 0, // Red hue for resentful
+      isResentful: true,
+      lastShotTime: 0,
+      shootCooldown: 1500,
+      chaseRange: 500
+    };
+  };
+
+  // Helper function to create Health Box
+  const createHealthBox = (levelConfig) => {
+    const game = gameRef.current;
+    const sizes = [1, 3, 5]; // Health points
+    const sizeIndex = Math.floor(Math.random() * sizes.length);
+    
+    return {
+      x: Math.random() * (game.worldWidth - 40) + 20,
+      y: Math.random() * (game.worldHeight - 40) + 20,
+      healthPoints: sizes[sizeIndex],
+      size: 15 + sizeIndex * 5,
+      pulse: 0,
+      pulseSpeed: 0.05
+    };
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -626,17 +757,66 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       }
     };
 
+    // Función para aplicar daño con efectos visuales
+    const applyDamage = (damage, x, y) => {
+      const game = gameRef.current;
+      
+      // Si está invulnerable, no recibe daño
+      if (game.invulnerable > 0) {
+        createParticle(x, y, '#00ffff', 5); // Efecto de escudo
+        return false;
+      }
+      
+      game.currentHealth -= damage;
+      game.damageFlash = 30; // 30 frames de flash rojo (~0.5 segundos)
+      game.invulnerable = 60; // 60 frames de invulnerabilidad (~1 segundo)
+      
+      createParticle(x, y, '#ff0000', 12);
+      
+      return game.currentHealth <= 0; // Retorna true si murió
+    };
+
+    // Función para aplicar curación con efectos visuales
+    const applyHeal = (amount, x, y) => {
+      const game = gameRef.current;
+      const previousHealth = game.currentHealth;
+      game.currentHealth = Math.min(game.currentHealth + amount, game.maxHealth);
+      
+      if (game.currentHealth > previousHealth) {
+        game.healFlash = 20; // 20 frames de flash verde (~0.33 segundos)
+        createParticle(x, y, '#00ff00', 10);
+        return true;
+      }
+      return false;
+    };
+
     const initGame = () => {
       const game = gameRef.current;
       const levelConfig = getLevelConfig(game.level, levelConfigs);
       
+      // Update world size based on level map size
+      const worldSize = getWorldSize(levelConfig.mapSize);
+      game.worldWidth = worldSize;
+      game.worldHeight = worldSize;
+      
+      console.log(`🗺️ Mapa nivel ${game.level}: mapSize=${levelConfig.mapSize}, BASE_UNIT=${BASE_UNIT}, worldSize=${worldSize}px`);
+      
       game.snake = [{ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }];
       game.direction = { x: 1, y: 0 };
       game.nextDirection = { x: 1, y: 0 };
-      game.food = Array.from({ length: levelConfig.xpDensity }, createFood);
+      game.food = Array.from({ length: levelConfig.xpPoints }, createFood);
       game.stars = []; // Reset stars
       game.enemies = Array.from({ length: levelConfig.enemyCount }, () => createEnemy(levelConfig, game.level));
-      console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos`);
+      
+      // Initialize new entities
+      game.killerSaws = Array.from({ length: levelConfig.killerSawCount }, () => createKillerSaw(levelConfig));
+      game.floatingCannons = Array.from({ length: levelConfig.floatingCannonCount }, () => createFloatingCannon(levelConfig));
+      game.resentfulSnakes = Array.from({ length: levelConfig.resentfulSnakeCount }, () => createResentfulSnake(levelConfig));
+      game.healthBoxes = Array.from({ length: levelConfig.healthBoxCount }, () => createHealthBox(levelConfig));
+      game.structures = [];
+      
+      console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, mapa ${levelConfig.mapSize}x${levelConfig.mapSize}`);
+      game.totalStarsGenerated = 0; // Reset star counter for level
       game.particles = [];
       game.currentXP = 0;
       game.currentStars = 0;
@@ -644,6 +824,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
       game.maxHealth = 2 + (healthLevel * 2);
       game.currentHealth = game.maxHealth;
+      // Reset efectos visuales
+      game.damageFlash = 0;
+      game.healFlash = 0;
+      game.invulnerable = 0;
       // Aplicar velocidad del nivel
       game.speed = levelConfig.playerSpeed;
       game.baseSpeed = levelConfig.playerSpeed;
@@ -723,6 +907,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const dy = touchY - centerY;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
+      // Calcular intensidad (0-1) basada en distancia desde el centro
+      const intensity = Math.min(distance / radius, 1);
+      joystickRef.current.intensity = intensity;
+      
       if (distance < radius) {
         // Within circle - use actual position
         const rect = canvasRef.current.getBoundingClientRect();
@@ -734,7 +922,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         setJoystickDirection(dir);
         joystickRef.current.direction = dir; // Store synchronously
       } else {
-        // Outside circle - clamp to edge
+        // Outside circle - clamp to edge (intensidad máxima = 1)
         const angle = Math.atan2(dy, dx);
         const dir = { x: Math.cos(angle), y: Math.sin(angle) };
         const rect = canvasRef.current.getBoundingClientRect();
@@ -752,6 +940,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       e.preventDefault();
       joystickRef.current.isActive = false;
       joystickRef.current.direction = { x: 0, y: 0 };
+      joystickRef.current.intensity = 0;
       setJoystickActive(false);
       setJoystickPosition({ x: 0, y: 0 });
       setJoystickDirection({ x: 0, y: 0 });
@@ -848,6 +1037,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       }
     };
 
+    const handleMouseDown = (e) => {
+      // Don't handle mouse if admin panel is open or shop is open
+      if (showAdminPanel || shopOpen) return;
+      
+      // Solo botón izquierdo (button === 0) y solo si tiene cañón
+      if (e.button === 0 && cannonLevel > 0) {
+        e.preventDefault();
+        if (!isShootingRef.current) {
+          isShootingRef.current = true;
+          shootBullet(); // Disparo inmediato
+          startAutoFire(); // Iniciar auto-fire
+        }
+      }
+    };
+
+    const handleMouseUp = (e) => {
+      if (e.button === 0) {
+        e.preventDefault();
+        stopAutoFire();
+      }
+    };
+
     const shootBullet = () => {
       const game = gameRef.current;
       if (!game.snake || game.snake.length === 0) {
@@ -880,9 +1091,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Calcular cooldown: base según cannonLevel, reducido por bulletSpeedLevel
       // Base: cannon level 5 = 500ms, otros = 1000ms
       const baseCooldown = cannonLevel === 5 ? 500 : 1000;
-      // bulletSpeedLevel reduce el cooldown: nivel 1 = 10% menos, nivel 10 = 90% menos
-      const cooldownReduction = bulletSpeedLevel * 0.1; // 10% por nivel
-      const cooldown = Math.max(50, baseCooldown * (1 - cooldownReduction)); // Mínimo 50ms
+      // bulletSpeedLevel reduce el cooldown LINEALMENTE: cada nivel resta 2ms * 10 = 20ms máximo
+      // Nivel 0: base, Nivel 1: base-2, Nivel 2: base-4, ..., Nivel 10: base-20
+      const cooldownReduction = bulletSpeedLevel * 2; // 2ms por nivel, máximo 20ms con nivel 10
+      const cooldown = Math.max(50, baseCooldown - cooldownReduction); // Mínimo 50ms
       
       if (currentTime - game.lastPlayerShot < cooldown) {
         return; // Still on cooldown
@@ -923,19 +1135,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Level 4: 2 bullets from head + 2 from tail (double cannon tail)
       // Level 5: Same as 4 but faster (2 shots/sec)
       
-      // Velocidad de bala siempre constante (no cambia con bulletSpeedLevel)
-      const bulletSpeed = 8;
+      // Velocidad de bala: escala lineal de nivel 1 (4) a nivel 10 (12)
+      // Nivel 0 sin mejora = 4, Nivel 1 = 4, Nivel 2 = 4.89, ..., Nivel 10 = 12
+      // Fórmula: 4 + ((nivel - 1) * 8 / 9) para niveles 1-10
+      const bulletSpeed = bulletSpeedLevel >= 1 
+        ? 4 + ((bulletSpeedLevel - 1) * 8 / 9)
+        : 4; // Sin mejora = velocidad mínima
       
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
+        // Velocidad relativa a la víbora: bala + velocidad de la víbora
         const headBulletCount = cannonLevel >= 2 ? 2 : 1;
+        const snakeSpeed = game.speed || 2; // Velocidad actual de la víbora
         for (let i = 0; i < headBulletCount; i++) {
           const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
         game.bullets.push({
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
-            vx: game.direction.x * bulletSpeed,
-            vy: game.direction.y * bulletSpeed,
+            // Sumar velocidad de la víbora para que la bala salga adelante
+            vx: game.direction.x * (bulletSpeed + snakeSpeed),
+            vy: game.direction.y * (bulletSpeed + snakeSpeed),
           life: 100,
           owner: 'player'
         });
@@ -1004,6 +1223,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // Create food and star from dead enemy
     // starsToCreate: número de estrellas a crear (1 + estrellas que había comido el enemigo)
     const createFoodFromEnemy = (x, y, totalXP, starsToCreate = 1) => {
+      const game = gameRef.current;
+      
+      // Debug: contar estrellas generadas
+      game.totalStarsGenerated = (game.totalStarsGenerated || 0) + starsToCreate;
+      console.log(`⭐ Estrella generada! Total generadas: ${game.totalStarsGenerated}, En mapa: ${game.stars.length + starsToCreate}`);
       const foodCount = Math.min(20, Math.max(5, Math.floor(totalXP / 5))); // 5-20 food items
       const xpPerFood = Math.floor(totalXP / foodCount);
       const spreadRadius = 100; // Spread food in 100px radius
@@ -1016,12 +1240,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         
         // Create high-value food (yellow/orange for visibility)
         const food = createFood(Math.random() < 0.5 ? 'yellow' : 'orange', xpPerFood);
-        food.x = Math.max(BORDER_WIDTH, Math.min(WORLD_WIDTH - BORDER_WIDTH, foodX));
-        food.y = Math.max(BORDER_WIDTH, Math.min(WORLD_HEIGHT - BORDER_WIDTH, foodY));
-        gameRef.current.food.push(food);
+        food.x = Math.max(BORDER_WIDTH, Math.min(game.worldWidth - BORDER_WIDTH, foodX));
+        food.y = Math.max(BORDER_WIDTH, Math.min(game.worldHeight - BORDER_WIDTH, foodY));
+        game.food.push(food);
       }
       
       // Create golden stars at the death location (1 propia + las que había comido)
+      // Todas las estrellas de la misma víbora comparten un groupId para limitar curación
+      const starGroupId = Date.now() + Math.random(); // ID único para este grupo de estrellas
+      
       for (let i = 0; i < starsToCreate; i++) {
         // Distribuir las estrellas en un pequeño radio si son varias
         const starAngle = starsToCreate > 1 ? (Math.PI * 2 * i) / starsToCreate : 0;
@@ -1034,7 +1261,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         rotation: 0,
         rotationSpeed: 0.02,
         pulse: 0,
-        pulseSpeed: 0.05
+        pulseSpeed: 0.05,
+        groupId: starGroupId, // ID del grupo para limitar curación a 1 por víbora muerta
+        healedAlready: false // Se marca true cuando el grupo ya curó
       });
       }
     };
@@ -1165,13 +1394,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         let newY = head.y + enemy.direction.y * enemy.speed * normalizedDelta;
 
         // Bounce off world walls
-        if (newX < BORDER_WIDTH || newX > WORLD_WIDTH - BORDER_WIDTH) {
+        if (newX < BORDER_WIDTH || newX > game.worldWidth - BORDER_WIDTH) {
           enemy.direction.x *= -1;
-          newX = Math.max(BORDER_WIDTH, Math.min(WORLD_WIDTH - BORDER_WIDTH, newX));
+          newX = Math.max(BORDER_WIDTH, Math.min(game.worldWidth - BORDER_WIDTH, newX));
         }
-        if (newY < BORDER_WIDTH || newY > WORLD_HEIGHT - BORDER_WIDTH) {
+        if (newY < BORDER_WIDTH || newY > game.worldHeight - BORDER_WIDTH) {
           enemy.direction.y *= -1;
-          newY = Math.max(BORDER_WIDTH, Math.min(WORLD_HEIGHT - BORDER_WIDTH, newY));
+          newY = Math.max(BORDER_WIDTH, Math.min(game.worldHeight - BORDER_WIDTH, newY));
         }
 
         // Check collision with central rectangle walls (enemies must use openings too)
@@ -1270,8 +1499,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
 
         enemy.segments.unshift({
-          x: Math.max(BORDER_WIDTH, Math.min(WORLD_WIDTH - BORDER_WIDTH, newX)),
-          y: Math.max(BORDER_WIDTH, Math.min(WORLD_HEIGHT - BORDER_WIDTH, newY))
+          x: Math.max(BORDER_WIDTH, Math.min(game.worldWidth - BORDER_WIDTH, newX)),
+          y: Math.max(BORDER_WIDTH, Math.min(game.worldHeight - BORDER_WIDTH, newY))
         });
 
         if (enemy.segments.length > enemy.length) {
@@ -1321,6 +1550,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Enemy eats star - contador y recuperar vida
             enemy.starsEaten = (enemy.starsEaten || 0) + 1;
             
+            // Debug: log cuando un enemigo come una estrella
+            console.log(`🐍 Enemigo comió estrella! starsEaten ahora: ${enemy.starsEaten}, Estrellas en mapa: ${game.stars.length - 1}`);
+            
             // Recuperar vida hasta el máximo
             enemy.currentHealth = Math.min(enemy.currentHealth + enemy.maxHealth, enemy.maxHealth);
             
@@ -1334,16 +1566,45 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
 
         // Check collision: Player head vs Enemy body (excluding enemy head)
-        // If player head hits enemy body, PLAYER dies
+        // Si el jugador choca con el cuerpo de un enemigo, recibe daño (no muerte instantánea)
         for (let i = 1; i < enemy.segments.length; i++) {
           if (checkCollision(playerHead, enemy.segments[i], game.snakeSize + SNAKE_SIZE)) {
-            // Player dies - save session and game over
+            // Sistema de escudo: probabilidad de esquivar
+            let dodged = false;
+            if (shieldLevel > 0) {
+              const dodgeChance = (shieldLevel - 1) / shieldLevel;
+              dodged = Math.random() < dodgeChance;
+            }
+            
+            if (!dodged) {
+              // No esquivó - recibe daño con efectos visuales
+              const damage = 3;
+              const died = applyDamage(damage, playerHead.x, playerHead.y);
+              
+              // Si la vida llega a 0 o menos, el jugador muere
+              if (died) {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-            // Use game.sessionXP for score because React state (score) may be outdated
-            saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+                saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
             setGameState('gameOver');
             return;
+              }
+            } else {
+              // Esquivó - efecto visual azul brillante
+              createParticle(playerHead.x, playerHead.y, '#00ffff', 12);
+            }
+            
+            // Empujar al jugador hacia atrás para evitar múltiples colisiones seguidas (siempre)
+            const dx = playerHead.x - enemy.segments[i].x;
+            const dy = playerHead.y - enemy.segments[i].y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 0) {
+              const pushForce = 30;
+              playerHead.x += (dx / distance) * pushForce;
+              playerHead.y += (dy / distance) * pushForce;
+            }
+            
+            break; // Solo una colisión por frame
           }
         }
 
@@ -1352,33 +1613,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const enemyHead = enemy.segments[0];
         for (let i = 1; i < game.snake.length; i++) {
           if (checkCollision(enemyHead, game.snake[i], SNAKE_SIZE + game.snakeSize)) {
-            // Enemy dies - create food and stars (1 propia + las que comió)
-            const deathX = enemyHead.x;
-            const deathY = enemyHead.y;
-            const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
-            const starsToCreate = 1 + (enemy.starsEaten || 0);
-            createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-            createParticle(deathX, deathY, '#ff3366', 15);
-            enemiesToRemove.push(enemyIndex);
+            // Only process if not already marked for death
+            if (!enemy.markedForDeath && !enemiesToRemove.includes(enemyIndex)) {
+              enemy.markedForDeath = true;
+              // Enemy dies - create food and stars (1 propia + las que comió)
+              const deathX = enemyHead.x;
+              const deathY = enemyHead.y;
+              const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
+              const starsToCreate = 1 + (enemy.starsEaten || 0);
+              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+              createParticle(deathX, deathY, '#ff3366', 15);
+              enemiesToRemove.push(enemyIndex);
+            }
             break;
           }
         }
 
         // Enemy head vs Enemy body collisions (enemies can kill each other)
         game.enemies.forEach((otherEnemy, otherIndex) => {
-          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex)) return;
+          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex) || otherEnemy.markedForDeath) return;
           
           const otherHead = otherEnemy.segments[0];
           for (let i = 1; i < enemy.segments.length; i++) {
             if (checkCollision(otherHead, enemy.segments[i], SNAKE_SIZE + SNAKE_SIZE)) {
-              // Other enemy dies - create food and stars (1 propia + las que comió)
-              const deathX = otherHead.x;
-              const deathY = otherHead.y;
-              const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
-              const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
-              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-              createParticle(deathX, deathY, '#ff3366', 15);
-              if (!enemiesToRemove.includes(otherIndex)) {
+              // Only process if not already marked for death
+              if (!otherEnemy.markedForDeath && !enemiesToRemove.includes(otherIndex)) {
+                otherEnemy.markedForDeath = true;
+                // Other enemy dies - create food and stars (1 propia + las que comió)
+                const deathX = otherHead.x;
+                const deathY = otherHead.y;
+                const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
+                const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
+                createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+                createParticle(deathX, deathY, '#ff3366', 15);
                 enemiesToRemove.push(otherIndex);
               }
               break;
@@ -1403,7 +1670,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         if (bullet.owner === 'player') {
         let hit = false;
           game.enemies.forEach((enemy, enemyIndex) => {
-          if (!hit && enemy.segments.length > 0) {
+          // Skip if enemy is already marked for death or already hit this frame
+          if (!hit && enemy.segments.length > 0 && !enemiesToKill.includes(enemyIndex) && !enemy.markedForDeath) {
               // Check collision with enemy head (most important)
               const enemyHead = enemy.segments[0];
               let hitEnemyHead = false;
@@ -1436,7 +1704,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 hit = true;
                 
                 // Si la vida llega a 0 o menos, el enemigo muere
-                if (enemy.currentHealth <= 0) {
+                if (enemy.currentHealth <= 0 && !enemy.markedForDeath) {
+                  enemy.markedForDeath = true; // Prevent duplicate death processing
                   const deathX = enemyHead.x;
                   const deathY = enemyHead.y;
                   const enemyXP = enemy.totalXP || (enemy.length * 2);
@@ -1453,8 +1722,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           if (hit) return false; // Remove bullet if it hit
         }
         
-        // Check collision with player (enemy bullets)
-        if (bullet.owner === 'enemy' && game.snake.length > 0) {
+        // Check collision with player (enemy and cannon bullets)
+        if ((bullet.owner === 'enemy' || bullet.owner === 'cannon') && game.snake.length > 0) {
           const playerHead = game.snake[0];
           let hitHead = false;
           let hitBody = false;
@@ -1473,15 +1742,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           }
           
           if (hitHead || hitBody) {
-            // Sistema de vida: cabeza -2, cuerpo -1
-            const damage = hitHead ? 2 : 1;
-            game.currentHealth -= damage;
+            // Sistema de escudo: probabilidad de esquivar
+            // Nivel 2: 1 de 2 balas afectan (50% esquivar)
+            // Nivel 3: 1 de 3 balas afectan (66.6% esquivar)
+            // Nivel 10: 1 de 10 balas afectan (90% esquivar)
+            let dodged = false;
+            if (shieldLevel > 0) {
+              const dodgeChance = (shieldLevel - 1) / shieldLevel;
+              dodged = Math.random() < dodgeChance;
+            }
             
-            // Efecto visual
-              createParticle(bullet.x, bullet.y, shieldLevel > 0 ? '#6495ed' : '#ff0000', 8);
+            if (dodged) {
+              // Esquivó el ataque - efecto visual azul brillante
+              createParticle(bullet.x, bullet.y, '#00ffff', 12);
+              return false; // Remove bullet sin hacer daño
+            }
+            
+            // No esquivó - recibe daño con efectos visuales
+            const damage = hitHead ? 2 : 1;
+            const died = applyDamage(damage, bullet.x, bullet.y);
               
             // Si la vida llega a 0 o menos, el jugador muere
-            if (game.currentHealth <= 0) {
+            if (died) {
                 const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
                 createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
@@ -1494,8 +1776,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
         
         return bullet.life > 0 &&
-               bullet.x > 0 && bullet.x < WORLD_WIDTH &&
-               bullet.y > 0 && bullet.y < WORLD_HEIGHT;
+               bullet.x > 0 && bullet.x < game.worldWidth &&
+               bullet.y > 0 && bullet.y < game.worldHeight;
       });
       
       // Remove killed enemies
@@ -1703,10 +1985,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       }
       
-      // Apply speed improvement when cursor is close (speedLevel: 1-10 = 10% to 100% extra)
-      // Only applies on desktop with mouse
+      // Apply speed based on input intensity
       let currentSpeed = game.baseSpeed;
-      if (!isMobile && speedLevel > 0 && distance < 200) {
+      
+      if (isMobile && isJoystickActive) {
+        // Mobile: velocidad proporcional a qué tan lejos está el dedo del centro
+        // Mínimo 30% de velocidad (cerca del centro), máximo 100% + bonus de speedLevel (en el borde)
+        const joystickIntensity = joystickRef.current.intensity;
+        const minSpeedFactor = 0.3; // 30% velocidad cuando está casi en el centro
+        const maxSpeedFactor = 1.0 + (speedLevel * 0.1); // 100% + 10% por nivel de velocidad
+        const speedFactor = minSpeedFactor + (maxSpeedFactor - minSpeedFactor) * joystickIntensity;
+        currentSpeed = game.baseSpeed * speedFactor;
+      } else if (!isMobile && speedLevel > 0 && distance < 200) {
+        // Desktop: bonus de velocidad cuando el cursor está cerca
         const speedBonus = (speedLevel * 10) / 100; // 10% per level
         currentSpeed = game.baseSpeed * (1 + speedBonus);
       }
@@ -1732,15 +2023,42 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         y: head.y + game.direction.y * game.speed * normalizedDelta
       };
 
-      // Check collision with red borders - instant death
-      if (newHead.x < BORDER_WIDTH || newHead.x > WORLD_WIDTH - BORDER_WIDTH ||
-          newHead.y < BORDER_WIDTH || newHead.y > WORLD_HEIGHT - BORDER_WIDTH) {
-        // Save game session before game over
+      // Check collision with red borders - aplica daño con escudo
+      if (newHead.x < BORDER_WIDTH || newHead.x > game.worldWidth - BORDER_WIDTH ||
+          newHead.y < BORDER_WIDTH || newHead.y > game.worldHeight - BORDER_WIDTH) {
+        
+        // Sistema de escudo: probabilidad de esquivar
+        let dodged = false;
+        if (shieldLevel > 0) {
+          const dodgeChance = (shieldLevel - 1) / shieldLevel;
+          dodged = Math.random() < dodgeChance;
+        }
+        
+        if (!dodged) {
+          // No esquivó - recibe daño
+          const damage = 5;
+          game.currentHealth -= damage;
+          
+          // Efecto visual rojo
+          createParticle(newHead.x, newHead.y, '#ff0000', 15);
+          
+          // Si la vida llega a 0, game over
+          if (game.currentHealth <= 0) {
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        // Use game.sessionXP for score because React state (score) may be outdated
-        saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+            saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
         setGameState('gameOver');
         return;
+          }
+        } else {
+          // Esquivó - efecto visual azul brillante
+          createParticle(newHead.x, newHead.y, '#00ffff', 15);
+        }
+        
+        // Rebotar hacia el centro para no quedar pegado al borde (siempre)
+        if (newHead.x < BORDER_WIDTH) newHead.x = BORDER_WIDTH + 5;
+        if (newHead.x > game.worldWidth - BORDER_WIDTH) newHead.x = game.worldWidth - BORDER_WIDTH - 5;
+        if (newHead.y < BORDER_WIDTH) newHead.y = BORDER_WIDTH + 5;
+        if (newHead.y > game.worldHeight - BORDER_WIDTH) newHead.y = game.worldHeight - BORDER_WIDTH - 5;
       }
 
       // Check collision with central rectangle walls - instant death
@@ -1859,8 +2177,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.snake.unshift(newHead);
 
       // Update camera to follow player
-      game.camera.x = Math.max(0, Math.min(WORLD_WIDTH - CANVAS_WIDTH, newHead.x - CANVAS_WIDTH / 2));
-      game.camera.y = Math.max(0, Math.min(WORLD_HEIGHT - CANVAS_HEIGHT, newHead.y - CANVAS_HEIGHT / 2));
+      game.camera.x = Math.max(0, Math.min(game.worldWidth - CANVAS_WIDTH, newHead.x - CANVAS_WIDTH / 2));
+      game.camera.y = Math.max(0, Math.min(game.worldHeight - CANVAS_HEIGHT, newHead.y - CANVAS_HEIGHT / 2));
 
       // Apply magnet improvement to attract food towards snake HEAD
       // magnetLevel 1-10: rango 25, 50, 75... 250 pixels desde la cabeza
@@ -1900,6 +2218,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
       // Check food collision
       let foodEaten = false;
+      const levelConfig = getLevelConfig(game.level, levelConfigs);
       game.food = game.food.filter(food => {
         if (checkCollision(newHead, food, game.snakeSize + food.size)) {
           // Head levels: 1 = normal (1x), 2 = double (2x), 3 = triple (3x)
@@ -1916,6 +2235,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           
           createParticle(food.x, food.y, food.color, 5);
           foodEaten = true;
+          
+          // Reaparecer otro punto XP en otro lugar del mapa
+          const newFood = createFood();
+          game.food.push(newFood);
+          
           return false;
         }
         return true;
@@ -1930,11 +2254,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           setCurrentLevelStars(prev => prev + 1);
           setTotalStars(prev => prev + 1);
           
-          // Recuperar vida al comer estrella (hasta el máximo)
-          const previousHealth = game.currentHealth;
-          game.currentHealth = Math.min(game.currentHealth + game.maxHealth, game.maxHealth);
-          if (game.currentHealth > previousHealth) {
-            console.log(`❤️ Vida recuperada: ${previousHealth} → ${game.currentHealth}/${game.maxHealth}`);
+          // Recuperar vida SOLO si este grupo de estrellas no ha curado todavía
+          // (máximo 1 vida por víbora muerta, sin importar cuántas estrellas tenía)
+          if (star.groupId) {
+            // Estrella de víbora muerta - verificar si el grupo ya curó
+            const groupAlreadyHealed = game.stars.some(s => s.groupId === star.groupId && s.healedAlready);
+            
+            if (!groupAlreadyHealed) {
+              // Primera estrella del grupo - curar 1 vida y marcar el grupo
+              applyHeal(1, star.x, star.y);
+              // Marcar todas las estrellas del mismo grupo como que ya curaron
+              game.stars.forEach(s => {
+                if (s.groupId === star.groupId) {
+                  s.healedAlready = true;
+                }
+              });
+            }
+            // Si el grupo ya curó, no cura pero sí cuenta la estrella
+          } else {
+            // Estrella sin grupo (del mapa o spawn inicial) - cura normalmente
+            applyHeal(1, star.x, star.y);
           }
           
           createParticle(star.x, star.y, '#FFD700', 8);
@@ -1965,10 +2304,296 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
         saveGameSession(game.sessionXP, level, game.sessionXP, duration);
         
+        // Si es el nivel 25, mostrar pantalla especial de victoria
+        if (level === 25) {
+          // Obtener datos del ranking del usuario
+          fetch(`/api/leaderboard/rank/${user.id}`)
+            .then(res => res.json())
+            .then(data => {
+              const previousBestScore = data.bestScore || 0;
+              
+              setVictoryData({
+                score: game.sessionXP,
+                previousBestScore: previousBestScore,
+                position: data.rank || '?',
+                isNewRecord: game.sessionXP > previousBestScore,
+                series: currentSeries
+              });
+              setGameState('gameComplete');
+            })
+            .catch(err => {
+              console.error('Error obteniendo ranking:', err);
+              // Fallback si falla el endpoint
+              setVictoryData({
+                score: game.sessionXP,
+                previousBestScore: 0,
+                position: '?',
+                isNewRecord: true,
+                series: currentSeries
+              });
+              setGameState('gameComplete');
+            });
+        } else {
         setGameState('levelComplete');
+        }
       }
 
       updateEnemies(normalizedDelta);
+
+      // Update Killer Saws
+      if (game.killerSaws && game.killerSaws.length > 0) {
+        game.killerSaws.forEach(saw => {
+          // Rotate
+          saw.rotation += saw.rotationSpeed * normalizedDelta;
+          
+          // Move
+          saw.x += saw.velocity.x * saw.speed * normalizedDelta;
+          saw.y += saw.velocity.y * saw.speed * normalizedDelta;
+          
+          // Bounce off walls
+          if (saw.x - saw.radius < BORDER_WIDTH || saw.x + saw.radius > game.worldWidth - BORDER_WIDTH) {
+            saw.velocity.x *= -1;
+            saw.x = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldWidth - BORDER_WIDTH - saw.radius, saw.x));
+          }
+          if (saw.y - saw.radius < BORDER_WIDTH || saw.y + saw.radius > game.worldHeight - BORDER_WIDTH) {
+            saw.velocity.y *= -1;
+            saw.y = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldHeight - BORDER_WIDTH - saw.radius, saw.y));
+          }
+          
+          // Check collision with player
+          const head = game.snake[0];
+          if (head) {
+            const dx = head.x - saw.x;
+            const dy = head.y - saw.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const collisionDist = saw.radius + game.snakeSize + 5; // Extra margen para mejor detección
+            
+            if (dist < collisionDist) {
+              // Player hit by saw! - empujar siempre para evitar quedarse pegado
+              const pushForce = 50;
+              if (dist > 0) {
+                head.x += (dx / dist) * pushForce;
+                head.y += (dy / dist) * pushForce;
+              }
+              
+              // Daño variable según tamaño/color de la sierra (1-5)
+              // El escudo NO protege contra las sierras
+              const damage = saw.damage || 1;
+              
+              if (damage > 0) {
+                const died = applyDamage(damage, head.x, head.y);
+                if (died) {
+                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+                  setGameState('gameOver');
+                  return;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Update Floating Cannons
+      if (game.floatingCannons && game.floatingCannons.length > 0) {
+        const currentTime = Date.now();
+        game.floatingCannons.forEach(cannon => {
+          // Apuntar a un segmento aleatorio del cuerpo de la víbora (no solo la cabeza)
+          if (game.snake.length > 0) {
+            // Elegir un segmento aleatorio como objetivo (cabeza o cuerpo)
+            const targetIndex = Math.floor(Math.random() * Math.min(game.snake.length, 10)); // Máximo los primeros 10 segmentos
+            const target = game.snake[targetIndex];
+            
+            const dx = target.x - cannon.x;
+            const dy = target.y - cannon.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Only aim if player is in range
+            if (dist < cannon.range) {
+              const targetAngle = Math.atan2(dy, dx);
+              // Smooth rotation towards target
+              const angleDiff = targetAngle - cannon.angle;
+              cannon.angle += angleDiff * 0.08 * normalizedDelta; // Rotación más rápida
+              
+              // Shoot if cooldown is ready (2 disparos por segundo = 500ms)
+              const shootInterval = 500; // 500ms = 2 disparos por segundo
+              if (currentTime - cannon.shootCooldown > shootInterval) {
+                cannon.shootCooldown = currentTime;
+                
+                // Crear DOBLE BALA (separadas ligeramente)
+                const spreadAngle = 0.15; // Separación entre las dos balas
+                
+                // Bala 1
+                game.bullets.push({
+                  x: cannon.x + Math.cos(cannon.angle - spreadAngle) * 35,
+                  y: cannon.y + Math.sin(cannon.angle - spreadAngle) * 35,
+                  vx: Math.cos(cannon.angle - spreadAngle) * cannon.bulletSpeed,
+                  vy: Math.sin(cannon.angle - spreadAngle) * cannon.bulletSpeed,
+                  life: 150,
+                  owner: 'cannon'
+                });
+                
+                // Bala 2
+                game.bullets.push({
+                  x: cannon.x + Math.cos(cannon.angle + spreadAngle) * 35,
+                  y: cannon.y + Math.sin(cannon.angle + spreadAngle) * 35,
+                  vx: Math.cos(cannon.angle + spreadAngle) * cannon.bulletSpeed,
+                  vy: Math.sin(cannon.angle + spreadAngle) * cannon.bulletSpeed,
+                  life: 150,
+                  owner: 'cannon'
+                });
+              }
+            }
+          }
+        });
+      }
+
+      // Update Resentful Snakes
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        const currentTime = Date.now();
+        game.resentfulSnakes.forEach(snake => {
+          if (!snake.segments || snake.segments.length === 0) return;
+          
+          const snakeHead = snake.segments[0];
+          const playerHead = game.snake[0];
+          
+          if (playerHead) {
+            const dx = playerHead.x - snakeHead.x;
+            const dy = playerHead.y - snakeHead.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Chase player if in range
+            if (dist < snake.chaseRange) {
+              // Aim at player
+              const targetDir = { x: dx / dist, y: dy / dist };
+              
+              // Smooth turning
+              snake.direction.x += (targetDir.x - snake.direction.x) * 0.1 * normalizedDelta;
+              snake.direction.y += (targetDir.y - snake.direction.y) * 0.1 * normalizedDelta;
+              
+              // Normalize
+              const dirLen = Math.sqrt(snake.direction.x * snake.direction.x + snake.direction.y * snake.direction.y);
+              if (dirLen > 0) {
+                snake.direction.x /= dirLen;
+                snake.direction.y /= dirLen;
+              }
+              
+              // Shoot at player
+              if (currentTime - snake.lastShotTime > snake.shootCooldown) {
+                snake.lastShotTime = currentTime;
+                game.bullets.push({
+                  x: snakeHead.x + snake.direction.x * 15,
+                  y: snakeHead.y + snake.direction.y * 15,
+                  vx: snake.direction.x * 6,
+                  vy: snake.direction.y * 6,
+                  life: 100,
+                  owner: 'enemy'
+                });
+              }
+            } else {
+              // Random movement when not chasing
+              if (Math.random() < 0.02 * normalizedDelta) {
+                snake.direction = {
+                  x: Math.cos(Math.random() * Math.PI * 2),
+                  y: Math.sin(Math.random() * Math.PI * 2)
+                };
+              }
+            }
+            
+            // Move snake
+            const newX = snakeHead.x + snake.direction.x * snake.speed * normalizedDelta;
+            const newY = snakeHead.y + snake.direction.y * snake.speed * normalizedDelta;
+            
+            // Bounce off walls
+            if (newX > BORDER_WIDTH && newX < game.worldWidth - BORDER_WIDTH &&
+                newY > BORDER_WIDTH && newY < game.worldHeight - BORDER_WIDTH) {
+              snake.segments.unshift({ x: newX, y: newY });
+              
+              // Maintain length
+              while (snake.segments.length > snake.length) {
+                snake.segments.pop();
+              }
+            } else {
+              // Bounce
+              if (newX <= BORDER_WIDTH || newX >= game.worldWidth - BORDER_WIDTH) {
+                snake.direction.x *= -1;
+              }
+              if (newY <= BORDER_WIDTH || newY >= game.worldHeight - BORDER_WIDTH) {
+                snake.direction.y *= -1;
+              }
+            }
+            
+            // Check collision with player
+            if (dist < game.snakeSize * 2) {
+              // Player hit by resentful snake! - Empujar al jugador
+              const pushForce = 40;
+              if (dist > 0) {
+                playerHead.x += (dx / dist) * pushForce;
+                playerHead.y += (dy / dist) * pushForce;
+              }
+              
+              let damage = 3;
+              
+              if (shieldLevel >= 4) {
+                damage = 0; // Full protection
+              } else if (shieldLevel >= 1) {
+                damage = Math.ceil(damage / 2);
+              }
+              
+              if (damage > 0) {
+                const died = applyDamage(damage, playerHead.x, playerHead.y);
+                
+                // ¡CORTAR LA VÍBORA! - Quitar segmentos según el daño
+                if (game.snake.length > 1) {
+                  const segmentsToCut = Math.min(damage * 3, game.snake.length - 1); // Cortar 3 segmentos por punto de daño
+                  for (let cut = 0; cut < segmentsToCut; cut++) {
+                    const removedSegment = game.snake.pop();
+                    if (removedSegment) {
+                      // Crear partículas rojas donde se cortó
+                      createParticle(removedSegment.x, removedSegment.y, '#ff3366', 5);
+                    }
+                  }
+                }
+                
+                if (died) {
+                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
+                  setGameState('gameOver');
+                  return;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Update Health Boxes
+      if (game.healthBoxes && game.healthBoxes.length > 0) {
+        game.healthBoxes = game.healthBoxes.filter(box => {
+          // Animate pulse
+          box.pulse += box.pulseSpeed * normalizedDelta;
+          
+          // Check collision with player
+          const head = game.snake[0];
+          if (head) {
+            const dx = head.x - box.x;
+            const dy = head.y - box.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < box.size + game.snakeSize) {
+              // Collect health box!
+              applyHeal(box.healthPoints, box.x, box.y);
+              return false; // Remove health box
+            }
+          }
+          return true;
+        });
+      }
+
+      // Update visual effect timers
+      if (game.damageFlash > 0) game.damageFlash -= normalizedDelta;
+      if (game.healFlash > 0) game.healFlash -= normalizedDelta;
+      if (game.invulnerable > 0) game.invulnerable -= normalizedDelta;
 
       // Update particles
       game.particles = game.particles.filter(p => {
@@ -2015,15 +2640,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       if (camY < BORDER_WIDTH * 2) {
         ctx.beginPath();
         ctx.moveTo(0 - camX, BORDER_WIDTH / 2 - camY);
-        ctx.lineTo(WORLD_WIDTH - camX, BORDER_WIDTH / 2 - camY);
+        ctx.lineTo(game.worldWidth - camX, BORDER_WIDTH / 2 - camY);
         ctx.stroke();
       }
       
       // Bottom border
-      if (camY + CANVAS_HEIGHT > WORLD_HEIGHT - BORDER_WIDTH * 2) {
+      if (camY + CANVAS_HEIGHT > game.worldHeight - BORDER_WIDTH * 2) {
         ctx.beginPath();
-        ctx.moveTo(0 - camX, WORLD_HEIGHT - BORDER_WIDTH / 2 - camY);
-        ctx.lineTo(WORLD_WIDTH - camX, WORLD_HEIGHT - BORDER_WIDTH / 2 - camY);
+        ctx.moveTo(0 - camX, game.worldHeight - BORDER_WIDTH / 2 - camY);
+        ctx.lineTo(game.worldWidth - camX, game.worldHeight - BORDER_WIDTH / 2 - camY);
         ctx.stroke();
       }
       
@@ -2031,15 +2656,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       if (camX < BORDER_WIDTH * 2) {
         ctx.beginPath();
         ctx.moveTo(BORDER_WIDTH / 2 - camX, 0 - camY);
-        ctx.lineTo(BORDER_WIDTH / 2 - camX, WORLD_HEIGHT - camY);
+        ctx.lineTo(BORDER_WIDTH / 2 - camX, game.worldHeight - camY);
         ctx.stroke();
       }
       
       // Right border
-      if (camX + CANVAS_WIDTH > WORLD_WIDTH - BORDER_WIDTH * 2) {
+      if (camX + CANVAS_WIDTH > game.worldWidth - BORDER_WIDTH * 2) {
         ctx.beginPath();
-        ctx.moveTo(WORLD_WIDTH - BORDER_WIDTH / 2 - camX, 0 - camY);
-        ctx.lineTo(WORLD_WIDTH - BORDER_WIDTH / 2 - camX, WORLD_HEIGHT - camY);
+        ctx.moveTo(game.worldWidth - BORDER_WIDTH / 2 - camX, 0 - camY);
+        ctx.lineTo(game.worldWidth - BORDER_WIDTH / 2 - camX, game.worldHeight - camY);
         ctx.stroke();
       }
       
@@ -2222,6 +2847,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         star.rotation += star.rotationSpeed;
         star.pulse += star.pulseSpeed;
         
+        // Las estrellas siempre se mueven hacia el jugador (atracción automática)
+        const playerHead = game.snake[0];
+        if (playerHead) {
+          const dx = playerHead.x - star.x;
+          const dy = playerHead.y - star.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // Velocidad de atracción: más rápido cuando está lejos, desacelera al acercarse
+          // Rango máximo de atracción: 800px, velocidad base: 2
+          if (distance > 20 && distance < 800) {
+            const speed = Math.min(4, 2 + (distance / 200)); // Entre 2 y 4 de velocidad
+            star.x += (dx / distance) * speed;
+            star.y += (dy / distance) * speed;
+          }
+        }
+        
         const screenX = star.x - camX;
         const screenY = star.y - camY;
         
@@ -2300,10 +2941,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         { r: 255, g: 0, b: 255 }     // Rosa/Magenta
       ];
       
+      // Dibujar víbora (sin parpadeo para evitar lag)
       game.snake.forEach((seg, i) => {
         const screenX = seg.x - camX;
         const screenY = seg.y - camY;
-        const alpha = 1 - (i / game.snake.length) * 0.2;
+        let alpha = 1 - (i / game.snake.length) * 0.2;
         
         // Calculate color based on position in snake (gradient)
         const colorProgress = Math.min(i / Math.max(game.snake.length - 1, 1), 1);
@@ -2312,9 +2954,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const colorHigh = Math.min(colorLow + 1, snakeColors.length - 1);
         const colorMix = colorIndex - colorLow;
         
-        const r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
-        const g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
-        const b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+        let r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
+        let g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
+        let b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+        
+        // Apply damage flash (red tint)
+        if (game.damageFlash > 0) {
+          const flashIntensity = game.damageFlash / 30;
+          r = Math.min(255, r + Math.round(100 * flashIntensity));
+          g = Math.round(g * (1 - flashIntensity * 0.5));
+          b = Math.round(b * (1 - flashIntensity * 0.5));
+        }
+        
+        // Apply heal flash (green tint)
+        if (game.healFlash > 0) {
+          const healIntensity = game.healFlash / 20;
+          g = Math.min(255, g + Math.round(100 * healIntensity));
+        }
         
         const segmentColor = `rgb(${r}, ${g}, ${b})`;
         
@@ -2330,8 +2986,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         
         // Draw segment with gradient color
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = segmentColor;
+        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : 12);
+        ctx.shadowColor = game.damageFlash > 0 ? '#ff0000' : (game.healFlash > 0 ? '#00ff00' : segmentColor);
         ctx.beginPath();
         ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
         ctx.fill();
@@ -2428,6 +3084,167 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
       ctx.shadowBlur = 0;
 
+      // Draw Killer Saws
+      if (game.killerSaws && game.killerSaws.length > 0) {
+        game.killerSaws.forEach(saw => {
+          const screenX = saw.x - camX;
+          const screenY = saw.y - camY;
+          
+          if (screenX > -100 && screenX < CANVAS_WIDTH + 100 && 
+              screenY > -100 && screenY < CANVAS_HEIGHT + 100) {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(saw.rotation);
+            
+            // Outer glow
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = saw.color;
+            
+            // Draw saw body
+            ctx.fillStyle = saw.color;
+            ctx.beginPath();
+            ctx.arc(0, 0, saw.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw saw teeth
+            const teethCount = 12;
+            ctx.fillStyle = '#333';
+            for (let i = 0; i < teethCount; i++) {
+              const angle = (Math.PI * 2 * i) / teethCount;
+              ctx.beginPath();
+              ctx.moveTo(Math.cos(angle) * saw.radius * 0.5, Math.sin(angle) * saw.radius * 0.5);
+              ctx.lineTo(Math.cos(angle + 0.15) * saw.radius * 1.1, Math.sin(angle + 0.15) * saw.radius * 1.1);
+              ctx.lineTo(Math.cos(angle - 0.15) * saw.radius * 1.1, Math.sin(angle - 0.15) * saw.radius * 1.1);
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Center circle
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(0, 0, saw.radius * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+            ctx.shadowBlur = 0;
+          }
+        });
+      }
+
+      // Draw Floating Cannons
+      if (game.floatingCannons && game.floatingCannons.length > 0) {
+        game.floatingCannons.forEach(cannon => {
+          const screenX = cannon.x - camX;
+          const screenY = cannon.y - camY;
+          
+          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(cannon.angle);
+            
+            // Cannon body
+            ctx.fillStyle = '#555';
+      ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff6600';
+      ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill();
+            
+            // Cannon barrel
+            ctx.fillStyle = '#333';
+            ctx.fillRect(10, -5, 25, 10);
+            
+            // Cannon glow indicator
+            ctx.fillStyle = '#ff6600';
+            ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+      ctx.shadowBlur = 0;
+          }
+        });
+      }
+
+      // Draw Resentful Snakes (special red enemies that chase player)
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        game.resentfulSnakes.forEach(snake => {
+          if (!snake.segments || snake.segments.length === 0) return;
+          
+          snake.segments.forEach((seg, i) => {
+            const screenX = seg.x - camX;
+            const screenY = seg.y - camY;
+            
+            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+              const alpha = 1 - (i / snake.segments.length) * 0.5;
+              
+              // Red color for resentful snakes
+              ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+              ctx.shadowBlur = 15;
+              ctx.shadowColor = '#ff0000';
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Angry eyes on head
+              if (i === 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(screenX - 3, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.arc(screenX + 3, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(screenX - 3, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.arc(screenX + 3, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          });
+          ctx.shadowBlur = 0;
+        });
+      }
+
+      // Draw Health Boxes
+      if (game.healthBoxes && game.healthBoxes.length > 0) {
+        game.healthBoxes.forEach(box => {
+          const screenX = box.x - camX;
+          const screenY = box.y - camY;
+          
+          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            const pulseSize = box.size + Math.sin(box.pulse) * 3;
+            
+            // Glow effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00ff00';
+            
+            // Box body
+            ctx.fillStyle = '#00aa00';
+            ctx.fillRect(screenX - pulseSize/2, screenY - pulseSize/2, pulseSize, pulseSize);
+            
+            // White cross
+            ctx.fillStyle = '#ffffff';
+            const crossWidth = pulseSize * 0.25;
+            const crossLength = pulseSize * 0.7;
+            ctx.fillRect(screenX - crossWidth/2, screenY - crossLength/2, crossWidth, crossLength);
+            ctx.fillRect(screenX - crossLength/2, screenY - crossWidth/2, crossLength, crossWidth);
+            
+            // Health points indicator
+            ctx.font = 'bold 12px monospace';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(`+${box.healthPoints}`, screenX, screenY + pulseSize/2 + 15);
+            ctx.textAlign = 'left';
+            
+            ctx.shadowBlur = 0;
+          }
+        });
+      }
+
       // Draw HUD - Horizontal level bar at the top (compact)
       const barHeight = 30;
       const barPadding = 5;
@@ -2491,9 +3308,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Stars bar fill with glow
       const starsPercent = Math.min(game.currentStars / game.starsNeeded, 1);
       if (starsPercent > 0) {
-        ctx.fillStyle = '#FFD700';
+      ctx.fillStyle = '#FFD700';
         ctx.shadowBlur = 6;
-        ctx.shadowColor = '#FFD700';
+      ctx.shadowColor = '#FFD700';
         ctx.beginPath();
         ctx.roundRect(starsBarX + 2, starsBarY + 2, (starsBarWidth - 4) * starsPercent, starsBarHeight - 4, 3);
         ctx.fill();
@@ -2641,8 +3458,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
       
       // Draw player position on minimap (distinctive marker)
-      const playerMinimapX = minimapX + (game.snake[0].x / WORLD_WIDTH) * minimapWidth;
-      const playerMinimapY = minimapY + (game.snake[0].y / WORLD_HEIGHT) * minimapHeight;
+      const playerMinimapX = minimapX + (game.snake[0].x / game.worldWidth) * minimapWidth;
+      const playerMinimapY = minimapY + (game.snake[0].y / game.worldHeight) * minimapHeight;
       
       // Outer ring for player
       ctx.strokeStyle = '#33ffff';
@@ -2665,8 +3482,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.enemies.forEach(enemy => {
         if (enemy.segments && enemy.segments.length > 0) {
           const enemyHead = enemy.segments[0];
-          const enemyMinimapX = minimapX + (enemyHead.x / WORLD_WIDTH) * minimapWidth;
-          const enemyMinimapY = minimapY + (enemyHead.y / WORLD_HEIGHT) * minimapHeight;
+          const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
+          const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
           
           // Use the enemy's hue color
           ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
@@ -2678,6 +3495,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.shadowBlur = 0;
         }
       });
+      
+      // Draw stars on minimap as small golden dots
+      if (game.stars && game.stars.length > 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.shadowBlur = 3;
+        ctx.shadowColor = '#FFD700';
+        game.stars.forEach(star => {
+          const starMinimapX = minimapX + (star.x / game.worldWidth) * minimapWidth;
+          const starMinimapY = minimapY + (star.y / game.worldHeight) * minimapHeight;
+          ctx.beginPath();
+          ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.shadowBlur = 0;
+      }
       
       // Shop hint (only on desktop, not mobile)
       if (!isMobile) {
@@ -2720,6 +3552,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     if (gameState === 'playing') {
       const canvas = canvasRef.current;
       canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mousedown', handleMouseDown);
+      canvas.addEventListener('mouseup', handleMouseUp);
       canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
       canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
       canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
@@ -2741,6 +3575,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mousedown', handleMouseDown);
+        canvas.removeEventListener('mouseup', handleMouseUp);
         canvas.removeEventListener('touchmove', handleTouchMove);
         canvas.removeEventListener('touchstart', handleTouchStart);
         canvas.removeEventListener('touchend', handleJoystickEnd);
@@ -2774,13 +3610,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
   const initGame = () => {
     const game = gameRef.current;
-    const levelConfig = getLevelConfig(game.level);
+    const levelConfig = getLevelConfig(game.level, levelConfigs);
     
     // Central rectangle (1 screen size = 800x600) - solo si el nivel lo requiere
     if (levelConfig.hasCentralCell) {
       const centralRect = {
-        x: WORLD_WIDTH / 2 - CANVAS_WIDTH / 2,
-        y: WORLD_HEIGHT / 2 - CANVAS_HEIGHT / 2,
+        x: game.worldWidth / 2 - CANVAS_WIDTH / 2,
+        y: game.worldHeight / 2 - CANVAS_HEIGHT / 2,
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
         openings: [
@@ -2827,12 +3663,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.centralRect = null; // Sin celda del medio en niveles bajos
     }
     
-    // Create regular food across the map - usar densidad del nivel
-    game.food = Array.from({ length: levelConfig.xpDensity }, () => createFood());
+    // Create regular food across the map - usar xpPoints del nivel
+    game.food = Array.from({ length: levelConfig.xpPoints }, () => createFood());
     
     // Add yellow/orange orbs inside central rectangle (solo si existe)
     if (game.centralRect) {
-      const centralFoodCount = Math.floor(levelConfig.xpDensity * 0.3); // 30% de la comida en el centro
+      const centralFoodCount = Math.floor(levelConfig.xpPoints * 0.3); // 30% de la comida en el centro
       for (let i = 0; i < centralFoodCount; i++) {
         const color = Math.random() < 0.5 ? 'yellow' : 'orange';
         const food = createFood(color);
@@ -2849,7 +3685,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
       return createEnemy(levelConfig, game.level);
     });
-    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos`);
+    
+    // Create new entities based on level config
+    game.killerSaws = Array.from({ length: levelConfig.killerSawCount }, () => createKillerSaw(levelConfig));
+    game.floatingCannons = Array.from({ length: levelConfig.floatingCannonCount }, () => createFloatingCannon(levelConfig));
+    game.resentfulSnakes = Array.from({ length: levelConfig.resentfulSnakeCount }, () => createResentfulSnake(levelConfig));
+    game.healthBoxes = Array.from({ length: levelConfig.healthBoxCount }, () => createHealthBox(levelConfig));
+    
+    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} canones, ${game.resentfulSnakes.length} viboras resentidas`);
     
     // Spawn player: lejos del borde, lejos de enemigos, fuera del centralRect
     const EDGE_MARGIN = 300; // Distancia mínima del borde
@@ -2861,8 +3704,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     
     do {
       // Random position con margen del borde
-      spawnX = EDGE_MARGIN + Math.random() * (WORLD_WIDTH - EDGE_MARGIN * 2);
-      spawnY = EDGE_MARGIN + Math.random() * (WORLD_HEIGHT - EDGE_MARGIN * 2);
+      spawnX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
+      spawnY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
       
       validSpawn = true;
       
@@ -2901,14 +3744,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     
     // Fallback: si no encontró posición segura, buscar la más alejada de enemigos
     if (!validSpawn) {
-      let bestX = WORLD_WIDTH / 2;
-      let bestY = WORLD_HEIGHT / 2;
+      let bestX = game.worldWidth / 2;
+      let bestY = game.worldHeight / 2;
       let bestMinDistance = 0;
       
       // Probar varias posiciones y elegir la mejor
       for (let i = 0; i < 20; i++) {
-        const testX = EDGE_MARGIN + Math.random() * (WORLD_WIDTH - EDGE_MARGIN * 2);
-        const testY = EDGE_MARGIN + Math.random() * (WORLD_HEIGHT - EDGE_MARGIN * 2);
+        const testX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
+        const testY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
         
         let minDistance = Infinity;
         for (const enemy of game.enemies) {
@@ -2948,9 +3791,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
     game.maxHealth = 2 + (healthLevel * 2);
     game.currentHealth = game.maxHealth;
+    // Reset efectos visuales
+    game.damageFlash = 0;
+    game.healFlash = 0;
+    game.invulnerable = 0;
     game.camera = { 
-      x: WORLD_WIDTH / 2 - CANVAS_WIDTH / 2, 
-      y: WORLD_HEIGHT / 2 - CANVAS_HEIGHT / 2 
+      x: game.worldWidth / 2 - CANVAS_WIDTH / 2, 
+      y: game.worldHeight / 2 - CANVAS_HEIGHT / 2 
     };
     setCurrentLevelXP(0);
     setCurrentLevelStars(0);
@@ -2972,6 +3819,52 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     initGame();
     setShopOpen(false);
     setGameState('playing');
+  };
+
+  const handleRebirth = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/users/${user.id}/rebirth`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({}) // Body vacío requerido por Fastify con Content-Type JSON
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al hacer rebirth');
+      }
+      
+      const data = await response.json();
+      
+      // Actualizar estados locales
+      setRebirthCount(data.rebirthCount);
+      setCurrentSeries(data.currentSeries);
+      setLevel(1);
+      setTotalXP(0);
+      setTotalStars(0);
+      setCurrentLevelXP(0);
+      setCurrentLevelStars(0);
+      
+      // Actualizar niveles de tienda según rebirth
+      const baseLevel = data.rebirthCount;
+      setShieldLevel(baseLevel);
+      setCannonLevel(baseLevel);
+      setMagnetLevel(baseLevel);
+      setSpeedLevel(baseLevel);
+      setBulletSpeedLevel(baseLevel);
+      setHealthLevel(baseLevel);
+      setHeadLevel(1 + baseLevel);
+      
+      // Volver al menú
+      setGameState('menu');
+      setVictoryData(null);
+      
+      console.log(`🔄 Rebirth completado! Serie ${data.currentSeries}, Base Level: ${baseLevel}`);
+    } catch (error) {
+      console.error('Error en rebirth:', error);
+      alert('Error al hacer rebirth. Intenta de nuevo.');
+    }
   };
 
   const buyItem = (item) => {
@@ -3015,7 +3908,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         setHealthLevel(level);
       }
       
-      setShopOpen(false);
+      // NO cerrar la tienda al comprar - el usuario puede querer seguir comprando
+      // setShopOpen(false);
       
       // Save progress after purchase
       setTimeout(() => saveUserProgress(), 100);
@@ -3220,6 +4114,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 {level}
               </div>
             </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+                {currentSeries}
+              </div>
+            </div>
+            {rebirthCount > 0 && (
+              <div>
+                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+                </div>
+              </div>
+            )}
           </div>
           {gameState === 'playing' && (
             <div style={{ width: '100%' }}>
@@ -3320,27 +4228,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 Admin
               </button>
             )}
-            <button
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #ff3366',
-                color: '#ff3366',
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
                   padding: '4px 8px',
                   fontSize: '10px',
-                cursor: 'pointer',
+              cursor: 'pointer',
                   borderRadius: '3px',
                   transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
                 Salir
-            </button>
+          </button>
           </div>
           </div>
         </div>
@@ -3390,6 +4298,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               {level}
             </div>
           </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+              {currentSeries}
+            </div>
+          </div>
+          {rebirthCount > 0 && (
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+              </div>
+            </div>
+          )}
           {gameState === 'playing' && (
             <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
               <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
@@ -3482,28 +4404,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               Admin
             </button>
           )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'transparent',
+            border: '1px solid #ff3366',
+            color: '#ff3366',
                   padding: '5px 10px',
                   fontSize: '11px',
-              cursor: 'pointer',
+            cursor: 'pointer',
                   borderRadius: '3px',
-              transition: 'all 0.3s',
+            transition: 'all 0.3s',
                   marginLeft: '10px'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'transparent';
+          }}
+        >
                 Salir
-          </button>
+        </button>
         </div>
           </div>
       </div>
@@ -4062,7 +4984,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                         Nivel Máximo
                       </p>
                     )}
-                  </div>
+          </div>
                 </div>
               );
             })()}
@@ -4094,11 +5016,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                           {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                         </p>
-                        <button 
+          <button 
                           onClick={() => buyItem(next.item)}
                           disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                          style={{
-                            background: 'transparent',
+            style={{
+              background: 'transparent',
                             border: '2px solid #ff5050',
                             color: '#ff5050',
                             padding: '8px 16px',
@@ -4265,6 +5187,232 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'gameComplete' && victoryData && (
+        <div style={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: '800px',
+          padding: '40px',
+          gap: '30px'
+        }}>
+          {/* Pantalla de Victoria */}
+          <div style={{ 
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
+            padding: '60px',
+            borderRadius: '20px',
+            border: '3px solid #FFD700',
+            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
+            width: '100%'
+          }}>
+            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
+            <h1 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 30px #FFD700, 0 0 50px #ff00ff',
+              fontSize: '48px',
+              marginBottom: '20px',
+              fontWeight: 'bold',
+              letterSpacing: '2px'
+            }}>
+              ¡FELICITACIONES!
+            </h1>
+            <h2 style={{ 
+              color: '#00ff88', 
+              textShadow: '0 0 20px #00ff88',
+              fontSize: '32px',
+              marginBottom: '20px'
+            }}>
+              ¡Completaste los 25 niveles!
+            </h2>
+            
+            {/* Serie Actual */}
+            <div style={{ 
+              fontSize: '20px', 
+              color: '#ff00ff', 
+              marginBottom: '30px',
+              textShadow: '0 0 10px #ff00ff'
+            }}>
+              ⚡ Serie {victoryData.series} Completada ⚡
+            </div>
+            
+            {/* Puntuación */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '30px',
+              borderRadius: '15px',
+              marginBottom: '30px',
+              border: '2px solid #33ffff'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Tu Puntuación Final
+              </div>
+              <div style={{ 
+                fontSize: '56px', 
+                color: '#33ffff', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #33ffff',
+                marginBottom: '20px'
+              }}>
+                {victoryData.score.toLocaleString()} XP
+              </div>
+              
+              {victoryData.isNewRecord ? (
+                <div style={{
+                  fontSize: '28px',
+                  color: '#FFD700',
+                  textShadow: '0 0 20px #FFD700',
+                  fontWeight: 'bold',
+                  marginTop: '15px'
+                }}>
+                  ✨ ¡NUEVO RÉCORD PERSONAL! ✨
+                </div>
+              ) : (
+                <div style={{ fontSize: '18px', color: '#888', marginTop: '10px' }}>
+                  Tu récord anterior: {victoryData.previousBestScore.toLocaleString()} XP
+                </div>
+              )}
+            </div>
+            
+            {/* Posición en Ranking */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '25px',
+              borderRadius: '15px',
+              border: '2px solid #FFD700'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Ranking Mundial
+              </div>
+              <div style={{ 
+                fontSize: '48px', 
+                color: '#FFD700', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #FFD700'
+              }}>
+                {victoryData.position === 1 && '🥇 '}
+                {victoryData.position === 2 && '🥈 '}
+                {victoryData.position === 3 && '🥉 '}
+                Posición #{victoryData.position}
+              </div>
+            </div>
+            
+            {/* Caja de Rebirth */}
+            <div style={{
+              background: 'rgba(255, 0, 0, 0.2)',
+              padding: '25px',
+              borderRadius: '15px',
+              marginTop: '30px',
+              border: '2px solid #ff3366',
+              boxShadow: '0 0 20px rgba(255, 51, 102, 0.4)'
+            }}>
+              <div style={{ 
+                marginBottom: '15px',
+                filter: 'drop-shadow(0 0 10px rgba(255, 51, 102, 0.8))'
+              }}>
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '48px', height: '48px' }} />
+              </div>
+              <h3 style={{ 
+                color: '#ff3366', 
+                fontSize: '24px',
+                marginBottom: '15px',
+                textShadow: '0 0 15px #ff3366'
+              }}>
+                ¿Querés mejorar tu marca?
+              </h3>
+              <p style={{ 
+                color: '#fff', 
+                fontSize: '16px',
+                marginBottom: '10px',
+                lineHeight: '1.6'
+              }}>
+                Hacé <strong>Rebirth</strong> para volver a nivel 1
+              </p>
+              <p style={{ 
+                color: '#00ff88', 
+                fontSize: '18px',
+                marginBottom: '20px',
+                fontWeight: 'bold',
+                textShadow: '0 0 10px #00ff88'
+              }}>
+                ✨ Ventaja: Todos los upgrades empiezan en nivel {rebirthCount + 1} ✨
+              </p>
+            </div>
+            
+            {/* Botones */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '20px', 
+              justifyContent: 'center',
+              marginTop: '40px',
+              flexWrap: 'wrap'
+            }}>
+              <button 
+                onClick={handleRebirth}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #ff3366',
+                  color: '#ff3366',
+                  padding: '20px 40px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #ff3366',
+                  boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 51, 102, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                <span style={{ fontSize: '28px' }}>♻️</span> REBIRTH
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameState('menu');
+                  setVictoryData(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '20px 50px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #FFD700',
+                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 215, 0, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                VOLVER AL MENÚ
+              </button>
             </div>
           </div>
         </div>
@@ -4681,7 +5829,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           Nivel Máximo
                         </p>
                       )}
-                    </div>
+                </div>
                   );
                 })()}
 
@@ -4690,10 +5838,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   const next = getNextUpgrade('bullet_speed');
                   const currentLevel = bulletSpeedLevel;
                   return (
-                    <div style={{ 
+                <div style={{ 
                       border: '2px solid #00ff00', 
                       padding: '20px', 
-                      borderRadius: '10px',
+                  borderRadius: '10px',
                       background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
                       minWidth: '220px'
                     }}>
@@ -4708,24 +5856,24 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
                             {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
                           </p>
-                          <button 
+                  <button 
                             onClick={() => buyItem(next.item)}
                             disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
+                    style={{
+                      background: 'transparent',
                               border: '2px solid #00ff00',
                               color: '#00ff00',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
+                      borderRadius: '5px',
                               opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
+                      width: '100%',
                               marginTop: '10px'
-                            }}
-                          >
+                    }}
+                  >
                             COMPRAR NIVEL {next.level}
-                          </button>
+                  </button>
                         </>
                       ) : (
                         <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>

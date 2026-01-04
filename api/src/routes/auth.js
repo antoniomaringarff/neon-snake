@@ -6,8 +6,9 @@ export default async function authRoutes(fastify, options) {
   fastify.post('/register', async (request, reply) => {
     const { username, email, password } = request.body;
 
-    if (!username || !email || !password) {
-      return reply.code(400).send({ error: 'Missing required fields' });
+    // Email es opcional, solo username y password son obligatorios
+    if (!username || !password) {
+      return reply.code(400).send({ error: 'Se requiere usuario y contraseña' });
     }
 
     if (password.length < 6) {
@@ -18,10 +19,10 @@ export default async function authRoutes(fastify, options) {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
 
-      // Insert user
+      // Insert user (email puede ser null)
       const result = await query(
         'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
-        [username, email, passwordHash]
+        [username, email || null, passwordHash]
       );
 
       const user = result.rows[0];

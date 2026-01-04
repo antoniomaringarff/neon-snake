@@ -24,7 +24,10 @@ await fastify.register(cors, {
 });
 
 await fastify.register(jwt, {
-  secret: process.env.JWT_SECRET || 'fallback-secret-change-this'
+  secret: process.env.JWT_SECRET || 'fallback-secret-change-this',
+  sign: {
+    expiresIn: '100y' // Sesión prácticamente eterna (100 años)
+  }
 });
 
 // Decorator for authentication
