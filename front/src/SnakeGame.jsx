@@ -493,16 +493,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     }
   }, [gameState]);
 
-  // Auto-save progress when it changes (debounced)
+  // Auto-save progress ONLY when in safe states (menu, shop, levelComplete)
+  // NOT during gameplay - if you refresh mid-game, you lose that session's progress
   useEffect(() => {
     if (loading) return; // Don't save while loading initial data
     
+    // Only auto-save when NOT in active gameplay
+    const safeStates = ['menu', 'shop', 'levelComplete', 'gameComplete'];
+    if (!safeStates.includes(gameState)) return;
+    
     const timeoutId = setTimeout(() => {
       saveUserProgress();
-    }, 2000); // Save 2 seconds after last change
+    }, 1000); // Save 1 second after state change
 
     return () => clearTimeout(timeoutId);
-  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel, healthLevel]);
+  }, [gameState, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel, healthLevel]);
 
   // Sincronizar magnetLevel con gameRef para el game loop
   useEffect(() => {
@@ -2313,7 +2318,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           game.currentXP += xpGain;
           game.sessionXP += xpGain;
           setCurrentLevelXP(prev => prev + xpGain);
-          setTotalXP(prev => prev + xpGain);
+          // NO sumar a totalXP durante el juego - solo cuando ganas el nivel
           setScore(prev => prev + xpGain); // Update score
           
           // El tamaño NO cambia al comer - solo crece la cola
@@ -2338,7 +2343,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           // Collect star
           game.currentStars += 1;
           setCurrentLevelStars(prev => prev + 1);
-          setTotalStars(prev => prev + 1);
+          // NO sumar a totalStars durante el juego - solo cuando ganas el nivel
           
           // Recuperar vida SOLO si este grupo de estrellas no ha curado todavía
           // (máximo 1 vida por víbora muerta, sin importar cuántas estrellas tenía)
@@ -2386,9 +2391,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
       // Check level completion - based on stars now
       if (game.currentStars >= game.starsNeeded) {
+        // ¡VICTORIA! Ahora sí sumamos XP y estrellas ganadas al total
+        const earnedXP = game.sessionXP;
+        const earnedStars = game.currentStars;
+        setTotalXP(prev => prev + earnedXP);
+        setTotalStars(prev => prev + earnedStars);
+        
         // Save game session when completing level
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+        saveGameSession(earnedXP, level, earnedXP, duration);
         
         // Si es el nivel 25, mostrar pantalla especial de victoria
         if (level === 25) {
@@ -2399,10 +2410,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               const previousBestScore = data.bestScore || 0;
               
               setVictoryData({
-                score: game.sessionXP,
+                score: earnedXP,
                 previousBestScore: previousBestScore,
                 position: data.rank || '?',
-                isNewRecord: game.sessionXP > previousBestScore,
+                isNewRecord: earnedXP > previousBestScore,
                 series: currentSeries
               });
               setGameState('gameComplete');
@@ -2411,7 +2422,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               console.error('Error obteniendo ranking:', err);
               // Fallback si falla el endpoint
               setVictoryData({
-                score: game.sessionXP,
+                score: earnedXP,
                 previousBestScore: 0,
                 position: '?',
                 isNewRecord: true,
