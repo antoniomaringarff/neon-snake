@@ -204,6 +204,160 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const FOOD_SIZE = 6;
   const BORDER_WIDTH = 20;
   
+  // Mensajes de intro por nivel
+  const levelIntroMessages = {
+    1: {
+      title: "Primeros Pasos",
+      objective: 5,
+      dangers: ["15 víboras enemigas", "Bordes del mapa"],
+      tip: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada."
+    },
+    2: {
+      title: "Calentando",
+      objective: 8,
+      dangers: ["15 víboras enemigas", "Bordes del mapa"],
+      tip: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas"
+    },
+    3: {
+      title: "Nuevos Obstáculos",
+      objective: 11,
+      dangers: ["20 víboras enemigas", "Si buscas XP, encuentra las estructuras", "Dos disparan"],
+      tip: "Cuidado! Algunos enemigos ahora disparan"
+    },
+    4: {
+      title: "Territorio Hostil",
+      objective: 14,
+      dangers: ["25 víboras enemigas", "Las estructuras esconden tesoros de XP", "Dos o tres tienen escudo"],
+      tip: "Los enemigos con escudo brillan azul"
+    },
+    5: {
+      title: "Zona de Guerra",
+      objective: 17,
+      dangers: ["30 víboras enemigas", "Seis disparan", "Seis tienen escudo"],
+      tip: "Busca las cajas verdes con vida extra"
+    },
+    6: {
+      title: "Sin Tregua",
+      objective: 20,
+      dangers: ["35 víboras enemigas", "Siete disparan", "Siete tienen escudo"],
+      tip: "Tu escudo te da chance de esquivar balas"
+    },
+    7: {
+      title: "Supervivencia",
+      objective: 23,
+      dangers: ["40 víboras enemigas", "Doce disparan", "Doce tienen escudo"],
+      tip: "Mejora tu velocidad de bala en la tienda"
+    },
+    8: {
+      title: "Último Respiro",
+      objective: 26,
+      dangers: ["45 víboras enemigas", "Unos trece disparan", "Unos trece tienen escudo"],
+      tip: "El imán atrae XP y estrellas hacia ti"
+    },
+    9: {
+      title: "Sierras Asesinas",
+      objective: 29,
+      dangers: ["50 víboras enemigas", "5 sierras asesinas", "2 cañones flotantes", "Veinte disparan", "Veinte tienen escudo"],
+      tip: "Las sierras rebotan por el mapa. Evítalas!"
+    },
+    10: {
+      title: "La Resentida",
+      objective: 32,
+      dangers: ["55 víboras enemigas", "Sierras", "1 víbora resentida", "Veintidós disparan", "Veintidós tienen escudo"],
+      tip: "La víbora arcoíris te persigue. Es un duelo!"
+    },
+    11: {
+      title: "Infierno",
+      objective: 35,
+      dangers: ["60 víboras enemigas", "5 sierras asesinas", "4 cañones flotantes", "1 víbora resentida", "Treinta disparan", "Treinta tienen escudo"],
+      tip: "Los cañones flotantes disparan doble"
+    },
+    12: {
+      title: "Sin Escape",
+      objective: 38,
+      dangers: ["65 víboras enemigas", "7 sierras asesinas", "4 cañones flotantes", "2 víboras resentidas", "Unos treinta y dos disparan", "Unos treinta y dos tienen escudo"],
+      tip: "Las sierras grandes hacen más daño"
+    },
+    13: {
+      title: "Velocidad Mortal",
+      objective: 41,
+      dangers: ["70 víboras enemigas", "Enemigos MÁS RÁPIDOS", "Treinta y cinco disparan", "Treinta y cinco tienen escudo"],
+      tip: "Los enemigos ahora son más rápidos"
+    },
+    14: {
+      title: "Emboscada",
+      objective: 44,
+      dangers: ["75 víboras enemigas", "3 víboras resentidas", "Cuarenta y cinco disparan", "Cuarenta y cinco tienen escudo"],
+      tip: "Tocar a la resentida la mata y reaparece"
+    },
+    15: {
+      title: "Campo Abierto",
+      objective: 47,
+      dangers: ["80 víboras enemigas", "Sin estructuras", "Sierras", "Cañones", "Cuarenta y ocho disparan", "Cuarenta y ocho tienen escudo"],
+      tip: "Sin estructuras donde esconderte"
+    },
+    16: {
+      title: "Fuego Cruzado",
+      objective: 50,
+      dangers: ["85 víboras enemigas", "8 cañones flotantes", "4 víboras resentidas", "Cincuenta y uno disparan", "Cincuenta y uno tienen escudo"],
+      tip: "Las resentidas dejan caja de vida al morir"
+    },
+    17: {
+      title: "Tormenta",
+      objective: 53,
+      dangers: ["90 víboras enemigas", "8 sierras asesinas", "Sesenta y tres disparan", "Sesenta y tres tienen escudo"],
+      tip: "Dispara con click izquierdo o ESPACIO"
+    },
+    18: {
+      title: "Jugador Rápido",
+      objective: 56,
+      dangers: ["95 víboras enemigas", "TU velocidad aumenta", "Unos sesenta y seis disparan", "Unos sesenta y seis tienen escudo"],
+      tip: "Aprovecha tu mayor velocidad"
+    },
+    19: {
+      title: "Resistencia",
+      objective: 59,
+      dangers: ["100 víboras enemigas", "Todo al máximo", "Setenta disparan", "Setenta tienen escudo"],
+      tip: "Cada estrella del mismo enemigo cura 1 vez"
+    },
+    20: {
+      title: "Elite",
+      objective: 62,
+      dangers: ["105 víboras enemigas", "5 víboras resentidas", "Unos setenta y tres disparan", "Unos setenta y tres tienen escudo"],
+      tip: "Las resentidas disparan doble y rápido"
+    },
+    21: {
+      title: "Veterano",
+      objective: 65,
+      dangers: ["110 víboras enemigas", "10 sierras asesinas", "Setenta y siete disparan", "Setenta y siete tienen escudo"],
+      tip: "Mira el minimapa para ubicar enemigos"
+    },
+    22: {
+      title: "Enemigos Veloces",
+      objective: 68,
+      dangers: ["115 víboras enemigas", "Enemigos MÁS rápidos", "Unos ochenta disparan", "Unos ochenta tienen escudo"],
+      tip: "Los enemigos ahora corren a tu velocidad"
+    },
+    23: {
+      title: "Penúltimo",
+      objective: 71,
+      dangers: ["120 víboras enemigas", "6 víboras resentidas", "Ochenta y cuatro disparan", "Ochenta y cuatro tienen escudo"],
+      tip: "Ya casi! Un nivel más!"
+    },
+    24: {
+      title: "La Antesala",
+      objective: 74,
+      dangers: ["125 víboras enemigas", "15 cañones flotantes", "Cien disparan", "Cien tienen escudo"],
+      tip: "Prepara todo para el nivel final"
+    },
+    25: {
+      title: "EL FINAL",
+      objective: 100,
+      dangers: ["130 víboras enemigas", "Mapa GIGANTE", "TODO", "Ciento cuatro disparan", "Ciento cuatro tienen escudo"],
+      tip: "100 estrellas. Esto es todo. Buena suerte!"
+    }
+  };
+  
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
     direction: { x: 1, y: 0 },
@@ -518,13 +672,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     }
   }, [gameState]);
 
-  // Auto-save progress ONLY when in safe states (menu, shop, levelComplete)
+  // Auto-save progress ONLY when in safe states (menu, shop, levelComplete, levelIntro)
   // NOT during gameplay - if you refresh mid-game, you lose that session's progress
   useEffect(() => {
     if (loading) return; // Don't save while loading initial data
     
     // Only auto-save when NOT in active gameplay
-    const safeStates = ['menu', 'shop', 'levelComplete', 'gameComplete'];
+    const safeStates = ['menu', 'shop', 'levelComplete', 'gameComplete', 'levelIntro'];
     if (!safeStates.includes(gameState)) return;
     
     const timeoutId = setTimeout(() => {
@@ -3826,6 +3980,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen, showAdminPanel, isAdmin, freeShots]); // Quitado totalXP de las dependencias
 
   const startGame = () => {
+    // Mostrar intro del nivel primero
+    setGameState('levelIntro');
+  };
+
+  const beginLevel = () => {
+    // Esta función realmente inicia el juego después de la intro
     gameRef.current.level = level;
     const levelConfig = getLevelConfig(level, levelConfigs);
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
@@ -4035,22 +4195,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   };
 
   const nextLevel = () => {
-    // El nivel ya fue incrementado cuando ganaste, solo usamos el valor actual
-    const currentLevel = level;
-    gameRef.current.level = currentLevel;
-    const levelConfig = getLevelConfig(currentLevel, levelConfigs);
-    gameRef.current.starsNeeded = levelConfig.starsNeeded;
-    gameRef.current.gameStartTime = Date.now();
-    gameRef.current.sessionXP = 0;
-    gameRef.current.currentStars = 0; // Reset stars for new level
-    gameRef.current.headHits = 0; // Reset head hits counter
-    gameRef.current.bodyHits = 0; // Reset body hits counter
-    setScore(0);
-    setCurrentLevelStars(0);
-    setCurrentLevelXP(0);
-    initGame();
-    setShopOpen(false);
-    setGameState('playing');
+    // Mostrar intro del siguiente nivel primero
+    setGameState('levelIntro');
   };
 
   const handleRebirth = async () => {
@@ -5276,6 +5422,153 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {gameState === 'levelIntro' && levelIntroMessages[level] && (
+        <div style={{ 
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: '600px',
+          padding: '20px'
+        }}>
+          <div style={{ 
+            textAlign: 'center',
+            background: 'rgba(0, 0, 0, 0.95)',
+            padding: '40px',
+            borderRadius: '10px',
+            border: '3px solid #33ffff',
+            boxShadow: '0 0 40px rgba(51, 255, 255, 0.5)',
+            width: '100%'
+          }}>
+            {/* Título del nivel */}
+            <h1 style={{ 
+              color: '#33ffff', 
+              textShadow: '0 0 20px #33ffff', 
+              marginBottom: '10px',
+              fontSize: isMobile ? '28px' : '36px'
+            }}>
+              NIVEL {level}
+            </h1>
+            <h2 style={{ 
+              color: '#ff00ff', 
+              textShadow: '0 0 15px #ff00ff', 
+              marginBottom: '30px',
+              fontSize: isMobile ? '20px' : '24px',
+              fontStyle: 'italic'
+            }}>
+              "{levelIntroMessages[level].title}"
+            </h2>
+
+            {/* Objetivo */}
+            <div style={{ 
+              marginBottom: '25px',
+              padding: '15px',
+              background: 'rgba(51, 255, 255, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #33ffff'
+            }}>
+              <p style={{ 
+                color: '#33ffff', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '5px'
+              }}>
+                OBJETIVO:
+              </p>
+              <p style={{ 
+                color: '#ffffff', 
+                fontSize: isMobile ? '18px' : '20px'
+              }}>
+                Recolecta {levelIntroMessages[level].objective} estrellas ⭐
+              </p>
+            </div>
+
+            {/* Peligros */}
+            <div style={{ 
+              marginBottom: '25px',
+              padding: '15px',
+              background: 'rgba(255, 0, 0, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #ff3366'
+            }}>
+              <p style={{ 
+                color: '#ff3366', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '10px'
+              }}>
+                PELIGROS:
+              </p>
+              {levelIntroMessages[level].dangers.map((danger, idx) => (
+                <p key={idx} style={{ 
+                  color: '#ffaaaa', 
+                  fontSize: isMobile ? '14px' : '16px',
+                  marginBottom: '5px',
+                  textAlign: 'left'
+                }}>
+                  • {danger}
+                </p>
+              ))}
+            </div>
+
+            {/* Consejo */}
+            <div style={{ 
+              marginBottom: '30px',
+              padding: '15px',
+              background: 'rgba(255, 215, 0, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #FFD700'
+            }}>
+              <p style={{ 
+                color: '#FFD700', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '10px'
+              }}>
+                CONSEJO:
+              </p>
+              <p style={{ 
+                color: '#ffffaa', 
+                fontSize: isMobile ? '14px' : '16px',
+                lineHeight: '1.5',
+                textAlign: 'left'
+              }}>
+                {levelIntroMessages[level].tip}
+              </p>
+            </div>
+
+            {/* Botón COMENZAR */}
+            <button 
+              onClick={beginLevel}
+              style={{
+                background: 'transparent',
+                border: '3px solid #33ffff',
+                color: '#33ffff',
+                padding: '15px 50px',
+                fontSize: isMobile ? '18px' : '22px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #33ffff',
+                boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
+                transition: 'all 0.3s',
+                width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                e.target.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              COMENZAR
+            </button>
           </div>
         </div>
       )}
