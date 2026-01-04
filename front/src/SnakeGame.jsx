@@ -2397,9 +2397,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         setTotalXP(prev => prev + earnedXP);
         setTotalStars(prev => prev + earnedStars);
         
+        // Incrementar nivel AHORA (no cuando presiona el botón)
+        // Así si hace refresh, ya está en el nivel siguiente
+        const nextLevelNum = level < 25 ? level + 1 : level;
+        setLevel(nextLevelNum);
+        
         // Save game session when completing level
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
         saveGameSession(earnedXP, level, earnedXP, duration);
+        
+        // Guardar progreso inmediatamente (incluyendo el nuevo nivel)
+        setTimeout(() => saveUserProgress(), 100);
         
         // Si es el nivel 25, mostrar pantalla especial de victoria
         if (level === 25) {
@@ -4002,10 +4010,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   };
 
   const nextLevel = () => {
-    const newLevel = level + 1;
-    setLevel(newLevel);
-    gameRef.current.level = newLevel;
-    const levelConfig = getLevelConfig(newLevel, levelConfigs);
+    // El nivel ya fue incrementado cuando ganaste, solo usamos el valor actual
+    const currentLevel = level;
+    gameRef.current.level = currentLevel;
+    const levelConfig = getLevelConfig(currentLevel, levelConfigs);
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
     gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
@@ -4014,6 +4022,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setCurrentLevelStars(0);
+    setCurrentLevelXP(0);
     initGame();
     setShopOpen(false);
     setGameState('playing');
