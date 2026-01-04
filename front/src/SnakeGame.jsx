@@ -696,23 +696,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
   };
 
-  // Helper function to create Resentful Snake
+  // Helper function to create Resentful Snake (BOSS-like enemy)
+  // Negra con borde arcoíris, dispara doble, agresiva, si te toca muere y reaparece
   const createResentfulSnake = (levelConfig) => {
     const game = gameRef.current;
-    const x = Math.random() * game.worldWidth;
-    const y = Math.random() * game.worldHeight;
+    const margin = 200;
+    const x = margin + Math.random() * (game.worldWidth - margin * 2);
+    const y = margin + Math.random() * (game.worldHeight - margin * 2);
     const angle = Math.random() * Math.PI * 2;
     
     return {
       segments: [{ x, y }],
       direction: { x: Math.cos(angle), y: Math.sin(angle) },
-      speed: levelConfig.enemySpeed * 1.2,
-      length: 20 + Math.random() * 15,
-      hue: 0, // Red hue for resentful
+      speed: levelConfig.enemySpeed * 1.8, // Más rápida
+      length: 25 + Math.random() * 10,
+      hue: 0,
+      rainbowOffset: Math.random() * 360, // Offset para el arcoíris animado
       isResentful: true,
       lastShotTime: 0,
-      shootCooldown: 1500,
-      chaseRange: 500
+      shootCooldown: 400, // Dispara muy rápido (400ms)
+      chaseRange: 800, // Rango de caza más amplio
+      bulletSpeed: 10 // Balas más rápidas
     };
   };
 
@@ -1719,6 +1723,88 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           }
         });
         
+          // Check collision with Resentful Snakes (player bullets)
+          if (!hit && game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+            game.resentfulSnakes.forEach((snake, snakeIndex) => {
+              if (hit || !snake.segments || snake.segments.length === 0) return;
+              
+              const snakeHead = snake.segments[0];
+              let hitHead = false;
+              let hitBody = false;
+              
+              if (checkCollision(bullet, snakeHead, 15)) {
+                hitHead = true;
+              } else {
+                for (let i = 1; i < snake.segments.length; i++) {
+                  if (checkCollision(bullet, snake.segments[i], 12)) {
+                    hitBody = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (hitHead || hitBody) {
+                // La resentful snake recibe daño - necesita varios disparos para morir
+                snake.health = snake.health ?? 10; // 10 de vida por defecto
+                const damage = hitHead ? 3 : 1; // Cabeza = más daño
+                snake.health -= damage;
+                
+                // Efecto visual arcoíris al recibir daño
+                const hue = (snake.rainbowOffset || 0) % 360;
+                createParticle(bullet.x, bullet.y, `hsl(${hue}, 100%, 60%)`, 12);
+                hit = true;
+                
+                // Si la resentful snake muere, reaparece en otro lugar
+                if (snake.health <= 0) {
+                  // Efecto de muerte espectacular
+                  for (let p = 0; p < 20; p++) {
+                    const particleHue = (hue + p * 18) % 360;
+                    createParticle(snakeHead.x, snakeHead.y, `hsl(${particleHue}, 100%, 60%)`, 8);
+                  }
+                  createParticle(snakeHead.x, snakeHead.y, '#ffffff', 25);
+                  
+                  // Crear estrella y XP como recompensa
+                  createFoodFromEnemy(snakeHead.x, snakeHead.y, 100, 3); // 3 estrellas por matar a la resentful
+                  
+                  // Dejar caja de vida de 5 puntos
+                  game.healthBoxes.push({
+                    x: snakeHead.x,
+                    y: snakeHead.y,
+                    healthPoints: 5,
+                    size: 25, // Tamaño grande
+                    pulse: 0,
+                    pulseSpeed: 0.05
+                  });
+                  
+                  // Respawn en otro lugar (lejos del jugador)
+                  const playerHead = game.snake[0];
+                  let newSpawnX, newSpawnY, attempts = 0;
+                  do {
+                    const margin = 200;
+                    newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+                    newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+                    const distToPlayer = Math.sqrt(
+                      Math.pow(newSpawnX - playerHead.x, 2) + 
+                      Math.pow(newSpawnY - playerHead.y, 2)
+                    );
+                    attempts++;
+                    if (distToPlayer > 600 || attempts > 20) break;
+                  } while (true);
+                  
+                  snake.segments = [{ x: newSpawnX, y: newSpawnY }];
+                  snake.direction = {
+                    x: Math.cos(Math.random() * Math.PI * 2),
+                    y: Math.sin(Math.random() * Math.PI * 2)
+                  };
+                  snake.health = 10; // Reset vida
+                  snake.lastShotTime = Date.now();
+                  
+                  createParticle(newSpawnX, newSpawnY, '#ff00ff', 15);
+                }
+              }
+            });
+          }
+        
           if (hit) return false; // Remove bullet if it hit
         }
         
@@ -2448,11 +2534,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       }
 
-      // Update Resentful Snakes
+      // Update Resentful Snakes (BOSS-like enemies - duelo a muerte)
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
         const currentTime = Date.now();
         game.resentfulSnakes.forEach(snake => {
           if (!snake.segments || snake.segments.length === 0) return;
+          
+          // Animar el arcoíris
+          snake.rainbowOffset = (snake.rainbowOffset || 0) + 2;
           
           const snakeHead = snake.segments[0];
           const playerHead = game.snake[0];
@@ -2462,14 +2551,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const dy = playerHead.y - snakeHead.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
-            // Chase player if in range
+            // Chase player if in range (rango amplio)
             if (dist < snake.chaseRange) {
-              // Aim at player
+              // Aim at player - giro más rápido y agresivo
               const targetDir = { x: dx / dist, y: dy / dist };
               
-              // Smooth turning
-              snake.direction.x += (targetDir.x - snake.direction.x) * 0.1 * normalizedDelta;
-              snake.direction.y += (targetDir.y - snake.direction.y) * 0.1 * normalizedDelta;
+              // Giro más rápido cuando está cerca
+              const turnSpeed = 0.15 + (1 - dist / snake.chaseRange) * 0.1;
+              snake.direction.x += (targetDir.x - snake.direction.x) * turnSpeed * normalizedDelta;
+              snake.direction.y += (targetDir.y - snake.direction.y) * turnSpeed * normalizedDelta;
               
               // Normalize
               const dirLen = Math.sqrt(snake.direction.x * snake.direction.x + snake.direction.y * snake.direction.y);
@@ -2478,17 +2568,36 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 snake.direction.y /= dirLen;
               }
               
-              // Shoot at player
+              // DISPARO DOBLE agresivo
               if (currentTime - snake.lastShotTime > snake.shootCooldown) {
                 snake.lastShotTime = currentTime;
+                const bulletSpeed = snake.bulletSpeed || 10;
+                const spreadAngle = 0.12; // Separación entre las dos balas
+                
+                // Bala 1 (ligeramente a la izquierda)
+                const angle1 = Math.atan2(snake.direction.y, snake.direction.x) - spreadAngle;
                 game.bullets.push({
-                  x: snakeHead.x + snake.direction.x * 15,
-                  y: snakeHead.y + snake.direction.y * 15,
-                  vx: snake.direction.x * 6,
-                  vy: snake.direction.y * 6,
-                  life: 100,
+                  x: snakeHead.x + Math.cos(angle1) * 20,
+                  y: snakeHead.y + Math.sin(angle1) * 20,
+                  vx: Math.cos(angle1) * bulletSpeed,
+                  vy: Math.sin(angle1) * bulletSpeed,
+                  life: 150,
                   owner: 'enemy'
                 });
+                
+                // Bala 2 (ligeramente a la derecha)
+                const angle2 = Math.atan2(snake.direction.y, snake.direction.x) + spreadAngle;
+                game.bullets.push({
+                  x: snakeHead.x + Math.cos(angle2) * 20,
+                  y: snakeHead.y + Math.sin(angle2) * 20,
+                  vx: Math.cos(angle2) * bulletSpeed,
+                  vy: Math.sin(angle2) * bulletSpeed,
+                  life: 150,
+                  owner: 'enemy'
+                });
+                
+                // Efecto visual de disparo
+                createParticle(snakeHead.x, snakeHead.y, '#ff00ff', 8);
               }
             } else {
               // Random movement when not chasing
@@ -2500,7 +2609,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }
             }
             
-            // Move snake
+            // Move snake (más rápida)
             const newX = snakeHead.x + snake.direction.x * snake.speed * normalizedDelta;
             const newY = snakeHead.y + snake.direction.y * snake.speed * normalizedDelta;
             
@@ -2523,44 +2632,54 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }
             }
             
-            // Check collision with player
-            if (dist < game.snakeSize * 2) {
-              // Player hit by resentful snake! - Empujar al jugador
-              const pushForce = 40;
+            // DUELO: Si la resentful toca al jugador, ELLA muere y reaparece
+            if (dist < game.snakeSize * 2.5) {
+              // ¡La víbora resentida murió al tocarte!
+              createParticle(snakeHead.x, snakeHead.y, '#ff00ff', 20);
+              createParticle(snakeHead.x, snakeHead.y, '#00ffff', 15);
+              createParticle(snakeHead.x, snakeHead.y, '#ffffff', 12);
+              
+              // Dejar caja de vida de 5 puntos
+              game.healthBoxes.push({
+                x: snakeHead.x,
+                y: snakeHead.y,
+                healthPoints: 5,
+                size: 25, // Tamaño grande
+                pulse: 0,
+                pulseSpeed: 0.05
+              });
+              
+              // Respawn en otro lugar del mapa (lejos del jugador)
+              let newSpawnX, newSpawnY, attempts = 0;
+              do {
+                const margin = 200;
+                newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+                newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+                const distToPlayer = Math.sqrt(
+                  Math.pow(newSpawnX - playerHead.x, 2) + 
+                  Math.pow(newSpawnY - playerHead.y, 2)
+                );
+                attempts++;
+                // Asegurar que aparezca lejos del jugador (mínimo 500px)
+                if (distToPlayer > 500 || attempts > 20) break;
+              } while (true);
+              
+              // Reset snake position
+              snake.segments = [{ x: newSpawnX, y: newSpawnY }];
+              snake.direction = {
+                x: Math.cos(Math.random() * Math.PI * 2),
+                y: Math.sin(Math.random() * Math.PI * 2)
+              };
+              snake.lastShotTime = currentTime; // Cooldown para no disparar inmediatamente
+              
+              // Efecto visual en el nuevo spawn
+              createParticle(newSpawnX, newSpawnY, '#ff00ff', 10);
+              
+              // El jugador también recibe un pequeño empujón pero NO daño
+              const pushForce = 30;
               if (dist > 0) {
                 playerHead.x += (dx / dist) * pushForce;
                 playerHead.y += (dy / dist) * pushForce;
-              }
-              
-              let damage = 3;
-              
-              if (shieldLevel >= 4) {
-                damage = 0; // Full protection
-              } else if (shieldLevel >= 1) {
-                damage = Math.ceil(damage / 2);
-              }
-              
-              if (damage > 0) {
-                const died = applyDamage(damage, playerHead.x, playerHead.y);
-                
-                // ¡CORTAR LA VÍBORA! - Quitar segmentos según el daño
-                if (game.snake.length > 1) {
-                  const segmentsToCut = Math.min(damage * 3, game.snake.length - 1); // Cortar 3 segmentos por punto de daño
-                  for (let cut = 0; cut < segmentsToCut; cut++) {
-                    const removedSegment = game.snake.pop();
-                    if (removedSegment) {
-                      // Crear partículas rojas donde se cortó
-                      createParticle(removedSegment.x, removedSegment.y, '#ff3366', 5);
-                    }
-                  }
-                }
-                
-                if (died) {
-                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-                  setGameState('gameOver');
-                  return;
-                }
               }
             }
           }
@@ -2846,22 +2965,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         // Update star animation
         star.rotation += star.rotationSpeed;
         star.pulse += star.pulseSpeed;
-        
-        // Las estrellas siempre se mueven hacia el jugador (atracción automática)
-        const playerHead = game.snake[0];
-        if (playerHead) {
-          const dx = playerHead.x - star.x;
-          const dy = playerHead.y - star.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          // Velocidad de atracción: más rápido cuando está lejos, desacelera al acercarse
-          // Rango máximo de atracción: 800px, velocidad base: 2
-          if (distance > 20 && distance < 800) {
-            const speed = Math.min(4, 2 + (distance / 200)); // Entre 2 y 4 de velocidad
-            star.x += (dx / distance) * speed;
-            star.y += (dy / distance) * speed;
-          }
-        }
         
         const screenX = star.x - camX;
         const screenY = star.y - camY;
@@ -3167,10 +3270,24 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       }
 
-      // Draw Resentful Snakes (special red enemies that chase player)
+      // Draw Resentful Snakes (BOSS-like enemies - 7 colores al inicio, negro en el medio, 7 colores al final)
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        // Colores del arcoíris (7 colores)
+        const rainbowColors = [
+          '#ff0000', // Rojo
+          '#ff7f00', // Naranja
+          '#ffff00', // Amarillo
+          '#00ff00', // Verde
+          '#0000ff', // Azul
+          '#4b0082', // Índigo
+          '#9400d3'  // Violeta
+        ];
+        
         game.resentfulSnakes.forEach(snake => {
           if (!snake.segments || snake.segments.length === 0) return;
+          
+          const totalSegments = snake.segments.length;
+          const colorSegments = 7; // 7 segmentos de color en cada extremo
           
           snake.segments.forEach((seg, i) => {
             const screenX = seg.x - camX;
@@ -3178,28 +3295,69 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             
             if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
                 screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-              const alpha = 1 - (i / snake.segments.length) * 0.5;
               
-              // Red color for resentful snakes
-              ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
-              ctx.shadowBlur = 15;
-              ctx.shadowColor = '#ff0000';
+              let segmentColor;
+              let glowColor;
+              let hasGlow = false;
+              
+              // Determinar si es un segmento de color o negro
+              if (i < colorSegments) {
+                // Primeros 7 segmentos: arcoíris desde la cabeza
+                const colorIndex = i % rainbowColors.length;
+                segmentColor = rainbowColors[colorIndex];
+                glowColor = segmentColor;
+                hasGlow = true;
+              } else if (i >= totalSegments - colorSegments) {
+                // Últimos 7 segmentos: arcoíris hacia la cola
+                const colorIndex = (totalSegments - 1 - i) % rainbowColors.length;
+                segmentColor = rainbowColors[colorIndex];
+                glowColor = segmentColor;
+                hasGlow = true;
+              } else {
+                // Segmentos del medio: negro
+                segmentColor = '#0a0a0a';
+                glowColor = '#333333';
+                hasGlow = false;
+              }
+              
+              // Dibujar segmento
+              if (hasGlow) {
+                // Segmentos de color con glow
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = glowColor;
+              } else {
+                // Segmentos negros sin glow (o glow sutil)
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = '#222222';
+              }
+              
+              ctx.fillStyle = segmentColor;
               ctx.beginPath();
               ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
               ctx.fill();
               
-              // Angry eyes on head
+              // Borde sutil para todos
+              ctx.strokeStyle = hasGlow ? 'rgba(255,255,255,0.3)' : 'rgba(50,50,50,0.5)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              
+              // Ojos furiosos en la cabeza
               if (i === 0) {
+                ctx.shadowBlur = 0;
+                // Ojos blancos con pupila roja (mirada amenazante)
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(screenX - 3, screenY - 2, 3, 0, Math.PI * 2);
-                ctx.arc(screenX + 3, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.arc(screenX - 4, screenY - 2, 4, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 4, 0, Math.PI * 2);
                 ctx.fill();
                 
-                ctx.fillStyle = '#000000';
+                // Pupilas rojas brillantes
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ff0000';
                 ctx.beginPath();
-                ctx.arc(screenX - 3, screenY - 2, 1.5, 0, Math.PI * 2);
-                ctx.arc(screenX + 3, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.arc(screenX - 4, screenY - 2, 2, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 2, 0, Math.PI * 2);
                 ctx.fill();
               }
             }
@@ -3507,6 +3665,35 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.beginPath();
           ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
           ctx.fill();
+        });
+        ctx.shadowBlur = 0;
+      }
+      
+      // Draw resentful snakes on minimap as multicolor/rainbow dots
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        game.resentfulSnakes.forEach(snake => {
+          if (snake.segments && snake.segments.length > 0) {
+            const snakeHead = snake.segments[0];
+            const snakeMinimapX = minimapX + (snakeHead.x / game.worldWidth) * minimapWidth;
+            const snakeMinimapY = minimapY + (snakeHead.y / game.worldHeight) * minimapHeight;
+            
+            // Color arcoíris animado
+            const rainbowHue = (snake.rainbowOffset || 0) % 360;
+            const rainbowColor = `hsl(${rainbowHue}, 100%, 60%)`;
+            
+            // Punto con glow multicolor
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = rainbowColor;
+            ctx.fillStyle = rainbowColor;
+            ctx.beginPath();
+            ctx.arc(snakeMinimapX, snakeMinimapY, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Borde negro para que destaque
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
         });
         ctx.shadowBlur = 0;
       }
