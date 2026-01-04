@@ -471,7 +471,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   // Load leaderboard
   const loadLeaderboard = async () => {
     try {
-      const response = await fetch('/api/leaderboard?limit=10');
+      const response = await fetch('/api/leaderboard?type=xp&limit=10');
       if (response.ok) {
         const data = await response.json();
         setLeaderboard(data);
@@ -4814,7 +4814,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                     <tr style={{ borderBottom: '1px solid #FFD700' }}>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
                       <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Puntos</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
                       <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
                     </tr>
                   </thead>
@@ -4834,7 +4834,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           {entry.username}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
-                          {entry.bestScore?.toLocaleString() || 0}
+                          {entry.totalXp?.toLocaleString() || 0}
                         </td>
                         <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
                           {entry.highestLevel || 1}
@@ -5344,7 +5344,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                     <tr style={{ borderBottom: '1px solid #FFD700' }}>
                       <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
                       <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Puntos</th>
+                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>XP</th>
                       <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
                     </tr>
                   </thead>
@@ -5364,7 +5364,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           {entry.username}
                         </td>
                         <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
-                          {entry.bestScore?.toLocaleString() || 0}
+                          {entry.totalXp?.toLocaleString() || 0}
                         </td>
                         <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
                           {entry.highestLevel || 1}
