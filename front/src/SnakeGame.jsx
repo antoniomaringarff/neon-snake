@@ -775,6 +775,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.structures = [];
       
       console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, mapa ${levelConfig.mapSize}x${levelConfig.mapSize}`);
+      game.totalStarsGenerated = 0; // Reset star counter for level
       game.particles = [];
       game.currentXP = 0;
       game.currentStars = 0;
@@ -1173,6 +1174,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // starsToCreate: número de estrellas a crear (1 + estrellas que había comido el enemigo)
     const createFoodFromEnemy = (x, y, totalXP, starsToCreate = 1) => {
       const game = gameRef.current;
+      
+      // Debug: contar estrellas generadas
+      game.totalStarsGenerated = (game.totalStarsGenerated || 0) + starsToCreate;
+      console.log(`⭐ Estrella generada! Total generadas: ${game.totalStarsGenerated}, En mapa: ${game.stars.length + starsToCreate}`);
       const foodCount = Math.min(20, Math.max(5, Math.floor(totalXP / 5))); // 5-20 food items
       const xpPerFood = Math.floor(totalXP / foodCount);
       const spreadRadius = 100; // Spread food in 100px radius
@@ -1490,6 +1495,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Enemy eats star - contador y recuperar vida
             enemy.starsEaten = (enemy.starsEaten || 0) + 1;
             
+            // Debug: log cuando un enemigo come una estrella
+            console.log(`🐍 Enemigo comió estrella! starsEaten ahora: ${enemy.starsEaten}, Estrellas en mapa: ${game.stars.length - 1}`);
+            
             // Recuperar vida hasta el máximo
             enemy.currentHealth = Math.min(enemy.currentHealth + enemy.maxHealth, enemy.maxHealth);
             
@@ -1553,33 +1561,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const enemyHead = enemy.segments[0];
         for (let i = 1; i < game.snake.length; i++) {
           if (checkCollision(enemyHead, game.snake[i], SNAKE_SIZE + game.snakeSize)) {
-            // Enemy dies - create food and stars (1 propia + las que comió)
-            const deathX = enemyHead.x;
-            const deathY = enemyHead.y;
-            const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
-            const starsToCreate = 1 + (enemy.starsEaten || 0);
-            createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-            createParticle(deathX, deathY, '#ff3366', 15);
-            enemiesToRemove.push(enemyIndex);
+            // Only process if not already marked for death
+            if (!enemy.markedForDeath && !enemiesToRemove.includes(enemyIndex)) {
+              enemy.markedForDeath = true;
+              // Enemy dies - create food and stars (1 propia + las que comió)
+              const deathX = enemyHead.x;
+              const deathY = enemyHead.y;
+              const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
+              const starsToCreate = 1 + (enemy.starsEaten || 0);
+              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+              createParticle(deathX, deathY, '#ff3366', 15);
+              enemiesToRemove.push(enemyIndex);
+            }
             break;
           }
         }
 
         // Enemy head vs Enemy body collisions (enemies can kill each other)
         game.enemies.forEach((otherEnemy, otherIndex) => {
-          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex)) return;
+          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex) || otherEnemy.markedForDeath) return;
           
           const otherHead = otherEnemy.segments[0];
           for (let i = 1; i < enemy.segments.length; i++) {
             if (checkCollision(otherHead, enemy.segments[i], SNAKE_SIZE + SNAKE_SIZE)) {
-              // Other enemy dies - create food and stars (1 propia + las que comió)
-              const deathX = otherHead.x;
-              const deathY = otherHead.y;
-              const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
-              const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
-              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-              createParticle(deathX, deathY, '#ff3366', 15);
-              if (!enemiesToRemove.includes(otherIndex)) {
+              // Only process if not already marked for death
+              if (!otherEnemy.markedForDeath && !enemiesToRemove.includes(otherIndex)) {
+                otherEnemy.markedForDeath = true;
+                // Other enemy dies - create food and stars (1 propia + las que comió)
+                const deathX = otherHead.x;
+                const deathY = otherHead.y;
+                const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
+                const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
+                createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+                createParticle(deathX, deathY, '#ff3366', 15);
                 enemiesToRemove.push(otherIndex);
               }
               break;
@@ -1604,7 +1618,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         if (bullet.owner === 'player') {
         let hit = false;
           game.enemies.forEach((enemy, enemyIndex) => {
-          if (!hit && enemy.segments.length > 0) {
+          // Skip if enemy is already marked for death or already hit this frame
+          if (!hit && enemy.segments.length > 0 && !enemiesToKill.includes(enemyIndex) && !enemy.markedForDeath) {
               // Check collision with enemy head (most important)
               const enemyHead = enemy.segments[0];
               let hitEnemyHead = false;
@@ -1637,7 +1652,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 hit = true;
                 
                 // Si la vida llega a 0 o menos, el enemigo muere
-                if (enemy.currentHealth <= 0) {
+                if (enemy.currentHealth <= 0 && !enemy.markedForDeath) {
+                  enemy.markedForDeath = true; // Prevent duplicate death processing
                   const deathX = enemyHead.x;
                   const deathY = enemyHead.y;
                   const enemyXP = enemy.totalXP || (enemy.length * 2);
