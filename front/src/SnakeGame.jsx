@@ -136,7 +136,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     centerY: 0, 
     radius: 0, 
     isActive: false,
-    direction: { x: 0, y: 0 } // Store direction synchronously
+    direction: { x: 0, y: 0 }, // Store direction synchronously
+    intensity: 0 // 0-1, qué tan lejos está el dedo del centro (para aceleración)
   });
   const shootBulletRef = useRef(null);
   const isShootingRef = useRef(false);
@@ -654,19 +655,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   // Helper function to create Killer Saw
   const createKillerSaw = (levelConfig) => {
     const game = gameRef.current;
+    // Tamaños: más grande = más daño
     const sizes = [20, 30, 40, 50, 60];
-    const colors = ['#ff0000', '#ff6600', '#ffaa00', '#ffdd00'];
-    const damages = [1, 2, 3, 4]; // Damage based on color
+    const sizeDamages = [1, 2, 3, 4, 5]; // Daño según tamaño: pequeña=1, grande=5
+    const colors = ['#ffdd00', '#ffaa00', '#ff6600', '#ff3300', '#ff0000']; // Amarillo (débil) a Rojo (fuerte)
     
-    const size = sizes[Math.floor(Math.random() * sizes.length)];
-    const colorIndex = Math.floor(Math.random() * colors.length);
+    const sizeIndex = Math.floor(Math.random() * sizes.length);
+    const size = sizes[sizeIndex];
+    const damage = sizeDamages[sizeIndex]; // Daño basado en tamaño (1-5)
+    const color = colors[sizeIndex]; // Color también basado en tamaño
     
     return {
       x: Math.random() * (game.worldWidth - size * 2) + size,
       y: Math.random() * (game.worldHeight - size * 2) + size,
       radius: size,
-      color: colors[colorIndex],
-      damage: damages[colorIndex],
+      color: color,
+      damage: damage, // 1-5 según tamaño
       rotation: 0,
       rotationSpeed: 0.05 + Math.random() * 0.05,
       velocity: {
@@ -901,6 +905,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const dy = touchY - centerY;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
+      // Calcular intensidad (0-1) basada en distancia desde el centro
+      const intensity = Math.min(distance / radius, 1);
+      joystickRef.current.intensity = intensity;
+      
       if (distance < radius) {
         // Within circle - use actual position
         const rect = canvasRef.current.getBoundingClientRect();
@@ -912,7 +920,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         setJoystickDirection(dir);
         joystickRef.current.direction = dir; // Store synchronously
       } else {
-        // Outside circle - clamp to edge
+        // Outside circle - clamp to edge (intensidad máxima = 1)
         const angle = Math.atan2(dy, dx);
         const dir = { x: Math.cos(angle), y: Math.sin(angle) };
         const rect = canvasRef.current.getBoundingClientRect();
@@ -930,6 +938,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       e.preventDefault();
       joystickRef.current.isActive = false;
       joystickRef.current.direction = { x: 0, y: 0 };
+      joystickRef.current.intensity = 0;
       setJoystickActive(false);
       setJoystickPosition({ x: 0, y: 0 });
       setJoystickDirection({ x: 0, y: 0 });
@@ -1231,6 +1240,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       }
       
       // Create golden stars at the death location (1 propia + las que había comido)
+      // Todas las estrellas de la misma víbora comparten un groupId para limitar curación
+      const starGroupId = Date.now() + Math.random(); // ID único para este grupo de estrellas
+      
       for (let i = 0; i < starsToCreate; i++) {
         // Distribuir las estrellas en un pequeño radio si son varias
         const starAngle = starsToCreate > 1 ? (Math.PI * 2 * i) / starsToCreate : 0;
@@ -1243,7 +1255,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         rotation: 0,
         rotationSpeed: 0.02,
         pulse: 0,
-        pulseSpeed: 0.05
+        pulseSpeed: 0.05,
+        groupId: starGroupId, // ID del grupo para limitar curación a 1 por víbora muerta
+        healedAlready: false // Se marca true cuando el grupo ya curó
       });
       }
     };
@@ -1954,10 +1968,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       }
       
-      // Apply speed improvement when cursor is close (speedLevel: 1-10 = 10% to 100% extra)
-      // Only applies on desktop with mouse
+      // Apply speed based on input intensity
       let currentSpeed = game.baseSpeed;
-      if (!isMobile && speedLevel > 0 && distance < 200) {
+      
+      if (isMobile && isJoystickActive) {
+        // Mobile: velocidad proporcional a qué tan lejos está el dedo del centro
+        // Mínimo 30% de velocidad (cerca del centro), máximo 100% + bonus de speedLevel (en el borde)
+        const joystickIntensity = joystickRef.current.intensity;
+        const minSpeedFactor = 0.3; // 30% velocidad cuando está casi en el centro
+        const maxSpeedFactor = 1.0 + (speedLevel * 0.1); // 100% + 10% por nivel de velocidad
+        const speedFactor = minSpeedFactor + (maxSpeedFactor - minSpeedFactor) * joystickIntensity;
+        currentSpeed = game.baseSpeed * speedFactor;
+      } else if (!isMobile && speedLevel > 0 && distance < 200) {
+        // Desktop: bonus de velocidad cuando el cursor está cerca
         const speedBonus = (speedLevel * 10) / 100; // 10% per level
         currentSpeed = game.baseSpeed * (1 + speedBonus);
       }
@@ -2214,8 +2237,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           setCurrentLevelStars(prev => prev + 1);
           setTotalStars(prev => prev + 1);
           
-          // Recuperar vida al comer estrella (hasta el máximo) con efectos visuales
-          applyHeal(game.maxHealth, star.x, star.y);
+          // Recuperar vida SOLO si este grupo de estrellas no ha curado todavía
+          // (máximo 1 vida por víbora muerta, sin importar cuántas estrellas tenía)
+          if (star.groupId) {
+            // Estrella de víbora muerta - verificar si el grupo ya curó
+            const groupAlreadyHealed = game.stars.some(s => s.groupId === star.groupId && s.healedAlready);
+            
+            if (!groupAlreadyHealed) {
+              // Primera estrella del grupo - curar 1 vida y marcar el grupo
+              applyHeal(1, star.x, star.y);
+              // Marcar todas las estrellas del mismo grupo como que ya curaron
+              game.stars.forEach(s => {
+                if (s.groupId === star.groupId) {
+                  s.healedAlready = true;
+                }
+              });
+            }
+            // Si el grupo ya curó, no cura pero sí cuenta la estrella
+          } else {
+            // Estrella sin grupo (del mapa o spawn inicial) - cura normalmente
+            applyHeal(1, star.x, star.y);
+          }
           
           createParticle(star.x, star.y, '#FFD700', 8);
           starCollected = true;
@@ -2317,14 +2359,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 head.y += (dy / dist) * pushForce;
               }
               
-              let damage = saw.damage || 2; // Default damage si no está definido
-              
-              // Check shield protection
-              if (shieldLevel >= 4) {
-                damage = 0; // Full protection
-              } else if (shieldLevel >= 1) {
-                damage = Math.ceil(damage / 2); // Partial protection
-              }
+              // Daño variable según tamaño/color de la sierra (1-5)
+              // El escudo NO protege contra las sierras
+              const damage = saw.damage || 1;
               
               if (damage > 0) {
                 const died = applyDamage(damage, head.x, head.y);
@@ -2344,30 +2381,47 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       if (game.floatingCannons && game.floatingCannons.length > 0) {
         const currentTime = Date.now();
         game.floatingCannons.forEach(cannon => {
-          // Aim at player
-          const head = game.snake[0];
-          if (head) {
-            const dx = head.x - cannon.x;
-            const dy = head.y - cannon.y;
+          // Apuntar a un segmento aleatorio del cuerpo de la víbora (no solo la cabeza)
+          if (game.snake.length > 0) {
+            // Elegir un segmento aleatorio como objetivo (cabeza o cuerpo)
+            const targetIndex = Math.floor(Math.random() * Math.min(game.snake.length, 10)); // Máximo los primeros 10 segmentos
+            const target = game.snake[targetIndex];
+            
+            const dx = target.x - cannon.x;
+            const dy = target.y - cannon.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             // Only aim if player is in range
             if (dist < cannon.range) {
               const targetAngle = Math.atan2(dy, dx);
-              // Smooth rotation towards player
+              // Smooth rotation towards target
               const angleDiff = targetAngle - cannon.angle;
-              cannon.angle += angleDiff * 0.05 * normalizedDelta;
+              cannon.angle += angleDiff * 0.08 * normalizedDelta; // Rotación más rápida
               
-              // Shoot if cooldown is ready
-              if (currentTime - cannon.shootCooldown > cannon.shootInterval) {
+              // Shoot if cooldown is ready (2 disparos por segundo = 500ms)
+              const shootInterval = 500; // 500ms = 2 disparos por segundo
+              if (currentTime - cannon.shootCooldown > shootInterval) {
                 cannon.shootCooldown = currentTime;
                 
-                // Create bullet
+                // Crear DOBLE BALA (separadas ligeramente)
+                const spreadAngle = 0.15; // Separación entre las dos balas
+                
+                // Bala 1
                 game.bullets.push({
-                  x: cannon.x + Math.cos(cannon.angle) * 35,
-                  y: cannon.y + Math.sin(cannon.angle) * 35,
-                  vx: Math.cos(cannon.angle) * cannon.bulletSpeed,
-                  vy: Math.sin(cannon.angle) * cannon.bulletSpeed,
+                  x: cannon.x + Math.cos(cannon.angle - spreadAngle) * 35,
+                  y: cannon.y + Math.sin(cannon.angle - spreadAngle) * 35,
+                  vx: Math.cos(cannon.angle - spreadAngle) * cannon.bulletSpeed,
+                  vy: Math.sin(cannon.angle - spreadAngle) * cannon.bulletSpeed,
+                  life: 150,
+                  owner: 'cannon'
+                });
+                
+                // Bala 2
+                game.bullets.push({
+                  x: cannon.x + Math.cos(cannon.angle + spreadAngle) * 35,
+                  y: cannon.y + Math.sin(cannon.angle + spreadAngle) * 35,
+                  vx: Math.cos(cannon.angle + spreadAngle) * cannon.bulletSpeed,
+                  vy: Math.sin(cannon.angle + spreadAngle) * cannon.bulletSpeed,
                   life: 150,
                   owner: 'cannon'
                 });
@@ -2854,11 +2908,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         { r: 255, g: 0, b: 255 }     // Rosa/Magenta
       ];
       
-      // Check if snake should blink (invulnerable)
-      const isBlinking = game.invulnerable > 0 && Math.floor(game.invulnerable / 4) % 2 === 0;
-      
-      // Skip drawing if blinking (creates flash effect)
-      if (!isBlinking) {
+      // Dibujar víbora (sin parpadeo para evitar lag)
       game.snake.forEach((seg, i) => {
         const screenX = seg.x - camX;
         const screenY = seg.y - camY;
@@ -2898,15 +2948,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.lineWidth = shieldLevel === 1 ? 3 : 5;
           ctx.beginPath();
           ctx.arc(screenX, screenY, game.snakeSize + 4, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        
-        // Invulnerability glow effect
-        if (game.invulnerable > 0) {
-          ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * (game.invulnerable / 60)})`;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, game.snakeSize + 6, 0, Math.PI * 2);
           ctx.stroke();
         }
         
@@ -2974,7 +3015,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.fill();
         }
       });
-      } // End of isBlinking check
       ctx.shadowBlur = 0;
 
       // Draw bullets
