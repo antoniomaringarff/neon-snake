@@ -66,8 +66,9 @@ export const up = async (pool) => {
     CREATE INDEX IF NOT EXISTS idx_arena_leaderboard_total_kills ON arena_leaderboard(total_kills DESC);
 
     -- Insertar configuración de arena por defecto
+    -- map_size ahora significa "pantallas" (10x10 = mapa grande pero manejable)
     INSERT INTO arena_configs (arena_type, arena_name, map_size, enemy_count, enemy_shoot_percentage, enemy_shield_percentage, structures_count, killer_saw_count, floating_cannon_count, resentful_snake_count, health_box_count, is_active)
-    VALUES ('battle_royale', 'Arena Clásica', 100, 500, 50, 50, 25, 30, 25, 15, 50, true)
+    VALUES ('battle_royale', 'Arena Clásica', 10, 500, 50, 50, 25, 30, 25, 15, 50, true)
     ON CONFLICT DO NOTHING;
 
     -- Función para actualizar leaderboard de arena después de una sesión

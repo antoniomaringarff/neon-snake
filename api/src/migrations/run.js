@@ -22,6 +22,7 @@ import * as migration020 from './020_enemy_upgrade_level.js';
 import * as migration021 from './021_update_level_values.js';
 import * as migration022 from './022_add_is_immune_flag.js';
 import * as migration023 from './023_arena_system.js';
+import * as migration024 from './024_skins_system.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -46,7 +47,8 @@ const migrations = [
   { name: '020_enemy_upgrade_level', up: migration020.up, down: migration020.down },
   { name: '021_update_level_values', up: migration021.up, down: migration021.down },
   { name: '022_add_is_immune_flag', up: migration022.up, down: migration022.down },
-  { name: '023_arena_system', up: migration023.up, down: migration023.down }
+  { name: '023_arena_system', up: migration023.up, down: migration023.down },
+  { name: '024_skins_system', up: migration024.up, down: migration024.down }
 ];
 
 export async function runMigrations() {

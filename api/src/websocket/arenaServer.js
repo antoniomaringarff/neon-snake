@@ -52,50 +52,88 @@ export function setupArenaWebSocket(fastify) {
                 userId = decoded.id;
                 username = decoded.username || data.username;
 
+                // IMPORTANTE: Verificar si este usuario ya tiene una conexión activa y limpiarla
+                let oldSocketId = null;
+                arenaState.players.forEach((player, sid) => {
+                  if (player.userId === userId && sid !== socketId) {
+                    oldSocketId = sid;
+                  }
+                });
+                
+                if (oldSocketId) {
+                  console.log(`[Arena] User ${username} (${userId}) already connected with socketId ${oldSocketId}, removing old connection`);
+                  arenaState.players.delete(oldSocketId);
+                  const oldSocket = arenaState.connections.get(oldSocketId);
+                  if (oldSocket && oldSocket.readyState === 1) {
+                    oldSocket.close();
+                  }
+                  arenaState.connections.delete(oldSocketId);
+                }
+
                 // Crear estado inicial del jugador
+                const hue = Math.floor(Math.random() * 360); // Color único para cada jugador
                 playerState = {
                   socketId: socketId,
                   userId: userId,
                   username: username,
-                  x: Math.random() * 10000, // Posición inicial aleatoria en mapa 100x100
-                  y: Math.random() * 10000,
-                  direction: { x: 1, y: 0 },
-                  segments: [{ x: Math.random() * 10000, y: Math.random() * 10000 }],
+                  x: data.x || 0, // Posición enviada por el cliente
+                  y: data.y || 0,
+                  direction: data.direction || { x: 1, y: 0 },
+                  segments: data.segments || [{ x: data.x || 0, y: data.y || 0 }],
                   score: 0,
                   kills: 0,
+                  hue: hue, // Color único
+                  skin: data.skin || 'default', // Skin del jugador
                   lastUpdate: Date.now()
                 };
 
                 arenaState.players.set(socketId, playerState);
                 arenaState.connections.set(socketId, connection.socket);
 
-                // Enviar estado inicial completo
+                // Enviar estado inicial completo (incluyendo a sí mismo)
+                const allPlayers = Array.from(arenaState.players.values()).map(p => ({
+                  userId: p.userId,
+                  username: p.username,
+                  x: p.x,
+                  y: p.y,
+                  direction: p.direction,
+                  segments: p.segments,
+                  score: p.score,
+                  kills: p.kills,
+                  hue: p.hue,
+                  skin: p.skin,
+                  speed: p.speed
+                }));
+                
+                console.log(`[Arena] Sending arena_state to ${username} with ${allPlayers.length} players:`, 
+                  allPlayers.map(p => `${p.username}(${p.userId})`).join(', '));
+                
                 connection.socket.send(JSON.stringify({
                   type: 'arena_state',
-                  players: Array.from(arenaState.players.values()).map(p => ({
-                    userId: p.userId,
-                    username: p.username,
-                    x: p.x,
-                    y: p.y,
-                    direction: p.direction,
-                    segments: p.segments,
-                    score: p.score,
-                    kills: p.kills
-                  }))
+                  players: allPlayers
                 }));
 
-                // Notificar a otros jugadores
-                broadcastToOthers(socketId, {
+                // Notificar a otros jugadores que hay un nuevo jugador
+                const joinMessage = {
                   type: 'player_joined',
                   player: {
                     userId: playerState.userId,
                     username: playerState.username,
                     x: playerState.x,
-                    y: playerState.y
+                    y: playerState.y,
+                    direction: playerState.direction,
+                    segments: playerState.segments,
+                    hue: playerState.hue,
+                    skin: playerState.skin,
+                    speed: playerState.speed
                   }
-                });
+                };
+                
+                const otherConnections = arenaState.connections.size - 1;
+                console.log(`[Arena] Broadcasting player_joined for ${username} to ${otherConnections} other players`);
+                broadcastToOthers(socketId, joinMessage);
 
-                console.log(`[Arena] ${username} (${userId}) joined`);
+                console.log(`[Arena] ${username} (${userId}) joined successfully. Total players: ${arenaState.players.size}`);
               } catch (error) {
                 connection.socket.send(JSON.stringify({
                   type: 'error',
@@ -113,6 +151,8 @@ export function setupArenaWebSocket(fastify) {
               playerState.direction = data.direction;
               playerState.segments = data.segments;
               playerState.score = data.score || playerState.score;
+              playerState.speed = data.speed || 2.5; // Guardar velocidad
+              playerState.skin = data.skin || playerState.skin || 'default'; // Actualizar skin
               playerState.lastUpdate = Date.now();
 
               // Broadcast a otros jugadores (sin incluir al emisor)
@@ -126,7 +166,10 @@ export function setupArenaWebSocket(fastify) {
                   direction: playerState.direction,
                   segments: playerState.segments,
                   score: playerState.score,
-                  kills: playerState.kills
+                  kills: playerState.kills,
+                  hue: playerState.hue,
+                  speed: playerState.speed,
+                  skin: playerState.skin
                 }]
               });
               break;
@@ -258,6 +301,11 @@ export function setupArenaWebSocket(fastify) {
             case 'player_death':
               if (!playerState) return;
 
+              const sessionXP = data.xp || playerState.score || 0;
+              const killCount = data.kills || playerState.kills || 0;
+              const xpReward = data.xpReward || Math.floor(sessionXP * 0.1);
+              const starsFromKills = data.starsFromKills || killCount * 5;
+
               // Guardar sesión en la base de datos
               try {
                 // Obtener arena config activa
@@ -276,8 +324,8 @@ export function setupArenaWebSocket(fastify) {
                     [
                       userId,
                       arenaConfigId,
-                      data.xp || playerState.score,
-                      data.kills || playerState.kills || 0,
+                      sessionXP,
+                      killCount,
                       1,
                       durationSeconds
                     ]
@@ -285,6 +333,19 @@ export function setupArenaWebSocket(fastify) {
 
                   currentArenaSessionId = sessionResult.rows[0].id;
                   // El leaderboard se actualiza automáticamente via trigger en la DB
+                }
+
+                // GUARDAR RECOMPENSAS: Actualizar total_xp y total_stars del usuario
+                if (xpReward > 0 || starsFromKills > 0) {
+                  await query(
+                    `UPDATE users 
+                     SET total_xp = COALESCE(total_xp, 0) + $1,
+                         total_stars = COALESCE(total_stars, 0) + $2,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $3`,
+                    [xpReward, starsFromKills, userId]
+                  );
+                  console.log(`[Arena] Rewards saved for ${username}: +${xpReward} XP, +${starsFromKills} ⭐`);
                 }
               } catch (error) {
                 console.error('Error saving arena session:', error);
@@ -301,7 +362,7 @@ export function setupArenaWebSocket(fastify) {
                 username: playerState.username
               });
 
-              console.log(`[Arena] ${username} (${userId}) died with ${data.xp || playerState.score} XP and ${data.kills || playerState.kills} kills`);
+              console.log(`[Arena] ${username} (${userId}) died with ${sessionXP} XP and ${killCount} kills. Rewards: +${xpReward} XP, +${starsFromKills} ⭐`);
               break;
           }
         } catch (error) {

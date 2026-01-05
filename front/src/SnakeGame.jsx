@@ -133,6 +133,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const wsRef = useRef(null);
   const [arenaConfig, setArenaConfig] = useState(null);
   const [otherPlayers, setOtherPlayers] = useState([]);
+  const otherPlayersRef = useRef([]); // Ref para interpolación en game loop
   const [arenaPlayerCount, setArenaPlayerCount] = useState(0);
   const [arenaKills, setArenaKills] = useState(0);
   const [arenaDeathInfo, setArenaDeathInfo] = useState(null);
@@ -145,22 +146,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     starsNeeded: 0, // No aplica en arena
     playerSpeed: 2.5,
     enemySpeed: 2.8,
-    enemyCount: 500,
-    enemyDensity: 50,
     enemyShootPercentage: 50,
     enemyShieldPercentage: 50,
     enemyShootCooldown: 2000,
-    xpDensity: 300,
-    xpPoints: 300,
-    mapSize: 100, // Mapa 100x100 BASE_UNITS
-    structuresCount: 25,
-    killerSawCount: 30,
-    floatingCannonCount: 25,
-    resentfulSnakeCount: 15,
-    healthBoxCount: 50,
+    mapSize: 5, // Mapa de 5x5 pantallas (25 pantallas totales)
     enemyUpgradeLevel: 5, // Nivel medio de upgrades para enemigos
     hasCentralCell: false, // Sin celda central en arena
-    centralCellOpeningSpeed: 0,
     enemyRespawn: true,
     enemyRespawnDelay: 3000
   };
@@ -243,10 +234,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [bulletSpeedLevel, setBulletSpeedLevel] = useState(0); // 0-10: velocidad suma 2 por nivel, máximo 20
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
   const [healthLevel, setHealthLevel] = useState(0); // 0-10: puntos de vida (0=2, 1=4, 2=6... 10=22)
+  const [currentSkin, setCurrentSkin] = useState('default'); // Skin actual del jugador
+  const [ownedSkins, setOwnedSkins] = useState(['default']); // Skins comprados
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [shopConfigs, setShopConfigs] = useState(null); // Configuraciones de la tienda desde la DB
   const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data
+  const [arenaLeaderboard, setArenaLeaderboard] = useState([]); // Arena leaderboard data
+  const [previousGameState, setPreviousGameState] = useState(null); // Para navegación en cascada
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState(false); // Modal de rankings
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [levelConfigs, setLevelConfigs] = useState({}); // Configuraciones de niveles desde la DB
   const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
@@ -632,6 +628,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       setHealthLevel(data.healthLevel || 0);
       setRebirthCount(data.rebirthCount || 0);
       setCurrentSeries(data.currentSeries || 1);
+      setCurrentSkin(data.currentSkin || 'default');
+      setOwnedSkins(data.ownedSkins || ['default']);
       gameRef.current.level = data.currentLevel || 1;
       gameRef.current.magnetLevel = data.magnetLevel || 0;
       
@@ -678,6 +676,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       return;
     }
 
+    // Cerrar conexión anterior si existe
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      console.log('[Arena] Closing previous WebSocket connection');
+      wsRef.current.close();
+    }
+    
+    // Limpiar estado de otros jugadores
+    otherPlayersRef.current = [];
+    setOtherPlayers([]);
+
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const isDev = window.location.port === '8008';
     const apiHost = isDev ? window.location.hostname + ':3000' : window.location.host;
@@ -691,7 +699,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ws.send(JSON.stringify({
         type: 'join_arena',
         token: token,
-        username: user.username
+        username: user.username,
+        skin: currentSkin // Enviar skin actual
       }));
     };
 
@@ -700,39 +709,55 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       
       switch (data.type) {
         case 'arena_state':
-          setOtherPlayers(data.players?.filter(p => p.userId !== user.id) || []);
+          console.log('[Arena] State received, players:', data.players?.length, 'my id:', user.id);
+          const otherPlayersFromState = data.players?.filter(p => p.userId !== user.id) || [];
+          console.log('[Arena] Other players:', otherPlayersFromState.length);
+          otherPlayersRef.current = otherPlayersFromState;
+          setOtherPlayers(otherPlayersFromState);
           setArenaPlayerCount(data.players?.length || 0);
           // Inicializar el juego en modo arena
           initArenaGame();
           break;
           
         case 'player_joined':
+          console.log('[Arena] Player joined:', data.player?.username, 'id:', data.player?.userId);
           setArenaPlayerCount(prev => prev + 1);
           if (data.player && data.player.userId !== user.id) {
-            setOtherPlayers(prev => [...prev, data.player]);
+            // Verificar si ya existe
+            const exists = otherPlayersRef.current.some(p => p.userId === data.player.userId);
+            if (!exists) {
+              otherPlayersRef.current = [...otherPlayersRef.current, data.player];
+              setOtherPlayers([...otherPlayersRef.current]);
+            }
           }
           break;
           
         case 'player_left':
+          console.log('[Arena] Player left:', data.userId);
           setArenaPlayerCount(prev => Math.max(0, prev - 1));
-          setOtherPlayers(prev => prev.filter(p => p.userId !== data.userId));
+          otherPlayersRef.current = otherPlayersRef.current.filter(p => p.userId !== data.userId);
+          setOtherPlayers([...otherPlayersRef.current]);
           break;
           
         case 'players_update':
           if (data.players && Array.isArray(data.players)) {
-            setOtherPlayers(prev => {
-              const updated = [...prev];
-              data.players.forEach(updatedPlayer => {
-                if (updatedPlayer.userId === user.id) return;
-                const index = updated.findIndex(p => p.userId === updatedPlayer.userId);
-                if (index >= 0) {
-                  updated[index] = { ...updated[index], ...updatedPlayer };
-                } else {
-                  updated.push(updatedPlayer);
-                }
-              });
-              return updated;
+            data.players.forEach(updatedPlayer => {
+              if (updatedPlayer.userId === user.id) return;
+              const index = otherPlayersRef.current.findIndex(p => p.userId === updatedPlayer.userId);
+              if (index >= 0) {
+                // Actualizar jugador existente en el ref directamente
+                otherPlayersRef.current[index] = { 
+                  ...otherPlayersRef.current[index], 
+                  ...updatedPlayer 
+                };
+              } else {
+                // Si no existía, agregarlo
+                console.log('[Arena] Adding missing player:', updatedPlayer.username);
+                otherPlayersRef.current.push(updatedPlayer);
+              }
             });
+            // Solo actualizar state para trigger re-render del minimapa
+            setOtherPlayers([...otherPlayersRef.current]);
           }
           break;
           
@@ -743,17 +768,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               killMethod: data.killMethod
             });
           }
-          // Si somos el killer, incrementar contador
+          // Si somos el killer, incrementar contador y dar recompensa
           if (data.killerId === user.id) {
             setArenaKills(prev => prev + 1);
-            console.log('[Arena] ¡Eliminaste a ' + data.victimUsername + '!');
+            // Recompensa: +5 estrellas por kill
+            setTotalStars(prev => prev + 5);
+            console.log('[Arena] ¡Eliminaste a ' + data.victimUsername + '! +5⭐');
           }
           break;
           
         case 'kill_confirmed':
           // El servidor confirmó que matamos a alguien
           setArenaKills(prev => prev + 1);
-          console.log('[Arena] Kill confirmado');
+          // Recompensa: +5 estrellas por kill
+          setTotalStars(prev => prev + 5);
+          console.log('[Arena] Kill confirmado! +5⭐');
           break;
           
         case 'error':
@@ -789,20 +818,46 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     if (arenaMode) {
       const game = gameRef.current;
       const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+      const sessionXP = game.sessionXP || 0;
+      
+      // RECOMPENSAS DE ARENA:
+      // - 10% del XP ganado se conserva permanentemente
+      // - Las estrellas ganadas por kills ya se sumaron en tiempo real
+      const xpReward = Math.floor(sessionXP * 0.1);
+      const starsFromKills = arenaKills * 5; // Ya se sumaron, pero para mostrar
+      
+      if (xpReward > 0) {
+        setTotalXP(prev => prev + xpReward);
+        console.log(`[Arena] Recompensa: +${xpReward} XP (10% de ${sessionXP})`);
+      }
       
       // En modo arena, notificar al servidor
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: 'player_death',
-          xp: game.sessionXP || 0,
+          xp: sessionXP,
           kills: arenaKills,
           duration: duration,
-          killerInfo: killerInfo
+          killerInfo: killerInfo,
+          xpReward: xpReward,
+          starsFromKills: starsFromKills
         }));
       }
       
+      // Guardar progreso con las nuevas recompensas
+      saveUserProgress();
+      
       if (killerInfo) {
-        setArenaDeathInfo(killerInfo);
+        setArenaDeathInfo({
+          ...killerInfo,
+          xpReward,
+          starsFromKills
+        });
+      } else {
+        setArenaDeathInfo({
+          xpReward,
+          starsFromKills
+        });
       }
       
       setGameState('arenaDeath');
@@ -904,6 +959,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     }
   };
 
+  // Load arena leaderboard
+  const loadArenaLeaderboard = async () => {
+    try {
+      const response = await fetch('/api/arena/leaderboard');
+      if (response.ok) {
+        const data = await response.json();
+        setArenaLeaderboard(data);
+      }
+    } catch (error) {
+      console.error('Error loading arena leaderboard:', error);
+    }
+  };
+
   // Load progress on mount
   useEffect(() => {
     loadUserProgress();
@@ -913,6 +981,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   useEffect(() => {
     if (gameState === 'menu' || gameState === 'levelComplete' || gameState === 'gameComplete') {
       loadLeaderboard();
+    }
+    if (gameState === 'arenaLobby' || gameState === 'arenaDeath') {
+      loadArenaLeaderboard();
     }
   }, [gameState]);
 
@@ -1132,18 +1203,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const x = margin + Math.random() * (game.worldWidth - margin * 2);
     const y = margin + Math.random() * (game.worldHeight - margin * 2);
     const angle = Math.random() * Math.PI * 2;
+    const baseSpeed = levelConfig.enemySpeed || 2.8; // Valor por defecto si no está definido
     
     return {
       segments: [{ x, y }],
       direction: { x: Math.cos(angle), y: Math.sin(angle) },
-      speed: levelConfig.enemySpeed * 1.8, // Más rápida
+      speed: baseSpeed * 1.8, // Más rápida (50% más rápida que enemigos normales)
       length: 25 + Math.random() * 10,
       hue: 0,
       rainbowOffset: Math.random() * 360, // Offset para el arcoíris animado
       isResentful: true,
       lastShotTime: 0,
       shootCooldown: 400, // Dispara muy rápido (400ms)
-      chaseRange: 800, // Rango de caza más amplio
+      chaseRange: 1200, // Rango de caza muy amplio para que siempre persiga
       bulletSpeed: 10 // Balas más rápidas
     };
   };
@@ -1176,17 +1248,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const TARGET_FPS = 60;
     const FRAME_TIME = 1000 / TARGET_FPS; // milliseconds per frame at target FPS
 
+    // DESACTIVADO para mejor rendimiento - las partículas causan lag
     const createParticle = (x, y, color, count = 8) => {
-      for (let i = 0; i < count; i++) {
-        const angle = (Math.PI * 2 * i) / count;
-        gameRef.current.particles.push({
-          x, y,
-          vx: Math.cos(angle) * (2 + Math.random() * 2),
-          vy: Math.sin(angle) * (2 + Math.random() * 2),
-          life: 1,
-          color
-        });
-      }
+      // No hacer nada - partículas desactivadas
+      return;
     };
 
     // Función para aplicar daño con efectos visuales
@@ -1662,10 +1727,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // starsToCreate: número de estrellas a crear (1 + estrellas que había comido el enemigo)
     const createFoodFromEnemy = (x, y, totalXP, starsToCreate = 1) => {
       const game = gameRef.current;
-      
-      // Debug: contar estrellas generadas
-      game.totalStarsGenerated = (game.totalStarsGenerated || 0) + starsToCreate;
-      console.log(`⭐ Estrella generada! Total generadas: ${game.totalStarsGenerated}, En mapa: ${game.stars.length + starsToCreate}`);
       const foodCount = Math.min(20, Math.max(5, Math.floor(totalXP / 5))); // 5-20 food items
       const xpPerFood = Math.floor(totalXP / foodCount);
       const spreadRadius = 100; // Spread food in 100px radius
@@ -1712,11 +1773,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       
       game.enemies.forEach((enemy, enemyIndex) => {
         const head = enemy.segments[0];
+        if (!head) return; // Skip if enemy has no head
         
         // === INTELIGENCIA DEL ENEMIGO ===
         let targetingStar = false;
         let avoidingPlayer = false;
-        const playerHead = game.snake[0];
+        const playerHead = game.snake?.[0];
+        if (!playerHead) return; // Skip if player doesn't exist yet
         
         // 1. EVASIÓN DEL JUGADOR - Prioridad alta
         // Detectar si el jugador está cerca y esquivarlo
@@ -1988,16 +2051,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Enemy eats star - contador y recuperar vida
             enemy.starsEaten = (enemy.starsEaten || 0) + 1;
             
-            // Debug: log cuando un enemigo come una estrella
-            console.log(`🐍 Enemigo comió estrella! starsEaten ahora: ${enemy.starsEaten}, Estrellas en mapa: ${game.stars.length - 1}`);
-            
             // Recuperar vida hasta el máximo
             enemy.currentHealth = Math.min(enemy.currentHealth + enemy.maxHealth, enemy.maxHealth);
             
             // Efecto visual dorado al comer estrella
             createParticle(head.x, head.y, '#FFD700', 15);
             
-            console.log(`🌟 Enemigo comió estrella! Estrellas: ${enemy.starsEaten}, Vida: ${enemy.currentHealth}/${enemy.maxHealth}`);
             return false; // Remove star
           }
           return true; // Keep star
@@ -2092,9 +2151,47 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       });
 
+      // === ARENA MODE: Interpolar movimiento de otros jugadores ===
+      if (arenaMode && otherPlayersRef.current.length > 0) {
+        otherPlayersRef.current.forEach(player => {
+          if (!player.segments || player.segments.length === 0 || !player.direction) {
+            return;
+          }
+          
+          // Velocidad del otro jugador (usar velocidad recibida o default)
+          const playerSpeed = player.speed || 2.5;
+          
+          // Mover la cabeza del jugador basándose en su dirección
+          const head = player.segments[0];
+          head.x += player.direction.x * playerSpeed * normalizedDelta;
+          head.y += player.direction.y * playerSpeed * normalizedDelta;
+          
+          // Actualizar segmentos (el resto sigue a la cabeza)
+          for (let i = 1; i < player.segments.length; i++) {
+            const prev = player.segments[i - 1];
+            const current = player.segments[i];
+            const dx = prev.x - current.x;
+            const dy = prev.y - current.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > SNAKE_SIZE * 1.2) {
+              // Mover el segmento hacia el anterior
+              const ratio = (SNAKE_SIZE * 1.2) / dist;
+              current.x = prev.x - dx * ratio;
+              current.y = prev.y - dy * ratio;
+            }
+          }
+          
+          // Actualizar x, y del player
+          player.x = head.x;
+          player.y = head.y;
+        });
+      }
+
       // === ARENA MODE: Check collisions with other players ===
-      if (arenaMode && otherPlayers.length > 0) {
-        otherPlayers.forEach(otherPlayer => {
+      if (arenaMode && otherPlayersRef.current.length > 0 && game.snake?.[0]) {
+        const playerHead = game.snake[0];
+        otherPlayersRef.current.forEach(otherPlayer => {
           if (!otherPlayer.segments || otherPlayer.segments.length === 0) return;
           
           // Player head vs Other player body (local player takes damage)
@@ -2330,16 +2427,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   });
                   
                   // Respawn en otro lugar (lejos del jugador)
-                  const playerHead = game.snake[0];
+                  const playerHead = game.snake?.[0];
                   let newSpawnX, newSpawnY, attempts = 0;
                   do {
                     const margin = 200;
                     newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
                     newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
-                    const distToPlayer = Math.sqrt(
+                    const distToPlayer = playerHead ? Math.sqrt(
                       Math.pow(newSpawnX - playerHead.x, 2) + 
                       Math.pow(newSpawnY - playerHead.y, 2)
-                    );
+                    ) : 9999;
                     attempts++;
                     if (distToPlayer > 600 || attempts > 20) break;
                   } while (true);
@@ -2420,11 +2517,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
       
       // Remove killed enemies (en arena, respawnear nuevos)
-      if (arenaMode && enemiesToKill.length > 0) {
+      if (arenaMode && enemiesToKill.length > 0 && game.snake?.[0]) {
         const config = arenaConfig || defaultArenaConfig;
+        const playerHead = game.snake[0];
         enemiesToKill.sort((a, b) => b - a).forEach(index => {
           // Respawnear un nuevo enemigo lejos del jugador
-          const playerHead = game.snake[0];
           let newSpawnX, newSpawnY, attempts = 0;
           do {
             const margin = 200;
@@ -2454,9 +2551,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           game.enemies[index] = newEnemy;
         });
       } else {
-        enemiesToKill.sort((a, b) => b - a).forEach(index => {
-          game.enemies.splice(index, 1);
-        });
+      enemiesToKill.sort((a, b) => b - a).forEach(index => {
+        game.enemies.splice(index, 1);
+      });
       }
       
       // Make enemies shoot - ahora con sistema de cannonLevel
@@ -2856,16 +2953,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
       // === ARENA MODE: Enviar posición al servidor ===
       if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        if (!game.lastWsUpdate || Date.now() - game.lastWsUpdate > 50) {
+        const now = Date.now();
+        const timeSinceLastUpdate = now - (game.lastWsUpdate || 0);
+        
+        // Detectar si la dirección cambió significativamente
+        const lastDir = game.lastSentDirection || { x: 0, y: 0 };
+        const dirChanged = Math.abs(game.direction.x - lastDir.x) > 0.1 || 
+                          Math.abs(game.direction.y - lastDir.y) > 0.1;
+        
+        // Enviar actualización cada 50ms (~20fps) O si la dirección cambió
+        if (timeSinceLastUpdate > 50 || dirChanged) {
           wsRef.current.send(JSON.stringify({
             type: 'player_update',
             x: newHead.x,
             y: newHead.y,
             direction: game.direction,
             segments: game.snake.slice(0, 20), // Enviar solo los primeros 20 segmentos
-            score: game.sessionXP
+            score: game.sessionXP,
+            speed: game.speed, // Enviar velocidad actual para interpolación
+            skin: currentSkin // Enviar skin actual
           }));
-          game.lastWsUpdate = Date.now();
+          game.lastWsUpdate = now;
+          game.lastSentDirection = { ...game.direction };
         }
       }
 
@@ -2987,8 +3096,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         game.food.push(createFood());
       }
 
-      // Check level completion - based on stars now
-      if (game.currentStars >= game.starsNeeded) {
+      // Check level completion - based on stars now (NO aplica en modo arena)
+      if (!arenaMode && game.currentStars >= game.starsNeeded) {
         // ¡VICTORIA! Ahora sí sumamos XP y estrellas ganadas al total
         const earnedXP = game.sessionXP;
         const earnedStars = game.currentStars;
@@ -3161,7 +3270,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           snake.rainbowOffset = (snake.rainbowOffset || 0) + 2;
           
           const snakeHead = snake.segments[0];
-          const playerHead = game.snake[0];
+          const playerHead = game.snake?.[0];
           
           if (playerHead) {
             const dx = playerHead.x - snakeHead.x;
@@ -3331,13 +3440,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       if (game.healFlash > 0) game.healFlash -= normalizedDelta;
       if (game.invulnerable > 0) game.invulnerable -= normalizedDelta;
 
-      // Update particles
-      game.particles = game.particles.filter(p => {
-        p.x += p.vx * normalizedDelta;
-        p.y += p.vy * normalizedDelta;
-        p.life -= 0.02 * normalizedDelta;
-        return p.life > 0;
-      });
+      // Update particles - DESACTIVADO para mejor rendimiento
+      // game.particles = game.particles.filter(p => { ... });
+      game.particles = []; // Mantener vacío
     };
 
     const draw = () => {
@@ -3550,7 +3655,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.shadowBlur = 0;
       }
 
-      // Draw food with rainbow colors and variable sizes
+      // Draw food with rainbow colors - OPTIMIZADO (sin gradientes ni shadows)
       game.food.forEach(food => {
         const screenX = food.x - camX;
         const screenY = food.y - camY;
@@ -3558,26 +3663,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         // Only draw if visible on screen
         if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
             screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-          // Glow effect
-          const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, food.size * 3);
-          const alpha = 0.3 + Math.sin(Date.now() / 200 + food.x) * 0.2;
-          glow.addColorStop(0, `hsla(${food.hue}, 100%, 50%, ${alpha})`);
-          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = glow;
-          ctx.fillRect(screenX - food.size * 3, screenY - food.size * 3, food.size * 6, food.size * 6);
+          // Simple glow circle (más rápido que radialGradient)
+          ctx.fillStyle = `hsla(${food.hue}, 100%, 50%, 0.3)`;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, food.size * 2, 0, Math.PI * 2);
+          ctx.fill();
           
-          // The orb itself
+          // The orb itself (sin shadow)
           ctx.fillStyle = food.color;
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = food.color;
           ctx.beginPath();
           ctx.arc(screenX, screenY, food.size, 0, Math.PI * 2);
           ctx.fill();
-          ctx.shadowBlur = 0;
         }
       });
 
-      // Draw stars (golden 5-pointed stars)
+      // Draw stars (golden 5-pointed stars) - OPTIMIZADO
       game.stars.forEach(star => {
         // Update star animation
         star.rotation += star.rotationSpeed;
@@ -3590,37 +3690,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
             screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
           const pulseSize = star.size + Math.sin(star.pulse) * 3;
-          const glowAlpha = 0.4 + Math.sin(star.pulse) * 0.3;
           
-          // Outer glow
-          const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, pulseSize * 2);
-          glow.addColorStop(0, `rgba(255, 215, 0, ${glowAlpha})`);
-          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = glow;
-          ctx.fillRect(screenX - pulseSize * 2, screenY - pulseSize * 2, pulseSize * 4, pulseSize * 4);
+          // Simple glow (sin radialGradient)
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, pulseSize * 1.5, 0, Math.PI * 2);
+          ctx.fill();
           
-          // Draw the star
+          // Draw the star (sin shadow)
           ctx.fillStyle = '#FFD700';
           ctx.strokeStyle = '#FFA500';
           ctx.lineWidth = 2;
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#FFD700';
           drawStar(ctx, screenX, screenY, pulseSize, star.rotation);
           ctx.fill();
           ctx.stroke();
-          ctx.shadowBlur = 0;
         }
       });
 
-      // Draw enemies
-      if (!game.enemies || game.enemies.length === 0) {
-        console.warn('⚠️ No hay enemigos para dibujar');
-      }
+      // Draw enemies - OPTIMIZADO (sin shadows)
       game.enemies.forEach(enemy => {
-        if (!enemy.segments || enemy.segments.length === 0) {
-          console.warn('⚠️ Enemigo sin segmentos:', enemy);
-          return;
-        }
+        if (!enemy.segments || enemy.segments.length === 0) return;
+        
         enemy.segments.forEach((seg, i) => {
           const screenX = seg.x - camX;
           const screenY = seg.y - camY;
@@ -3631,27 +3721,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             
             // Dibujar escudo si el enemigo lo tiene (solo en la cabeza)
             if (enemy.hasShield && i === 0) {
-              const shieldAlpha = alpha * 0.4;
-              ctx.strokeStyle = `rgba(100, 149, 237, ${shieldAlpha})`;
-              ctx.lineWidth = 4;
+              ctx.strokeStyle = `rgba(100, 149, 237, ${alpha * 0.6})`;
+              ctx.lineWidth = 3;
               ctx.beginPath();
-              ctx.arc(screenX, screenY, SNAKE_SIZE + 4, 0, Math.PI * 2);
+              ctx.arc(screenX, screenY, SNAKE_SIZE + 3, 0, Math.PI * 2);
               ctx.stroke();
             }
             
             ctx.fillStyle = `hsla(${enemy.hue}, 100%, 50%, ${alpha})`;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
             ctx.beginPath();
             ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
             ctx.fill();
           }
         });
-        ctx.shadowBlur = 0;
       });
 
-      // Draw player snake with rainbow gradient like the logo
-      const snakeColors = [
+      // Draw player snake with skin support
+      const defaultColors = [
         { r: 0, g: 255, b: 0 },      // Verde brillante
         { r: 128, g: 255, b: 0 },    // Verde-amarillo
         { r: 255, g: 255, b: 0 },    // Amarillo
@@ -3661,22 +3747,67 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         { r: 255, g: 0, b: 255 }     // Rosa/Magenta
       ];
       
+      const dragonColors = [
+        { r: 255, g: 200, b: 50 },   // Amarillo dorado
+        { r: 255, g: 150, b: 0 },    // Naranja brillante
+        { r: 255, g: 100, b: 0 },    // Naranja oscuro
+        { r: 255, g: 50, b: 0 },     // Rojo-naranja
+        { r: 200, g: 30, b: 0 },     // Rojo oscuro
+        { r: 150, g: 20, b: 0 },     // Rojo muy oscuro
+        { r: 100, g: 10, b: 0 }      // Casi negro-rojo
+      ];
+      
+      const cyberColors = [
+        { r: 0, g: 255, b: 255 },    // Cyan brillante
+        { r: 0, g: 200, b: 255 },    // Cyan-azul
+        { r: 0, g: 150, b: 200 },    // Azul medio
+        { r: 0, g: 100, b: 150 },    // Azul oscuro
+        { r: 0, g: 50, b: 100 },     // Azul muy oscuro
+        { r: 0, g: 30, b: 60 },      // Casi negro-azul
+        { r: 0, g: 20, b: 40 }       // Negro-azul
+      ];
+      
+      // Seleccionar colores según skin
+      let snakeColors = defaultColors;
+      if (currentSkin === 'dragon') {
+        snakeColors = dragonColors;
+      } else if (currentSkin === 'cyber') {
+        snakeColors = cyberColors;
+      }
+      
       // Dibujar víbora (sin parpadeo para evitar lag)
       game.snake.forEach((seg, i) => {
         const screenX = seg.x - camX;
         const screenY = seg.y - camY;
         let alpha = 1 - (i / game.snake.length) * 0.2;
         
-        // Calculate color based on position in snake (gradient)
+        let r, g, b;
+        
+        if (currentSkin === 'rainbow') {
+          // SKIN ARCOÍRIS: Colores animados que fluyen
+          const rainbowHue = (i * 25 + Date.now() / 15) % 360;
+          // Convertir HSL a RGB
+          const hslToRgb = (h, s, l) => {
+            s /= 100;
+            l /= 100;
+            const k = n => (n + h / 30) % 12;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            return [Math.round(255 * f(0)), Math.round(255 * f(8)), Math.round(255 * f(4))];
+          };
+          [r, g, b] = hslToRgb(rainbowHue, 100, 55);
+        } else {
+          // Otros skins: usar gradiente de colores
         const colorProgress = Math.min(i / Math.max(game.snake.length - 1, 1), 1);
         const colorIndex = colorProgress * (snakeColors.length - 1);
         const colorLow = Math.floor(colorIndex);
         const colorHigh = Math.min(colorLow + 1, snakeColors.length - 1);
         const colorMix = colorIndex - colorLow;
         
-        let r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
-        let g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
-        let b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+          r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
+          g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
+          b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+        }
         
         // Apply damage flash (red tint)
         if (game.damageFlash > 0) {
@@ -3704,9 +3835,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.stroke();
         }
         
+        // SKIN CYBER: Agregar anillo de neón interior
+        if (currentSkin === 'cyber' && i > 0) {
+          ctx.strokeStyle = '#00ffff';
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#00ffff';
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, game.snakeSize - 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // SKIN DRAGON: Agregar efecto de escamas/fuego
+        if (currentSkin === 'dragon' && i === 0) {
+          // Pequeñas "llamas" alrededor de la cabeza
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#ff6600';
+        }
+        
         // Draw segment with gradient color
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : 12);
+        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : (currentSkin === 'rainbow' ? 15 : 12));
         ctx.shadowColor = game.damageFlash > 0 ? '#ff0000' : (game.healFlash > 0 ? '#00ff00' : segmentColor);
         ctx.beginPath();
         ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
@@ -3739,10 +3888,139 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           const rightEyeX = screenX - perpX * eyeOffset + dir.x * forwardOffset;
           const rightEyeY = screenY - perpY * eyeOffset + dir.y * forwardOffset;
           
-          // Draw white part of eyes with glow
+          // === MÁSCARAS DE SKINS ===
+          
+          // 🐉 DRAGÓN: Cuernos de fuego
+          if (currentSkin === 'dragon') {
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ff6600';
+            
+            // Cuerno izquierdo
+            const hornSize = 10;
+            const hornAngle = Math.atan2(dir.y, dir.x) - Math.PI / 3;
+            ctx.fillStyle = '#ffaa00';
+            ctx.beginPath();
+            ctx.moveTo(screenX + perpX * 6, screenY + perpY * 6);
+            ctx.lineTo(
+              screenX + perpX * 6 + Math.cos(hornAngle) * hornSize,
+              screenY + perpY * 6 + Math.sin(hornAngle) * hornSize
+            );
+            ctx.lineTo(
+              screenX + perpX * 4 + dir.x * 3,
+              screenY + perpY * 4 + dir.y * 3
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Cuerno derecho
+            const hornAngle2 = Math.atan2(dir.y, dir.x) + Math.PI / 3;
+            ctx.beginPath();
+            ctx.moveTo(screenX - perpX * 6, screenY - perpY * 6);
+            ctx.lineTo(
+              screenX - perpX * 6 + Math.cos(hornAngle2) * hornSize,
+              screenY - perpY * 6 + Math.sin(hornAngle2) * hornSize
+            );
+            ctx.lineTo(
+              screenX - perpX * 4 + dir.x * 3,
+              screenY - perpY * 4 + dir.y * 3
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Efecto de llama en la punta de los cuernos
+            ctx.fillStyle = '#ff3300';
+            ctx.beginPath();
+            ctx.arc(
+              screenX + perpX * 6 + Math.cos(hornAngle) * (hornSize - 2),
+              screenY + perpY * 6 + Math.sin(hornAngle) * (hornSize - 2),
+              3, 0, Math.PI * 2
+            );
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(
+              screenX - perpX * 6 + Math.cos(hornAngle2) * (hornSize - 2),
+              screenY - perpY * 6 + Math.sin(hornAngle2) * (hornSize - 2),
+              3, 0, Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+          
+          // 🌈 ARCOÍRIS: Corona/Aura brillante
+          if (currentSkin === 'rainbow') {
+            const crownTime = Date.now() / 100;
+            for (let ray = 0; ray < 5; ray++) {
+              const rayAngle = Math.atan2(dir.y, dir.x) + (ray - 2) * 0.4;
+              const rayHue = (ray * 60 + crownTime * 5) % 360;
+              const rayLength = 8 + Math.sin(crownTime + ray) * 3;
+              
+              ctx.strokeStyle = `hsl(${rayHue}, 100%, 60%)`;
+              ctx.shadowBlur = 8;
+              ctx.shadowColor = `hsl(${rayHue}, 100%, 60%)`;
+              ctx.lineWidth = 3;
+              ctx.lineCap = 'round';
+              
+              ctx.beginPath();
+              ctx.moveTo(screenX + dir.x * 5, screenY + dir.y * 5);
+              ctx.lineTo(
+                screenX + Math.cos(rayAngle) * rayLength + dir.x * 5,
+                screenY + Math.sin(rayAngle) * rayLength + dir.y * 5
+              );
+              ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+          }
+          
+          // ⚡ CYBER: Visera estilo Tron
+          if (currentSkin === 'cyber') {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00ffff';
+            
+            // Visera horizontal brillante
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            
+            // Línea de la visera
+            ctx.beginPath();
+            ctx.moveTo(screenX + perpX * 7, screenY + perpY * 7);
+            ctx.lineTo(screenX - perpX * 7, screenY - perpY * 7);
+            ctx.stroke();
+            
+            // Punto central brillante
           ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(screenX + dir.x * 2, screenY + dir.y * 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Antenas laterales
+            ctx.strokeStyle = '#0099ff';
+            ctx.lineWidth = 2;
+            const antennaLength = 6;
+            
+            ctx.beginPath();
+            ctx.moveTo(screenX + perpX * 6 - dir.x * 2, screenY + perpY * 6 - dir.y * 2);
+            ctx.lineTo(
+              screenX + perpX * 6 - dir.x * 2 + perpX * antennaLength,
+              screenY + perpY * 6 - dir.y * 2 + perpY * antennaLength
+            );
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(screenX - perpX * 6 - dir.x * 2, screenY - perpY * 6 - dir.y * 2);
+            ctx.lineTo(
+              screenX - perpX * 6 - dir.x * 2 - perpX * antennaLength,
+              screenY - perpY * 6 - dir.y * 2 - perpY * antennaLength
+            );
+            ctx.stroke();
+            
+            ctx.shadowBlur = 0;
+          }
+          
+          // Draw white part of eyes with glow
+          ctx.fillStyle = currentSkin === 'cyber' ? '#00ffff' : '#ffffff';
           ctx.shadowBlur = 6;
-          ctx.shadowColor = '#ffffff';
+          ctx.shadowColor = currentSkin === 'cyber' ? '#00ffff' : '#ffffff';
           
           ctx.beginPath();
           ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI * 2);
@@ -3753,7 +4031,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.fill();
           
           // Draw pupils (looking in movement direction)
-          ctx.fillStyle = '#000000';
+          ctx.fillStyle = currentSkin === 'dragon' ? '#ff3300' : '#000000';
           ctx.shadowBlur = 0;
           
           const pupilOffsetX = dir.x * 1.5;
@@ -3771,9 +4049,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.shadowBlur = 0;
 
       // === ARENA MODE: Draw other players ===
-      if (arenaMode && otherPlayers.length > 0) {
-        otherPlayers.forEach(player => {
+      if (arenaMode && otherPlayersRef.current.length > 0) {
+        otherPlayersRef.current.forEach(player => {
           if (!player.segments || player.segments.length === 0) return;
+          
+          // Color único para cada jugador basado en su hue
+          const playerHue = player.hue !== undefined ? player.hue : 120;
+          const playerSkin = player.skin || 'default';
+          
+          // Calcular dirección para los ojos
+          const dir = player.direction || { x: 1, y: 0 };
           
           // Dibujar segmentos del otro jugador
           player.segments.forEach((segment, index) => {
@@ -3782,38 +4067,120 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             
             if (screenX > -50 && screenX < CANVAS_WIDTH + 50 &&
                 screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-              // Color diferente para otros jugadores (verde)
-              const hue = 120; // Verde
-              const saturation = 100;
-              const lightness = index === 0 ? 60 : 40;
               
-              ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-              ctx.shadowBlur = 8;
-              ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+              // Renderizado según skin
+              if (playerSkin === 'dragon') {
+                // 🐉 SKIN DRAGÓN - Gradiente naranja/rojo con escamas
+                const gradient = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, SNAKE_SIZE);
+                gradient.addColorStop(0, index === 0 ? '#ffaa00' : '#ff6600');
+                gradient.addColorStop(1, index === 0 ? '#ff4400' : '#cc2200');
+                ctx.fillStyle = gradient;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#ff4400';
+                
+              } else if (playerSkin === 'rainbow') {
+                // 🌈 SKIN ARCOÍRIS - Colores animados
+                const rainbowHue = (index * 30 + Date.now() / 20) % 360;
+                ctx.fillStyle = `hsl(${rainbowHue}, 100%, 55%)`;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = `hsl(${rainbowHue}, 100%, 50%)`;
+                
+              } else if (playerSkin === 'cyber') {
+                // ⚡ SKIN CYBER - Neón con líneas
+                ctx.fillStyle = index === 0 ? '#00ffff' : '#001133';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00ffff';
+                
+              } else {
+                // DEFAULT - Color basado en hue
+                const lightness = index === 0 ? 55 : 40;
+                ctx.fillStyle = `hsl(${playerHue}, 100%, ${lightness}%)`;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = `hsl(${playerHue}, 100%, 50%)`;
+              }
+              
+              // Dibujar segmento
               ctx.beginPath();
               ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
               ctx.fill();
               
-              // Dibujar etiqueta con nombre del jugador sobre la cabeza
-              if (index === 0 && player.username) {
-                ctx.font = 'bold 12px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                
-                // Fondo semi-transparente para el texto
-                const textWidth = ctx.measureText(player.username).width;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(screenX - textWidth / 2 - 4, screenY - 30, textWidth + 8, 18);
-                
-                // Texto del nombre
-                ctx.fillStyle = '#00ff00';
+              // Borde para mejor definición
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              
+              // Detalles especiales para skin cyber
+              if (playerSkin === 'cyber' && index > 0) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, SNAKE_SIZE - 3, 0, Math.PI * 2);
+                ctx.stroke();
+              }
+              
+              // === CABEZA: Ojos y detalles ===
+              if (index === 0) {
                 ctx.shadowBlur = 0;
-                ctx.fillText(player.username, screenX, screenY - 15);
                 
-                // Mostrar score del jugador
-                ctx.font = '10px Arial';
-                ctx.fillStyle = '#aaffaa';
-                ctx.fillText(`${player.score || 0} XP`, screenX, screenY - 32);
+                // Calcular posición de los ojos basado en dirección
+                const eyeOffset = SNAKE_SIZE * 0.4;
+                const eyeSize = SNAKE_SIZE * 0.35;
+                const perpX = -dir.y;
+                const perpY = dir.x;
+                
+                // Ojo izquierdo
+                const leftEyeX = screenX + dir.x * eyeOffset * 0.5 + perpX * eyeOffset;
+                const leftEyeY = screenY + dir.y * eyeOffset * 0.5 + perpY * eyeOffset;
+                
+                // Ojo derecho
+                const rightEyeX = screenX + dir.x * eyeOffset * 0.5 - perpX * eyeOffset;
+                const rightEyeY = screenY + dir.y * eyeOffset * 0.5 - perpY * eyeOffset;
+                
+                // Dibujar ojos (blanco)
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(leftEyeX, leftEyeY, eyeSize, 0, Math.PI * 2);
+                ctx.arc(rightEyeX, rightEyeY, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Pupilas (negras, mirando hacia la dirección)
+                const pupilSize = eyeSize * 0.6;
+                const pupilOffset = eyeSize * 0.2;
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(leftEyeX + dir.x * pupilOffset, leftEyeY + dir.y * pupilOffset, pupilSize, 0, Math.PI * 2);
+                ctx.arc(rightEyeX + dir.x * pupilOffset, rightEyeY + dir.y * pupilOffset, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Brillo en los ojos
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(leftEyeX - pupilSize * 0.3, leftEyeY - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+                ctx.arc(rightEyeX - pupilSize * 0.3, rightEyeY - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Etiqueta con nombre del jugador
+                if (player.username) {
+                  ctx.font = 'bold 12px Arial';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'bottom';
+                  
+                  // Score arriba del nombre
+                  const scoreText = `${player.score || 0} XP`;
+                  ctx.font = 'bold 10px Arial';
+                  ctx.fillStyle = `hsl(${playerHue}, 70%, 80%)`;
+                  ctx.fillText(scoreText, screenX, screenY - 28);
+                  
+                  // Fondo para el nombre
+                  ctx.font = 'bold 12px Arial';
+                  const textWidth = ctx.measureText(player.username).width;
+                  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                  ctx.fillRect(screenX - textWidth / 2 - 4, screenY - 26, textWidth + 8, 16);
+                  
+                  // Nombre
+                  ctx.fillStyle = `hsl(${playerHue}, 100%, 70%)`;
+                  ctx.fillText(player.username, screenX, screenY - 12);
+                }
               }
             }
           });
@@ -3842,20 +4209,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.shadowBlur = 0;
       });
 
-      // Draw particles
-      game.particles.forEach(p => {
-        const screenX = p.x - camX;
-        const screenY = p.y - camY;
-        ctx.fillStyle = p.color.replace(')', `, ${p.life})`).replace('rgb', 'rgba');
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = p.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, 3 * p.life, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.shadowBlur = 0;
+      // Draw particles - DESACTIVADO para mejor rendimiento
+      // Las partículas están desactivadas para mejorar el FPS
 
-      // Draw Killer Saws
+      // Draw Killer Saws - OPTIMIZADO (sin shadows)
       if (game.killerSaws && game.killerSaws.length > 0) {
         game.killerSaws.forEach(saw => {
           const screenX = saw.x - camX;
@@ -3867,25 +4224,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             ctx.translate(screenX, screenY);
             ctx.rotate(saw.rotation);
             
-            // Outer glow
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = saw.color;
-            
-            // Draw saw body
+            // Draw saw body (sin shadow)
             ctx.fillStyle = saw.color;
             ctx.beginPath();
             ctx.arc(0, 0, saw.radius, 0, Math.PI * 2);
             ctx.fill();
             
-            // Draw saw teeth
-            const teethCount = 12;
+            // Draw saw teeth (simplificado: 8 en vez de 12)
+            const teethCount = 8;
             ctx.fillStyle = '#333';
             for (let i = 0; i < teethCount; i++) {
               const angle = (Math.PI * 2 * i) / teethCount;
               ctx.beginPath();
               ctx.moveTo(Math.cos(angle) * saw.radius * 0.5, Math.sin(angle) * saw.radius * 0.5);
-              ctx.lineTo(Math.cos(angle + 0.15) * saw.radius * 1.1, Math.sin(angle + 0.15) * saw.radius * 1.1);
-              ctx.lineTo(Math.cos(angle - 0.15) * saw.radius * 1.1, Math.sin(angle - 0.15) * saw.radius * 1.1);
+              ctx.lineTo(Math.cos(angle + 0.2) * saw.radius * 1.1, Math.sin(angle + 0.2) * saw.radius * 1.1);
+              ctx.lineTo(Math.cos(angle - 0.2) * saw.radius * 1.1, Math.sin(angle - 0.2) * saw.radius * 1.1);
               ctx.closePath();
               ctx.fill();
             }
@@ -3897,12 +4250,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             ctx.fill();
             
             ctx.restore();
-            ctx.shadowBlur = 0;
           }
         });
       }
 
-      // Draw Floating Cannons
+      // Draw Floating Cannons - OPTIMIZADO (sin shadows)
       if (game.floatingCannons && game.floatingCannons.length > 0) {
         game.floatingCannons.forEach(cannon => {
           const screenX = cannon.x - camX;
@@ -3914,13 +4266,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             ctx.translate(screenX, screenY);
             ctx.rotate(cannon.angle);
             
-            // Cannon body
+            // Cannon body (sin shadow)
             ctx.fillStyle = '#555';
-      ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff6600';
-      ctx.beginPath();
+            ctx.beginPath();
             ctx.arc(0, 0, 20, 0, Math.PI * 2);
-      ctx.fill();
+            ctx.fill();
             
             // Cannon barrel
             ctx.fillStyle = '#333';
@@ -4362,17 +4712,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Draw enemy positions on minimap as colored dots
+      // Draw enemy positions on minimap as BLUE dots
       game.enemies.forEach(enemy => {
         if (enemy.segments && enemy.segments.length > 0) {
           const enemyHead = enemy.segments[0];
           const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
           const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
           
-          // Use the enemy's hue color
-          ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
-          ctx.shadowBlur = 5;
-          ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
+          // Enemigos en AZUL
+          ctx.fillStyle = '#4488ff';
+          ctx.shadowBlur = 4;
+          ctx.shadowColor = '#4488ff';
           ctx.beginPath();
           ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
           ctx.fill();
@@ -4395,33 +4745,37 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.shadowBlur = 0;
       }
       
-      // Draw resentful snakes on minimap as multicolor/rainbow dots
+      // Draw resentful snakes on minimap as RED dots (sin shadows)
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        ctx.fillStyle = '#ff3333';
         game.resentfulSnakes.forEach(snake => {
           if (snake.segments && snake.segments.length > 0) {
             const snakeHead = snake.segments[0];
             const snakeMinimapX = minimapX + (snakeHead.x / game.worldWidth) * minimapWidth;
             const snakeMinimapY = minimapY + (snakeHead.y / game.worldHeight) * minimapHeight;
-            
-            // Color arcoíris animado
-            const rainbowHue = (snake.rainbowOffset || 0) % 360;
-            const rainbowColor = `hsl(${rainbowHue}, 100%, 60%)`;
-            
-            // Punto con glow multicolor
-            ctx.shadowBlur = 6;
-            ctx.shadowColor = rainbowColor;
-            ctx.fillStyle = rainbowColor;
             ctx.beginPath();
             ctx.arc(snakeMinimapX, snakeMinimapY, 3, 0, Math.PI * 2);
             ctx.fill();
-            
-            // Borde negro para que destaque
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 1;
-            ctx.stroke();
           }
         });
-        ctx.shadowBlur = 0;
+      }
+      
+      // Draw OTHER PLAYERS on minimap as GREEN dots (arena mode only) - OPTIMIZADO
+      if (arenaMode && otherPlayersRef.current.length > 0) {
+        ctx.fillStyle = '#00ff00';
+        otherPlayersRef.current.forEach(player => {
+          if (player.segments && player.segments.length > 0) {
+            const playerHead = player.segments[0];
+            const otherMinimapX = minimapX + (playerHead.x / game.worldWidth) * minimapWidth;
+            const otherMinimapY = minimapY + (playerHead.y / game.worldHeight) * minimapHeight;
+            ctx.fillStyle = '#00ff00';
+            ctx.beginPath();
+            ctx.arc(otherMinimapX, otherMinimapY, 3.5, 0, Math.PI * 2);
+            ctx.beginPath();
+            ctx.arc(otherMinimapX, otherMinimapY, 4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
       }
       
       // Shop hint (only on desktop, not mobile)
@@ -4737,28 +5091,62 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     setArenaKills(0);
     
     // Configurar tamaño del mundo para arena
-    game.worldWidth = config.mapSize * BASE_UNIT;
-    game.worldHeight = config.mapSize * BASE_UNIT;
+    // mapSize indica cuántas "pantallas" de ancho/alto tiene el mapa
+    // Limitar a máximo 5 pantallas para evitar sobrecarga
+    const mapSizeInScreens = Math.min(config.mapSize || 5, 5);
+    game.worldWidth = CANVAS_WIDTH * mapSizeInScreens;
+    game.worldHeight = CANVAS_HEIGHT * mapSizeInScreens;
     
     // Sin celda central en arena
     game.centralRect = null;
     
-    // Crear comida
-    game.food = Array.from({ length: config.xpDensity || 300 }, () => createFood());
+    // Calcular cantidad de entidades basado en el área del mapa
+    // Densidades REDUCIDAS para mejor rendimiento en multijugador
+    const screenArea = CANVAS_WIDTH * CANVAS_HEIGHT;
+    const mapArea = game.worldWidth * game.worldHeight;
+    const numScreens = mapArea / screenArea;
+    const xpPerScreen = 10; // Puntos de XP por pantalla
+    const enemiesPerScreen = 1.2; // Enemigos por pantalla (reducido)
+    const sawsPerScreen = 0.08; // Sierras por pantalla (MITAD)
+    const cannonsPerScreen = 0.08; // Cañones por pantalla (reducido)
+    const resentfulPerScreen = 0.01; // Víboras resentidas por pantalla (MITAD - muy costosas)
+    const healthBoxesPerScreen = 0.1; // Cajas de salud por pantalla
+    
+    // Configuración de arena para las funciones de creación
+    const arenaLevelConfig = {
+      ...config,
+      playerSpeed: config.playerSpeed || 2.5,
+      enemySpeed: config.enemySpeed || 2.8,
+      enemyShootPercentage: config.enemyShootPercentage || 50,
+      enemyShieldPercentage: config.enemyShieldPercentage || 50,
+      enemyShootCooldown: config.enemyShootCooldown || 2000,
+      enemyUpgradeLevel: config.enemyUpgradeLevel || 5
+    };
+    
+    // Crear comida - cantidad basada en área del mapa
+    const foodCount = Math.floor(numScreens * xpPerScreen);
+    game.food = Array.from({ length: foodCount }, () => createFood());
     game.initialFoodCount = game.food.length;
     
     // Crear enemigos con variabilidad 50/50
-    game.enemies = Array.from({ length: config.enemyCount || 500 }, () => {
-      return createEnemy(config, 1); // Nivel base 1 para arena
+    const enemyCount = Math.floor(numScreens * enemiesPerScreen);
+    game.enemies = Array.from({ length: enemyCount }, () => {
+      return createEnemy(arenaLevelConfig, 1);
     });
     
-    // Crear otros elementos
-    game.killerSaws = Array.from({ length: config.killerSawCount || 30 }, () => createKillerSaw(config));
-    game.floatingCannons = Array.from({ length: config.floatingCannonCount || 25 }, () => createFloatingCannon(config));
-    game.resentfulSnakes = Array.from({ length: config.resentfulSnakeCount || 15 }, () => createResentfulSnake(config));
-    game.healthBoxes = Array.from({ length: config.healthBoxCount || 50 }, () => createHealthBox(config));
+    // Crear otros elementos (mínimos reducidos para mejor rendimiento)
+    const sawCount = Math.max(2, Math.floor(numScreens * sawsPerScreen));
+    const cannonCount = Math.max(2, Math.floor(numScreens * cannonsPerScreen));
+    const resentfulCount = Math.max(1, Math.floor(numScreens * resentfulPerScreen));
+    const healthBoxCount = Math.max(3, Math.floor(numScreens * healthBoxesPerScreen));
     
-    console.log(`⚔️ Iniciando ARENA con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} cañones, ${game.resentfulSnakes.length} víboras resentidas`);
+    game.killerSaws = Array.from({ length: sawCount }, () => createKillerSaw(arenaLevelConfig));
+    game.floatingCannons = Array.from({ length: cannonCount }, () => createFloatingCannon(arenaLevelConfig));
+    game.resentfulSnakes = Array.from({ length: resentfulCount }, () => createResentfulSnake(arenaLevelConfig));
+    game.healthBoxes = Array.from({ length: healthBoxCount }, () => createHealthBox(arenaLevelConfig));
+    
+    console.log(`⚔️ Iniciando ARENA (${mapSizeInScreens}x${mapSizeInScreens} pantallas = ${game.worldWidth}x${game.worldHeight}px)`);
+    console.log(`   📦 ${game.food.length} puntos XP, ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} cañones, ${game.resentfulSnakes.length} víboras resentidas, ${game.healthBoxes.length} cajas de salud`);
     
     // Spawn del jugador en posición aleatoria segura
     const margin = 100;
@@ -4821,6 +5209,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     setCurrentLevelXP(0);
     setCurrentLevelStars(0);
     setGameState('playing');
+    
+    // Enviar posición inicial al servidor inmediatamente
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'player_update',
+        x: bestX,
+        y: bestY,
+        direction: game.direction,
+        segments: game.snake,
+        score: 0,
+        skin: currentSkin
+      }));
+    }
   };
 
   const nextLevel = () => {
@@ -5520,126 +5921,185 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           flexDirection: isMobile ? 'column' : 'row',
           gap: '20px',
           width: '100%',
-          maxWidth: '1200px',
+          maxWidth: '1000px',
           padding: '20px',
-          alignItems: isMobile ? 'center' : 'flex-start',
+          alignItems: 'stretch',
           justifyContent: 'center'
         }}>
-          {/* Left side: Main action buttons */}
+          {/* Panel principal */}
         <div style={{ 
           textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.7)',
+            background: 'rgba(0, 0, 0, 0.85)',
             padding: '30px',
           borderRadius: '10px',
           border: '2px solid #33ffff',
-            boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-            width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
-            flex: isMobile ? 'none' : '0 0 400px'
+            boxShadow: '0 0 40px rgba(51, 255, 255, 0.4)',
+            flex: 1,
+            maxWidth: '500px'
           }}>
-            <img 
-              src="/logo.png" 
-              alt="Neon Snake" 
+            <h1 style={{ 
+              color: '#33ffff', 
+              textShadow: '0 0 30px #33ffff',
+              fontSize: '32px',
+              marginBottom: '5px'
+            }}>
+              🐍 MODO CAMPAÑA 🐍
+            </h1>
+            <p style={{ fontSize: '14px', color: '#888', marginBottom: '20px' }}>
+              Avanza por niveles y mejora tu serpiente
+            </p>
+            
+            {/* Info del progreso */}
+            <div style={{ 
+              background: 'rgba(51, 255, 255, 0.1)',
+              padding: '15px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: '1px solid rgba(51, 255, 255, 0.3)'
+            }}>
+              <h3 style={{ color: '#33ffff', marginBottom: '12px', fontSize: '16px' }}>Tu Progreso</h3>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(2, 1fr)', 
+                gap: '8px',
+                fontSize: '13px',
+                textAlign: 'left'
+              }}>
+                <div style={{ color: '#ffff00' }}>📊 Nivel: {level}</div>
+                <div style={{ color: '#ffd700' }}>⭐ Estrellas: {totalStars}</div>
+                <div><Shield size={13} style={{ marginRight: '4px' }} />Escudo: Nv.{shieldLevel}</div>
+                <div><Zap size={13} style={{ marginRight: '4px' }} />Cañón: Nv.{cannonLevel}</div>
+                <div><Gauge size={13} style={{ marginRight: '4px' }} />Velocidad: Nv.{speedLevel}</div>
+                <div><Heart size={13} style={{ marginRight: '4px' }} />Vida: Nv.{healthLevel}</div>
+              </div>
+            </div>
+            
+            {/* Info del juego */}
+            <div style={{ 
+              background: 'rgba(0, 255, 0, 0.1)',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '25px',
+              border: '1px solid rgba(0, 255, 0, 0.3)',
+              fontSize: '13px',
+              color: '#aaa'
+            }}>
+              <p style={{ margin: '3px 0' }}>🎮 Mueve el mouse para controlar</p>
+              <p style={{ margin: '3px 0' }}>💎 Come puntos para ganar XP</p>
+              <p style={{ margin: '3px 0' }}>⭐ Recoge estrellas para avanzar</p>
+            </div>
+            
+            {/* Botón principal */}
+            <button 
+              onClick={startGame}
               style={{ 
-                width: '100%', 
-                maxWidth: '400px', 
-                height: 'auto',
+                background: 'linear-gradient(135deg, #33ffff, #00cccc)',
+                border: 'none',
+                color: '#000',
+                padding: '18px 60px',
+                fontSize: '22px',
+                cursor: 'pointer',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                boxShadow: '0 0 30px rgba(51, 255, 255, 0.6)',
                 marginBottom: '20px',
-                filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
-              }} 
-            />
-            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
-            Mueve el mouse/trackpad para controlar tu serpiente<br/>
-            Come puntos brillantes para ganar XP<br/>
-            ⭐ Recoge estrellas para avanzar de nivel
-          </p>
-            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
+                width: '100%',
+                maxWidth: '300px'
+              }}
+            >
+              🎮 JUGAR
+            </button>
+            
+            {/* Barra de botones */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              justifyContent: 'center', 
+              flexWrap: 'wrap',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              paddingTop: '20px'
+            }}>
           <button 
-            onClick={startGame}
+                onClick={() => { setPreviousGameState('menu'); setGameState('shop'); }}
+                style={{
+                  background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
+                  border: 'none',
+                  color: '#000',
+                  padding: '12px 25px',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)'
+                }}
+              >
+                🛒 Tienda
+              </button>
+              <button 
+                onClick={() => { loadLeaderboard(); loadArenaLeaderboard(); setShowLeaderboardModal(true); }}
             style={{
               background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '15px 40px',
-                  fontSize: '20px',
+                  border: '2px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '12px 25px',
+                  fontSize: '15px',
               cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #33ffff',
-              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-                  flex: 1,
-                  transition: 'all 0.3s'
+                  borderRadius: '8px'
                 }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-            }}
-          >
-            JUGAR
+              >
+                🏆 Rankings
           </button>
           <button 
-            onClick={() => setGameState('shop')}
+                onClick={onLogout}
             style={{
               background: 'transparent',
-              border: '2px solid #ff00ff',
-              color: '#ff00ff',
-              padding: '15px 40px',
-                  fontSize: '20px',
+                  border: '2px solid #888',
+                  color: '#888',
+                  padding: '12px 25px',
+                  fontSize: '15px',
               cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #ff00ff',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  flex: 1,
-                  transition: 'all 0.3s'
+                  borderRadius: '8px'
                 }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 0, 255, 0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-            }}
-          >
-            TIENDA
+              >
+                ← Inicio
           </button>
             </div>
           </div>
 
-          {/* Right side: Leaderboard */}
+          {/* Panel de ranking */}
           <div style={{ 
-            background: 'rgba(0, 0, 0, 0.7)',
+            background: 'rgba(0, 0, 0, 0.85)',
             padding: '25px',
             borderRadius: '10px',
             border: '2px solid #FFD700',
             boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
-            flex: isMobile ? 'none' : '1'
+            flex: 1,
+            maxWidth: '400px'
           }}>
             <h2 style={{ 
               color: '#FFD700', 
               textShadow: '0 0 20px #FFD700', 
               textAlign: 'center',
               marginBottom: '20px',
-              fontSize: '22px'
+              fontSize: '20px'
             }}>
-              🏆 RANKING
+              🏆 RANKING CAMPAÑA
             </h2>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
               {leaderboard.length === 0 ? (
                 <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
+                      <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                      <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                      <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>XP</th>
+                      <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Nv</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {leaderboard.map((entry, index) => (
+                    {leaderboard.slice(0, 10).map((entry, index) => (
                       <tr 
                         key={index}
                         style={{ 
@@ -5647,16 +6107,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                           backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
                         }}
                       >
-                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
+                        <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '13px' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                         </td>
-                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
+                        <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
                           {entry.username}
                         </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                        <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
                           {entry.totalXp?.toLocaleString() || 0}
                         </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                        <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
                           {entry.highestLevel || 1}
                         </td>
                       </tr>
@@ -5685,7 +6145,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           position: 'relative'
         }}>
           <button
-            onClick={() => setGameState('menu')}
+            onClick={() => setGameState(previousGameState || 'menu')}
             style={{
               position: 'absolute',
               top: '20px',
@@ -5706,7 +6166,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               e.target.style.background = 'transparent';
             }}
           >
-            VOLVER
+            ← VOLVER
           </button>
           <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
             TIENDA
@@ -6051,6 +6511,310 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 </div>
               );
             })()}
+          </div>
+
+          {/* === SECCIÓN DE SKINS === */}
+          <div style={{ 
+            marginTop: '30px', 
+            paddingTop: '25px', 
+            borderTop: '2px solid rgba(255, 0, 255, 0.3)'
+          }}>
+            <h3 style={{ 
+              color: '#ff00ff', 
+              textShadow: '0 0 15px #ff00ff', 
+              textAlign: 'center', 
+              fontSize: '20px', 
+              marginBottom: '20px' 
+            }}>
+              🎨 SKINS
+            </h3>
+            <p style={{ textAlign: 'center', fontSize: '14px', marginBottom: '15px', color: '#aaa' }}>
+              Skin actual: <span style={{ color: currentSkin === 'default' ? '#33ffff' : '#ff00ff', fontWeight: 'bold' }}>
+                {currentSkin === 'default' ? '🐍 Default' : 
+                 currentSkin === 'dragon' ? '🐉 Dragón' : 
+                 currentSkin === 'rainbow' ? '🌈 Arcoíris' : 
+                 currentSkin === 'cyber' ? '⚡ Cyber' : currentSkin}
+              </span>
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', maxWidth: '900px', margin: '0 auto' }}>
+              {/* Skin Default */}
+              <div style={{ 
+                border: `2px solid ${currentSkin === 'default' ? '#33ffff' : '#666'}`, 
+                padding: '15px', 
+                borderRadius: '10px',
+                background: currentSkin === 'default' ? 'rgba(51, 255, 255, 0.2)' : 'transparent',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🐍</div>
+                <h4 style={{ color: '#33ffff', marginBottom: '8px' }}>Default</h4>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Tu serpiente clásica</p>
+                {currentSkin === 'default' ? (
+                  <p style={{ color: '#33ffff', fontWeight: 'bold' }}>✓ EQUIPADA</p>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/users/${user.id}/skins/equip`, {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ skinId: 'default' })
+                        });
+                        if (response.ok) {
+                          setCurrentSkin('default');
+                        }
+                      } catch (error) {
+                        console.error('Error equipping skin:', error);
+                      }
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: '2px solid #33ffff',
+                      color: '#33ffff',
+                      padding: '8px 20px',
+                      cursor: 'pointer',
+                      borderRadius: '5px'
+                    }}
+                  >
+                    EQUIPAR
+                  </button>
+                )}
+        </div>
+
+              {/* Skin Dragón */}
+              <div style={{ 
+                border: `2px solid ${currentSkin === 'dragon' ? '#ff6600' : ownedSkins.includes('dragon') ? '#ff6600' : '#666'}`, 
+                padding: '15px', 
+                borderRadius: '10px',
+                background: currentSkin === 'dragon' ? 'rgba(255, 102, 0, 0.2)' : 'transparent',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🐉</div>
+                <h4 style={{ color: '#ff6600', marginBottom: '8px' }}>Dragón de Fuego</h4>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Escamas con gradiente naranja/rojo</p>
+                {ownedSkins.includes('dragon') ? (
+                  currentSkin === 'dragon' ? (
+                    <p style={{ color: '#ff6600', fontWeight: 'bold' }}>✓ EQUIPADA</p>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/users/${user.id}/skins/equip`, {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ skinId: 'dragon' })
+                          });
+                          if (response.ok) {
+                            setCurrentSkin('dragon');
+                          }
+                        } catch (error) {
+                          console.error('Error equipping skin:', error);
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: '2px solid #ff6600',
+                        color: '#ff6600',
+                        padding: '8px 20px',
+                        cursor: 'pointer',
+                        borderRadius: '5px'
+                      }}
+                    >
+                      EQUIPAR
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/users/${user.id}/skins/buy`, {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ skinId: 'skin_dragon' })
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                          setOwnedSkins(prev => [...prev, 'dragon']);
+                          setTotalStars(data.newStars);
+                        } else {
+                          alert(data.error || 'Error al comprar');
+                        }
+                      } catch (error) {
+                        console.error('Error buying skin:', error);
+                      }
+                    }}
+                    disabled={totalStars < 50}
+                    style={{
+                      background: totalStars >= 50 ? 'linear-gradient(135deg, #ff6600, #ff9933)' : 'transparent',
+                      border: '2px solid #ff6600',
+                      color: totalStars >= 50 ? '#fff' : '#666',
+                      padding: '8px 20px',
+                      cursor: totalStars >= 50 ? 'pointer' : 'not-allowed',
+                      borderRadius: '5px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    COMPRAR 50⭐
+                  </button>
+                )}
+              </div>
+
+              {/* Skin Arcoíris */}
+              <div style={{ 
+                border: `2px solid ${currentSkin === 'rainbow' ? '#ff00ff' : ownedSkins.includes('rainbow') ? '#ff00ff' : '#666'}`, 
+                padding: '15px', 
+                borderRadius: '10px',
+                background: currentSkin === 'rainbow' ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🌈</div>
+                <h4 style={{ color: '#ff00ff', marginBottom: '8px' }}>Arcoíris</h4>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Colores animados que fluyen</p>
+                {ownedSkins.includes('rainbow') ? (
+                  currentSkin === 'rainbow' ? (
+                    <p style={{ color: '#ff00ff', fontWeight: 'bold' }}>✓ EQUIPADA</p>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/users/${user.id}/skins/equip`, {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ skinId: 'rainbow' })
+                          });
+                          if (response.ok) {
+                            setCurrentSkin('rainbow');
+                          }
+                        } catch (error) {
+                          console.error('Error equipping skin:', error);
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: '2px solid #ff00ff',
+                        color: '#ff00ff',
+                        padding: '8px 20px',
+                        cursor: 'pointer',
+                        borderRadius: '5px'
+                      }}
+                    >
+                      EQUIPAR
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/users/${user.id}/skins/buy`, {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ skinId: 'skin_rainbow' })
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                          setOwnedSkins(prev => [...prev, 'rainbow']);
+                          setTotalStars(data.newStars);
+                        } else {
+                          alert(data.error || 'Error al comprar');
+                        }
+                      } catch (error) {
+                        console.error('Error buying skin:', error);
+                      }
+                    }}
+                    disabled={totalStars < 100}
+                    style={{
+                      background: totalStars >= 100 ? 'linear-gradient(135deg, #ff00ff, #ff66ff)' : 'transparent',
+                      border: '2px solid #ff00ff',
+                      color: totalStars >= 100 ? '#fff' : '#666',
+                      padding: '8px 20px',
+                      cursor: totalStars >= 100 ? 'pointer' : 'not-allowed',
+                      borderRadius: '5px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    COMPRAR 100⭐
+                  </button>
+                )}
+              </div>
+
+              {/* Skin Cyber */}
+              <div style={{ 
+                border: `2px solid ${currentSkin === 'cyber' ? '#00ffff' : ownedSkins.includes('cyber') ? '#00ffff' : '#666'}`, 
+                padding: '15px', 
+                borderRadius: '10px',
+                background: currentSkin === 'cyber' ? 'rgba(0, 255, 255, 0.2)' : 'transparent',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>⚡</div>
+                <h4 style={{ color: '#00ffff', marginBottom: '8px' }}>Cyber</h4>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Estilo Tron/Matrix con neón</p>
+                {ownedSkins.includes('cyber') ? (
+                  currentSkin === 'cyber' ? (
+                    <p style={{ color: '#00ffff', fontWeight: 'bold' }}>✓ EQUIPADA</p>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`/api/users/${user.id}/skins/equip`, {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ skinId: 'cyber' })
+                          });
+                          if (response.ok) {
+                            setCurrentSkin('cyber');
+                          }
+                        } catch (error) {
+                          console.error('Error equipping skin:', error);
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: '2px solid #00ffff',
+                        color: '#00ffff',
+                        padding: '8px 20px',
+                        cursor: 'pointer',
+                        borderRadius: '5px'
+                      }}
+                    >
+                      EQUIPAR
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/users/${user.id}/skins/buy`, {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                          body: JSON.stringify({ skinId: 'skin_cyber' })
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                          setOwnedSkins(prev => [...prev, 'cyber']);
+                          setTotalStars(data.newStars);
+                        } else {
+                          alert(data.error || 'Error al comprar');
+                        }
+                      } catch (error) {
+                        console.error('Error buying skin:', error);
+                      }
+                    }}
+                    disabled={totalStars < 200}
+                    style={{
+                      background: totalStars >= 200 ? 'linear-gradient(135deg, #00ffff, #0099ff)' : 'transparent',
+                      border: '2px solid #00ffff',
+                      color: totalStars >= 200 ? '#fff' : '#666',
+                      padding: '8px 20px',
+                      cursor: totalStars >= 200 ? 'pointer' : 'not-allowed',
+                      borderRadius: '5px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    COMPRAR 200⭐
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -6618,112 +7382,215 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       {/* === ARENA LOBBY === */}
       {gameState === 'arenaLobby' && (
         <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.85)',
-          padding: '40px',
-          borderRadius: '10px',
-          border: '2px solid #ff3366',
-          boxShadow: '0 0 40px rgba(255, 51, 102, 0.6)',
-          maxWidth: '600px',
-          width: '90%'
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '20px',
+          width: '100%',
+          maxWidth: '1000px',
+          padding: '20px',
+          alignItems: 'stretch',
+          justifyContent: 'center'
         }}>
-          <h1 style={{ 
-            color: '#ff3366', 
-            textShadow: '0 0 30px #ff3366',
-            fontSize: '36px',
-            marginBottom: '10px'
-          }}>
-            ⚔️ ARENA MULTIJUGADOR ⚔️
-          </h1>
-          <p style={{ 
-            fontSize: '18px', 
-            color: '#aaa',
-            marginBottom: '30px'
-          }}>
-            {arenaConfig?.arena_name || 'Arena Clásica'}
-          </p>
-          
+          {/* Panel principal */}
           <div style={{ 
-            background: 'rgba(51, 255, 255, 0.1)',
-            padding: '20px',
-            borderRadius: '8px',
-            marginBottom: '30px',
-            border: '1px solid rgba(51, 255, 255, 0.3)'
+            textAlign: 'center',
+            background: 'rgba(0, 0, 0, 0.85)',
+            padding: '30px',
+            borderRadius: '10px',
+            border: '2px solid #ff3366',
+            boxShadow: '0 0 40px rgba(255, 51, 102, 0.4)',
+            flex: 1,
+            maxWidth: '500px'
           }}>
-            <h3 style={{ color: '#33ffff', marginBottom: '15px' }}>Tus Mejoras Base</h3>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(2, 1fr)', 
-              gap: '10px',
-              fontSize: '14px',
-              textAlign: 'left'
+            <h1 style={{ 
+              color: '#ff3366', 
+              textShadow: '0 0 30px #ff3366',
+              fontSize: '32px',
+              marginBottom: '5px'
             }}>
-              <div><Shield size={14} style={{ marginRight: '5px' }} />Escudo: Nv.{shieldLevel}</div>
-              <div><Magnet size={14} style={{ marginRight: '5px' }} />Imán: Nv.{magnetLevel}</div>
-              <div><Zap size={14} style={{ marginRight: '5px' }} />Cañón: Nv.{cannonLevel}</div>
-              <div><Gauge size={14} style={{ marginRight: '5px' }} />Velocidad: Nv.{speedLevel}</div>
-              <div><Heart size={14} style={{ marginRight: '5px' }} />Vida: Nv.{healthLevel}</div>
-              <div><Sparkles size={14} style={{ marginRight: '5px' }} />Cabeza: Nv.{headLevel}</div>
+              ⚔️ ARENA MULTIJUGADOR ⚔️
+            </h1>
+            <p style={{ fontSize: '14px', color: '#888', marginBottom: '20px' }}>
+              {arenaConfig?.arena_name || 'Arena Clásica'} • Batalla contra otros jugadores
+            </p>
+            
+            {/* Info del progreso */}
+            <div style={{ 
+              background: 'rgba(51, 255, 255, 0.1)',
+              padding: '15px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: '1px solid rgba(51, 255, 255, 0.3)'
+            }}>
+              <h3 style={{ color: '#33ffff', marginBottom: '12px', fontSize: '16px' }}>Tus Mejoras Base</h3>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(2, 1fr)', 
+                gap: '8px',
+                fontSize: '13px',
+                textAlign: 'left'
+              }}>
+                <div><Shield size={13} style={{ marginRight: '4px' }} />Escudo: Nv.{shieldLevel}</div>
+                <div><Zap size={13} style={{ marginRight: '4px' }} />Cañón: Nv.{cannonLevel}</div>
+                <div><Gauge size={13} style={{ marginRight: '4px' }} />Velocidad: Nv.{speedLevel}</div>
+                <div><Heart size={13} style={{ marginRight: '4px' }} />Vida: Nv.{healthLevel}</div>
+              </div>
             </div>
-          </div>
-          
-          <div style={{ 
-            background: 'rgba(255, 51, 102, 0.1)',
-            padding: '15px',
-            borderRadius: '8px',
-            marginBottom: '30px',
-            border: '1px solid rgba(255, 51, 102, 0.3)'
-          }}>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}>
-              🗺️ Mapa: {arenaConfig?.mapSize || 100}x{arenaConfig?.mapSize || 100}
-            </p>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}>
-              👾 Enemigos: {arenaConfig?.enemyCount || 500}
-            </p>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}>
-              ⚠️ Los enemigos reaparecen constantemente
-            </p>
-            <p style={{ margin: '5px 0', fontSize: '14px', color: '#ff6666' }}>
-              💀 Al morir pierdes todo el progreso de la partida
-            </p>
-          </div>
-          
-          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            
+            {/* Info del mapa */}
+            <div style={{ 
+              background: 'rgba(255, 51, 102, 0.1)',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '25px',
+              border: '1px solid rgba(255, 51, 102, 0.3)',
+              fontSize: '13px',
+              color: '#aaa'
+            }}>
+              <p style={{ margin: '3px 0' }}>🗺️ Mapa: {arenaConfig?.mapSize || 5}x{arenaConfig?.mapSize || 5} pantallas</p>
+              <p style={{ margin: '3px 0' }}>⚠️ Los enemigos reaparecen constantemente</p>
+              <p style={{ margin: '3px 0', color: '#ff6666' }}>💀 Al morir: 10% XP + 5⭐ por kill</p>
+            </div>
+            
+            {/* Botón principal */}
             <button 
-              onClick={() => {
-                connectArenaWebSocket();
-                // El estado cambiará a 'playing' cuando se conecte
-              }}
+              onClick={() => connectArenaWebSocket()}
               style={{
                 background: 'linear-gradient(135deg, #ff3366, #ff6699)',
                 border: 'none',
                 color: '#fff',
-                padding: '18px 50px',
+                padding: '18px 60px',
                 fontSize: '22px',
                 cursor: 'pointer',
                 borderRadius: '8px',
                 fontWeight: 'bold',
                 boxShadow: '0 0 30px rgba(255, 51, 102, 0.6)',
-                transition: 'all 0.3s'
+                marginBottom: '20px',
+                width: '100%',
+                maxWidth: '300px'
               }}
             >
-              🎮 ENTRAR A LA ARENA
+              🎮 ENTRAR
             </button>
-            <button 
-              onClick={onLogout}
-              style={{
-                background: 'transparent',
-                border: '2px solid #888',
-                color: '#888',
-                padding: '15px 30px',
-                fontSize: '16px',
-                cursor: 'pointer',
-                borderRadius: '8px',
-                transition: 'all 0.3s'
-              }}
-            >
-              ← Volver
-            </button>
+            
+            {/* Barra de botones */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              justifyContent: 'center', 
+              flexWrap: 'wrap',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              paddingTop: '20px'
+            }}>
+              <button 
+                onClick={() => { setPreviousGameState('arenaLobby'); setGameState('shop'); }}
+                style={{
+                  background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
+                  border: 'none',
+                  color: '#000',
+                  padding: '12px 25px',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)'
+                }}
+              >
+                🛒 Tienda
+              </button>
+              <button 
+                onClick={() => { loadLeaderboard(); loadArenaLeaderboard(); setShowLeaderboardModal(true); }}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '12px 25px',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  borderRadius: '8px'
+                }}
+              >
+                🏆 Rankings
+              </button>
+              <button 
+                onClick={onLogout}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #888',
+                  color: '#888',
+                  padding: '12px 25px',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  borderRadius: '8px'
+                }}
+              >
+                ← Inicio
+              </button>
+            </div>
+          </div>
+
+          {/* Panel de ranking Arena */}
+          <div style={{ 
+            background: 'rgba(0, 0, 0, 0.85)',
+            padding: '25px',
+            borderRadius: '10px',
+            border: '2px solid #FFD700',
+            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+            flex: 1,
+            maxWidth: '400px'
+          }}>
+            <h2 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 20px #FFD700', 
+              textAlign: 'center',
+              marginBottom: '20px',
+              fontSize: '20px'
+            }}>
+              🏆 RANKING ARENA
+            </h2>
+            <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+              {arenaLeaderboard && arenaLeaderboard.length > 0 ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                      <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                      <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                      <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>XP</th>
+                      <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Kills</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {arenaLeaderboard.slice(0, 10).map((entry, index) => (
+                      <tr 
+                        key={index}
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#ff3366', fontSize: '13px' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                        </td>
+                        <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                          {entry.username}
+                        </td>
+                        <td style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '13px' }}>
+                          {entry.totalXp?.toLocaleString() || entry.total_xp?.toLocaleString() || 0}
+                        </td>
+                        <td style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '13px' }}>
+                          {entry.totalKills || entry.total_kills || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                  Aún no hay partidas registradas.<br/>
+                  ¡Sé el primero en entrar!
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -6768,39 +7635,109 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             background: 'rgba(51, 255, 255, 0.1)',
             padding: '20px',
             borderRadius: '8px',
-            marginBottom: '25px',
+            marginBottom: '15px',
             border: '1px solid rgba(51, 255, 255, 0.3)'
           }}>
-            <h3 style={{ color: '#33ffff', marginBottom: '15px' }}>Estadísticas de Partida</h3>
+            <h3 style={{ color: '#33ffff', marginBottom: '15px' }}>📊 Estadísticas de Partida</h3>
             <p style={{ fontSize: '28px', color: '#ffff00', margin: '10px 0' }}>
-              {score} XP
+              {score} XP ganado
             </p>
             <p style={{ fontSize: '18px', color: '#00ff00', margin: '10px 0' }}>
               ⚔️ Jugadores eliminados: {arenaKills}
             </p>
           </div>
           
-          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {/* RECOMPENSAS OBTENIDAS */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(255, 215, 0, 0.2))',
+            padding: '20px',
+            borderRadius: '8px',
+            marginBottom: '25px',
+            border: '2px solid rgba(0, 255, 136, 0.5)',
+            boxShadow: '0 0 20px rgba(0, 255, 136, 0.3)'
+          }}>
+            <h3 style={{ color: '#00ff88', marginBottom: '15px', fontSize: '20px' }}>🎁 RECOMPENSAS OBTENIDAS</h3>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', flexWrap: 'wrap' }}>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '5px' }}>XP Permanente (10%)</p>
+                <p style={{ fontSize: '24px', color: '#ffff00', fontWeight: 'bold' }}>
+                  +{arenaDeathInfo?.xpReward || Math.floor(score * 0.1)}
+                </p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '5px' }}>Estrellas por Kills</p>
+                <p style={{ fontSize: '24px', color: '#ffd700', fontWeight: 'bold' }}>
+                  +{arenaDeathInfo?.starsFromKills || arenaKills * 5} ⭐
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Botón principal */}
+          <button 
+            onClick={() => {
+              setScore(0);
+              setArenaKills(0);
+              setArenaDeathInfo(null);
+              connectArenaWebSocket();
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #ff3366, #ff6699)',
+              border: 'none',
+              color: '#fff',
+              padding: '18px 60px',
+              fontSize: '22px',
+              cursor: 'pointer',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              boxShadow: '0 0 30px rgba(255, 51, 102, 0.6)',
+              marginBottom: '20px',
+              width: '100%',
+              maxWidth: '350px'
+            }}
+          >
+            🔄 REINTENTAR
+          </button>
+          
+          {/* Barra de botones unificada */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '10px', 
+            justifyContent: 'center', 
+            flexWrap: 'wrap',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            paddingTop: '20px',
+            marginTop: '10px'
+          }}>
             <button 
-              onClick={() => {
-                setScore(0);
-                setArenaKills(0);
-                setArenaDeathInfo(null);
-                connectArenaWebSocket();
-              }}
+              onClick={() => { setPreviousGameState('arenaDeath'); setGameState('shop'); }}
               style={{
-                background: 'linear-gradient(135deg, #ff3366, #ff6699)',
+                background: 'linear-gradient(135deg, #ffd700, #ffaa00)',
                 border: 'none',
-                color: '#fff',
-                padding: '15px 40px',
-                fontSize: '20px',
+                color: '#000',
+                padding: '12px 25px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 borderRadius: '8px',
                 fontWeight: 'bold',
-                boxShadow: '0 0 25px rgba(255, 51, 102, 0.5)'
+                boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)'
               }}
             >
-              🔄 REINTENTAR
+              🛒 Tienda
+            </button>
+            <button 
+              onClick={() => { loadLeaderboard(); loadArenaLeaderboard(); setShowLeaderboardModal(true); }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #33ffff',
+                color: '#33ffff',
+                padding: '12px 25px',
+                fontSize: '15px',
+                cursor: 'pointer',
+                borderRadius: '8px'
+              }}
+            >
+              🏆 Rankings
             </button>
             <button 
               onClick={() => {
@@ -6815,15 +7752,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }}
               style={{
                 background: 'transparent',
-                border: '2px solid #33ffff',
-                color: '#33ffff',
-                padding: '15px 40px',
-                fontSize: '18px',
+                border: '2px solid #888',
+                color: '#888',
+                padding: '12px 25px',
+                fontSize: '15px',
                 cursor: 'pointer',
                 borderRadius: '8px'
               }}
             >
-              📊 VER LOBBY
+              ← Lobby
             </button>
           </div>
         </div>
@@ -7328,6 +8265,140 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* === MODAL DE RANKINGS === */}
+      {showLeaderboardModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.95)',
+            padding: '30px',
+            borderRadius: '15px',
+            border: '3px solid #FFD700',
+            boxShadow: '0 0 50px rgba(255, 215, 0, 0.5)',
+            maxWidth: '800px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#FFD700', textShadow: '0 0 20px #FFD700', margin: 0, fontSize: '28px' }}>
+                🏆 RANKINGS
+              </h2>
+              <button
+                onClick={() => setShowLeaderboardModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #888',
+                  color: '#888',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px'
+                }}
+              >
+                ✕ Cerrar
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              {/* Ranking Campaña */}
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                <h3 style={{ color: '#33ffff', marginBottom: '15px', textAlign: 'center' }}>🐍 Campaña</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nv</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.slice(0, 10).map((entry, index) => (
+                      <tr 
+                        key={index}
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                        </td>
+                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
+                          {entry.username}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                          {entry.totalXp?.toLocaleString() || 0}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                          {entry.highestLevel || 1}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Ranking Arena */}
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                <h3 style={{ color: '#ff3366', marginBottom: '15px', textAlign: 'center' }}>⚔️ Arena</h3>
+                {arenaLeaderboard && arenaLeaderboard.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Kills</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {arenaLeaderboard.slice(0, 10).map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#ff3366', fontSize: '14px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '14px' }}>
+                            {entry.totalXp?.toLocaleString() || entry.total_xp?.toLocaleString() || 0}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '14px' }}>
+                            {entry.totalKills || entry.total_kills || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
+                    Aún no hay partidas en Arena
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       </div>

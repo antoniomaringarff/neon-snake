@@ -16,20 +16,19 @@ export default async function arenaRoutes(fastify, options) {
       );
 
       // Si no hay configuración en la DB, devolver valores por defecto
+      // mapSize ahora significa "pantallas" no BASE_UNITS
       if (result.rows.length === 0) {
         return {
           id: 0,
           arenaType: 'battle_royale',
           arenaName: 'Arena Clásica',
-          mapSize: 100,
-          enemyCount: 500,
+          mapSize: 5, // 5x5 pantallas (25 pantallas totales)
+          enemySpeed: 2.8,
+          playerSpeed: 2.5,
           enemyShootPercentage: 50,
           enemyShieldPercentage: 50,
-          structuresCount: 25,
-          killerSawCount: 30,
-          floatingCannonCount: 25,
-          resentfulSnakeCount: 15,
-          healthBoxCount: 50,
+          enemyShootCooldown: 2000,
+          enemyUpgradeLevel: 5,
           isActive: true
         };
       }

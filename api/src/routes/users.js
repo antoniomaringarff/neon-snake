@@ -92,6 +92,8 @@ export default async function usersRoutes(fastify, options) {
           COALESCE(u.total_stars, 0) as total_stars,
           COALESCE(u.rebirth_count, 0) as rebirth_count,
           COALESCE(u.current_series, 1) as current_series,
+          COALESCE(u.current_skin, 'default') as current_skin,
+          COALESCE(u.owned_skins, ARRAY['default']::TEXT[]) as owned_skins,
           up.updated_at
         FROM user_progress up
         JOIN users u ON up.user_id = u.id
@@ -118,6 +120,8 @@ export default async function usersRoutes(fastify, options) {
         totalStars: progress.total_stars || 0,
         rebirthCount: progress.rebirth_count || 0,
         currentSeries: progress.current_series || 1,
+        currentSkin: progress.current_skin || 'default',
+        ownedSkins: progress.owned_skins || ['default'],
         updatedAt: progress.updated_at
       };
     } catch (error) {
@@ -201,6 +205,150 @@ export default async function usersRoutes(fastify, options) {
         totalXpEarned: parseInt(stats.total_xp_earned) || 0,
         avgScore: parseFloat(stats.avg_score) || 0,
         totalPlayTime: parseInt(stats.total_play_time) || 0
+      };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  // === SKINS ENDPOINTS ===
+  
+  // Get user skins
+  fastify.get('/:id/skins', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+
+    if (parseInt(id) !== request.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    try {
+      const result = await query(
+        `SELECT current_skin, owned_skins FROM users WHERE id = $1`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+
+      return {
+        currentSkin: result.rows[0].current_skin || 'default',
+        ownedSkins: result.rows[0].owned_skins || ['default']
+      };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  // Buy a skin
+  fastify.post('/:id/skins/buy', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { skinId } = request.body;
+
+    if (parseInt(id) !== request.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    try {
+      // Get skin price from shop_upgrades (usando upgrade_type)
+      const skinResult = await query(
+        `SELECT stars_cost FROM shop_upgrades WHERE upgrade_type = $1 AND level = 1`,
+        [skinId]
+      );
+
+      if (skinResult.rows.length === 0) {
+        return reply.code(404).send({ error: 'Skin not found' });
+      }
+
+      const skinCost = skinResult.rows[0].stars_cost;
+
+      // Get user stars and owned skins
+      const userResult = await query(
+        `SELECT total_stars, owned_skins FROM users WHERE id = $1`,
+        [id]
+      );
+
+      if (userResult.rows.length === 0) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+
+      const userStars = userResult.rows[0].total_stars || 0;
+      const ownedSkins = userResult.rows[0].owned_skins || ['default'];
+
+      // Check if already owns this skin
+      const skinName = skinId.replace('skin_', '');
+      if (ownedSkins.includes(skinName)) {
+        return reply.code(400).send({ error: 'Ya tienes este skin' });
+      }
+
+      // Check if has enough stars
+      if (userStars < skinCost) {
+        return reply.code(400).send({ error: 'No tienes suficientes estrellas' });
+      }
+
+      // Buy the skin
+      await query(
+        `UPDATE users 
+         SET total_stars = total_stars - $1,
+             owned_skins = array_append(owned_skins, $2)
+         WHERE id = $3`,
+        [skinCost, skinName, id]
+      );
+
+      return { 
+        success: true, 
+        message: 'Skin comprado',
+        skinId: skinName,
+        newStars: userStars - skinCost
+      };
+    } catch (error) {
+      throw error;
+    }
+  });
+
+  // Equip a skin
+  fastify.post('/:id/skins/equip', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { skinId } = request.body;
+
+    if (parseInt(id) !== request.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    try {
+      // Get user owned skins
+      const userResult = await query(
+        `SELECT owned_skins FROM users WHERE id = $1`,
+        [id]
+      );
+
+      if (userResult.rows.length === 0) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+
+      const ownedSkins = userResult.rows[0].owned_skins || ['default'];
+
+      // Check if owns this skin
+      if (!ownedSkins.includes(skinId)) {
+        return reply.code(400).send({ error: 'No tienes este skin' });
+      }
+
+      // Equip the skin
+      await query(
+        `UPDATE users SET current_skin = $1 WHERE id = $2`,
+        [skinId, id]
+      );
+
+      return { 
+        success: true, 
+        message: 'Skin equipado',
+        currentSkin: skinId
       };
     } catch (error) {
       throw error;
