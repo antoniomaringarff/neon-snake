@@ -9,6 +9,7 @@ function App() {
   const [isBanned, setIsBanned] = useState(false);
   const [freeShots, setFreeShots] = useState(false);
   const [isImmune, setIsImmune] = useState(false);
+  const [gameMode, setGameMode] = useState(null); // null = selector, 'single' = single player, 'arena' = arena
 
   useEffect(() => {
     // Check if user is logged in
@@ -91,7 +92,85 @@ function App() {
     return <AuthScreen onLogin={handleLogin} hasExistingAccount={hasExistingAccount} />;
   }
 
-  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} isImmune={isImmune} />;
+  // Selector de modo de juego
+  if (gameMode === null) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+        color: '#33ffff',
+        fontFamily: 'monospace'
+      }}>
+        <h1 style={{ fontSize: '36px', marginBottom: '40px' }}>VIBORITA</h1>
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button
+            onClick={() => setGameMode('single')}
+            style={{
+              padding: '20px 40px',
+              fontSize: '20px',
+              background: '#33ffff',
+              color: '#0a0a0a',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              minWidth: '200px'
+            }}
+          >
+            MODO CAMPAÑA
+          </button>
+          <button
+            onClick={() => setGameMode('arena')}
+            style={{
+              padding: '20px 40px',
+              fontSize: '20px',
+              background: '#ff3366',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              minWidth: '200px'
+            }}
+          >
+            ARENA MULTIJUGADOR
+          </button>
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            marginTop: '40px',
+            padding: '10px 20px',
+            fontSize: '14px',
+            background: 'transparent',
+            color: '#33ffff',
+            border: '1px solid #33ffff',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Cerrar Sesión
+        </button>
+      </div>
+    );
+  }
+
+  // Renderizar el modo de juego seleccionado
+  return (
+    <SnakeGame 
+      user={user} 
+      onLogout={() => setGameMode(null)} 
+      isAdmin={isAdmin} 
+      isBanned={isBanned} 
+      freeShots={freeShots} 
+      isImmune={isImmune}
+      arenaMode={gameMode === 'arena'}
+    />
+  );
 }
 
 export default App;

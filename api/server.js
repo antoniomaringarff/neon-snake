@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
+import websocket from '@fastify/websocket';
 import dotenv from 'dotenv';
 import authRoutes from './src/routes/auth.js';
 import usersRoutes from './src/routes/users.js';
@@ -8,6 +9,8 @@ import leaderboardRoutes from './src/routes/leaderboard.js';
 import sessionsRoutes from './src/routes/sessions.js';
 import shopRoutes from './src/routes/shop.js';
 import adminRoutes from './src/routes/admin.js';
+import arenaRoutes from './src/routes/arena.js';
+import { setupArenaWebSocket } from './src/websocket/arenaServer.js';
 
 dotenv.config();
 
@@ -30,6 +33,8 @@ await fastify.register(jwt, {
   }
 });
 
+await fastify.register(websocket);
+
 // Decorator for authentication
 fastify.decorate('authenticate', async function(request, reply) {
   try {
@@ -51,6 +56,10 @@ fastify.register(leaderboardRoutes, { prefix: '/api/leaderboard' });
 fastify.register(sessionsRoutes, { prefix: '/api/sessions' });
 fastify.register(shopRoutes, { prefix: '/api/shop' });
 fastify.register(adminRoutes, { prefix: '/api/admin' });
+fastify.register(arenaRoutes, { prefix: '/api/arena' });
+
+// Setup WebSocket for arena
+setupArenaWebSocket(fastify);
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

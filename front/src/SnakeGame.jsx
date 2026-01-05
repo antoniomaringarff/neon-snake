@@ -125,9 +125,61 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
   return levelSpecificConfigs[level] || baseConfig;
 };
 
-const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false, isImmune = false }) => {
+const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false, isImmune = false, arenaMode = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // === ARENA MODE STATE ===
+  const wsRef = useRef(null);
+  const [arenaConfig, setArenaConfig] = useState(null);
+  const [otherPlayers, setOtherPlayers] = useState([]);
+  const [arenaPlayerCount, setArenaPlayerCount] = useState(0);
+  const [arenaKills, setArenaKills] = useState(0);
+  const [arenaDeathInfo, setArenaDeathInfo] = useState(null);
+  const [arenaSessionId, setArenaSessionId] = useState(null);
+  
+  // Configuración por defecto para arena (fallback)
+  const defaultArenaConfig = {
+    arena_type: 'battle_royale',
+    arena_name: 'Arena Clásica',
+    starsNeeded: 0, // No aplica en arena
+    playerSpeed: 2.5,
+    enemySpeed: 2.8,
+    enemyCount: 500,
+    enemyDensity: 50,
+    enemyShootPercentage: 50,
+    enemyShieldPercentage: 50,
+    enemyShootCooldown: 2000,
+    xpDensity: 300,
+    xpPoints: 300,
+    mapSize: 100, // Mapa 100x100 BASE_UNITS
+    structuresCount: 25,
+    killerSawCount: 30,
+    floatingCannonCount: 25,
+    resentfulSnakeCount: 15,
+    healthBoxCount: 50,
+    enemyUpgradeLevel: 5, // Nivel medio de upgrades para enemigos
+    hasCentralCell: false, // Sin celda central en arena
+    centralCellOpeningSpeed: 0,
+    enemyRespawn: true,
+    enemyRespawnDelay: 3000
+  };
+  
+  // Función helper para obtener la configuración activa según el modo
+  const getActiveLevelConfig = useCallback((gameLevel, levelConfigsFromDB) => {
+    if (arenaMode) {
+      // En modo arena, usar configuración de arena (desde API o default)
+      if (arenaConfig) {
+        return {
+          ...defaultArenaConfig,
+          ...arenaConfig
+        };
+      }
+      return defaultArenaConfig;
+    }
+    // En modo campaña, usar getLevelConfig normal
+    return getLevelConfig(gameLevel, levelConfigsFromDB);
+  }, [arenaMode, arenaConfig]);
   
   // Calculate canvas dimensions based on screen size
   // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
@@ -175,7 +227,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const shootingIntervalRef = useRef(null);
   const startAutoFireRef = useRef(null);
   const stopAutoFireRef = useRef(null);
-  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
+  // Estados de juego: menu, playing, levelComplete, gameComplete, gameOver, shop
+  // En modo arena: arenaLobby, playing, arenaDeath
+  const [gameState, setGameState] = useState(arenaMode ? 'arenaLobby' : 'menu');
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [totalXP, setTotalXP] = useState(0);
@@ -594,8 +648,168 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       loadShopConfigs();
       loadUserProgress();
       loadLevelConfigs(); // Cargar configs de niveles para TODOS los usuarios
+      
+      // Si es modo arena, cargar config de arena
+      if (arenaMode) {
+        loadArenaConfig();
+      }
     }
-  }, [user?.id]);
+  }, [user?.id, arenaMode]);
+
+  // Cargar configuración de arena
+  const loadArenaConfig = async () => {
+    try {
+      const response = await fetch('/api/arena/config');
+      if (response.ok) {
+        const data = await response.json();
+        setArenaConfig(data);
+        console.log('[Arena] Config loaded:', data);
+      }
+    } catch (error) {
+      console.error('[Arena] Error loading config:', error);
+    }
+  };
+
+  // Conectar a WebSocket para modo arena
+  const connectArenaWebSocket = () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('[Arena] No token found');
+      return;
+    }
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const isDev = window.location.port === '8008';
+    const apiHost = isDev ? window.location.hostname + ':3000' : window.location.host;
+    const wsUrl = `${wsProtocol}//${apiHost}/arena`;
+    
+    console.log('[Arena] Connecting to WebSocket:', wsUrl);
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('[Arena] WebSocket connected');
+      ws.send(JSON.stringify({
+        type: 'join_arena',
+        token: token,
+        username: user.username
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      switch (data.type) {
+        case 'arena_state':
+          setOtherPlayers(data.players?.filter(p => p.userId !== user.id) || []);
+          setArenaPlayerCount(data.players?.length || 0);
+          // Inicializar el juego en modo arena
+          initArenaGame();
+          break;
+          
+        case 'player_joined':
+          setArenaPlayerCount(prev => prev + 1);
+          if (data.player && data.player.userId !== user.id) {
+            setOtherPlayers(prev => [...prev, data.player]);
+          }
+          break;
+          
+        case 'player_left':
+          setArenaPlayerCount(prev => Math.max(0, prev - 1));
+          setOtherPlayers(prev => prev.filter(p => p.userId !== data.userId));
+          break;
+          
+        case 'players_update':
+          if (data.players && Array.isArray(data.players)) {
+            setOtherPlayers(prev => {
+              const updated = [...prev];
+              data.players.forEach(updatedPlayer => {
+                if (updatedPlayer.userId === user.id) return;
+                const index = updated.findIndex(p => p.userId === updatedPlayer.userId);
+                if (index >= 0) {
+                  updated[index] = { ...updated[index], ...updatedPlayer };
+                } else {
+                  updated.push(updatedPlayer);
+                }
+              });
+              return updated;
+            });
+          }
+          break;
+          
+        case 'player_killed':
+          if (data.victimId === user.id) {
+            setArenaDeathInfo({
+              killerUsername: data.killerUsername,
+              killMethod: data.killMethod
+            });
+          }
+          // Si somos el killer, incrementar contador
+          if (data.killerId === user.id) {
+            setArenaKills(prev => prev + 1);
+            console.log('[Arena] ¡Eliminaste a ' + data.victimUsername + '!');
+          }
+          break;
+          
+        case 'kill_confirmed':
+          // El servidor confirmó que matamos a alguien
+          setArenaKills(prev => prev + 1);
+          console.log('[Arena] Kill confirmado');
+          break;
+          
+        case 'error':
+          console.error('[Arena] Error:', data.message);
+          break;
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[Arena] WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[Arena] WebSocket disconnected');
+    };
+
+    wsRef.current = ws;
+  };
+
+  // Desconectar WebSocket al salir
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  // Función centralizada para manejar la muerte del jugador
+  // Solo decide qué estado usar - el código de llamada ya maneja partículas y guardado de sesión
+  const handlePlayerDeath = (killerInfo = null) => {
+    if (arenaMode) {
+      const game = gameRef.current;
+      const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
+      
+      // En modo arena, notificar al servidor
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'player_death',
+          xp: game.sessionXP || 0,
+          kills: arenaKills,
+          duration: duration,
+          killerInfo: killerInfo
+        }));
+      }
+      
+      if (killerInfo) {
+        setArenaDeathInfo(killerInfo);
+      }
+      
+      setGameState('arenaDeath');
+    } else {
+      handlePlayerDeath();
+    }
+  };
 
   // Handle ESC key to close admin panel
   useEffect(() => {
@@ -1810,7 +2024,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
             createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
-            setGameState('gameOver');
+            handlePlayerDeath();
             return;
               }
             } else {
@@ -1878,6 +2092,86 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       });
 
+      // === ARENA MODE: Check collisions with other players ===
+      if (arenaMode && otherPlayers.length > 0) {
+        otherPlayers.forEach(otherPlayer => {
+          if (!otherPlayer.segments || otherPlayer.segments.length === 0) return;
+          
+          // Player head vs Other player body (local player takes damage)
+          for (let i = 1; i < otherPlayer.segments.length; i++) {
+            if (checkCollision(playerHead, otherPlayer.segments[i], game.snakeSize + SNAKE_SIZE)) {
+              let dodged = false;
+              if (shieldLevel > 0) {
+                const dodgeChance = (shieldLevel - 1) / shieldLevel;
+                dodged = Math.random() < dodgeChance;
+              }
+              
+              if (!dodged) {
+                const damage = 3;
+                const died = applyDamage(damage, playerHead.x, playerHead.y);
+                
+                if (died) {
+                  createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
+                  handlePlayerDeath({
+                    killerUsername: otherPlayer.username,
+                    killMethod: 'collision'
+                  });
+                  
+                  // Notificar al servidor sobre el kill
+                  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({
+                      type: 'player_kill',
+                      killerId: otherPlayer.userId,
+                      victimId: user.id,
+                      killMethod: 'collision'
+                    }));
+                  }
+                  return;
+                }
+              } else {
+                createParticle(playerHead.x, playerHead.y, '#00ffff', 12);
+              }
+              
+              // Push back
+              const dx = playerHead.x - otherPlayer.segments[i].x;
+              const dy = playerHead.y - otherPlayer.segments[i].y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance > 0) {
+                const pushForce = 30;
+                playerHead.x += (dx / distance) * pushForce;
+                playerHead.y += (dy / distance) * pushForce;
+              }
+              break;
+            }
+          }
+          
+          // Player head vs Other player head (both take damage)
+          const otherHead = otherPlayer.segments[0];
+          if (checkCollision(playerHead, otherHead, game.snakeSize + SNAKE_SIZE)) {
+            const damage = 5; // Colisión de cabezas es más dañina
+            const died = applyDamage(damage, playerHead.x, playerHead.y);
+            
+            if (died) {
+              createParticle(playerHead.x, playerHead.y, '#ff3366', 25);
+              handlePlayerDeath({
+                killerUsername: otherPlayer.username,
+                killMethod: 'head_collision'
+              });
+              
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'player_kill',
+                  killerId: otherPlayer.userId,
+                  victimId: user.id,
+                  killMethod: 'head_collision'
+                }));
+              }
+              return;
+            }
+          }
+        });
+      }
+
       // Remove dead enemies (in reverse order to maintain indices)
       enemiesToRemove.sort((a, b) => b - a).forEach(index => {
         game.enemies.splice(index, 1);
@@ -1942,6 +2236,45 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             }
           }
         });
+        
+          // === ARENA MODE: Check collision with other players (player bullets) ===
+          if (!hit && arenaMode && otherPlayers.length > 0) {
+            otherPlayers.forEach(otherPlayer => {
+              if (hit || !otherPlayer.segments || otherPlayer.segments.length === 0) return;
+              
+              const otherHead = otherPlayer.segments[0];
+              let hitHead = false;
+              let hitBody = false;
+              
+              if (checkCollision(bullet, otherHead, 15)) {
+                hitHead = true;
+              } else {
+                for (let i = 1; i < otherPlayer.segments.length; i++) {
+                  if (checkCollision(bullet, otherPlayer.segments[i], 12)) {
+                    hitBody = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (hitHead || hitBody) {
+                // Notificar al servidor que le dimos a otro jugador
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify({
+                    type: 'bullet_hit',
+                    targetId: otherPlayer.userId,
+                    hitType: hitHead ? 'head' : 'body',
+                    damage: hitHead ? 2 : 1
+                  }));
+                }
+                
+                createParticle(bullet.x, bullet.y, '#00ff00', 10);
+                hit = true;
+                
+                // Incrementar contador de kills cuando el servidor confirme
+              }
+            });
+          }
         
           // Check collision with Resentful Snakes (player bullets)
           if (!hit && game.resentfulSnakes && game.resentfulSnakes.length > 0) {
@@ -2073,7 +2406,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
                 createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
-                setGameState('gameOver');
+                handlePlayerDeath();
                 return false;
             }
             
@@ -2086,10 +2419,45 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                bullet.y > 0 && bullet.y < game.worldHeight;
       });
       
-      // Remove killed enemies
-      enemiesToKill.sort((a, b) => b - a).forEach(index => {
-        game.enemies.splice(index, 1);
-      });
+      // Remove killed enemies (en arena, respawnear nuevos)
+      if (arenaMode && enemiesToKill.length > 0) {
+        const config = arenaConfig || defaultArenaConfig;
+        enemiesToKill.sort((a, b) => b - a).forEach(index => {
+          // Respawnear un nuevo enemigo lejos del jugador
+          const playerHead = game.snake[0];
+          let newSpawnX, newSpawnY, attempts = 0;
+          do {
+            const margin = 200;
+            newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+            newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+            const distToPlayer = Math.sqrt(
+              Math.pow(newSpawnX - playerHead.x, 2) + 
+              Math.pow(newSpawnY - playerHead.y, 2)
+            );
+            attempts++;
+            if (distToPlayer > 500 || attempts > 20) break;
+          } while (true);
+          
+          // Crear nuevo enemigo en la posición segura
+          const newEnemy = createEnemy(config, 1);
+          if (newEnemy.segments && newEnemy.segments.length > 0) {
+            // Mover el nuevo enemigo a la posición de spawn
+            const offsetX = newSpawnX - newEnemy.segments[0].x;
+            const offsetY = newSpawnY - newEnemy.segments[0].y;
+            newEnemy.segments.forEach(seg => {
+              seg.x += offsetX;
+              seg.y += offsetY;
+            });
+          }
+          
+          // Reemplazar el enemigo muerto con el nuevo
+          game.enemies[index] = newEnemy;
+        });
+      } else {
+        enemiesToKill.sort((a, b) => b - a).forEach(index => {
+          game.enemies.splice(index, 1);
+        });
+      }
       
       // Make enemies shoot - ahora con sistema de cannonLevel
       const currentTime = Date.now();
@@ -2352,7 +2720,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           if (game.currentHealth <= 0) {
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-        setGameState('gameOver');
+        handlePlayerDeath();
         return;
           }
         } else {
@@ -2407,14 +2775,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               // Hit the wall, not the opening
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
               saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-              setGameState('gameOver');
+              handlePlayerDeath();
               return;
             }
           } else {
             // No opening, always die if touching wall
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-            setGameState('gameOver');
+            handlePlayerDeath();
             return;
           }
         }
@@ -2428,13 +2796,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             if (headX < opening.x - collisionMargin || headX > opening.x + opening.width + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
               saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-              setGameState('gameOver');
+              handlePlayerDeath();
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-            setGameState('gameOver');
+            handlePlayerDeath();
             return;
           }
         }
@@ -2448,13 +2816,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
               saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-              setGameState('gameOver');
+              handlePlayerDeath();
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-            setGameState('gameOver');
+            handlePlayerDeath();
             return;
           }
         }
@@ -2468,13 +2836,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             if (headY < opening.y - collisionMargin || headY > opening.y + opening.height + collisionMargin) {
               const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
               saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-              setGameState('gameOver');
+              handlePlayerDeath();
               return;
             }
           } else {
             const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
             saveGameSession(game.sessionXP, level, game.sessionXP, duration);
-            setGameState('gameOver');
+            handlePlayerDeath();
             return;
           }
         }
@@ -2485,6 +2853,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Update camera to follow player
       game.camera.x = Math.max(0, Math.min(game.worldWidth - CANVAS_WIDTH, newHead.x - CANVAS_WIDTH / 2));
       game.camera.y = Math.max(0, Math.min(game.worldHeight - CANVAS_HEIGHT, newHead.y - CANVAS_HEIGHT / 2));
+
+      // === ARENA MODE: Enviar posición al servidor ===
+      if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (!game.lastWsUpdate || Date.now() - game.lastWsUpdate > 50) {
+          wsRef.current.send(JSON.stringify({
+            type: 'player_update',
+            x: newHead.x,
+            y: newHead.y,
+            direction: game.direction,
+            segments: game.snake.slice(0, 20), // Enviar solo los primeros 20 segmentos
+            score: game.sessionXP
+          }));
+          game.lastWsUpdate = Date.now();
+        }
+      }
 
       // Apply magnet improvement to attract food towards snake HEAD
       // magnetLevel 1-10: rango 25, 50, 75... 250 pixels desde la cabeza
@@ -2705,7 +3088,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 if (died) {
                   const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                   saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-                  setGameState('gameOver');
+                  handlePlayerDeath();
                   return;
                 }
               }
@@ -3387,6 +3770,57 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
       ctx.shadowBlur = 0;
 
+      // === ARENA MODE: Draw other players ===
+      if (arenaMode && otherPlayers.length > 0) {
+        otherPlayers.forEach(player => {
+          if (!player.segments || player.segments.length === 0) return;
+          
+          // Dibujar segmentos del otro jugador
+          player.segments.forEach((segment, index) => {
+            const screenX = segment.x - camX;
+            const screenY = segment.y - camY;
+            
+            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 &&
+                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+              // Color diferente para otros jugadores (verde)
+              const hue = 120; // Verde
+              const saturation = 100;
+              const lightness = index === 0 ? 60 : 40;
+              
+              ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+              ctx.shadowBlur = 8;
+              ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Dibujar etiqueta con nombre del jugador sobre la cabeza
+              if (index === 0 && player.username) {
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                
+                // Fondo semi-transparente para el texto
+                const textWidth = ctx.measureText(player.username).width;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(screenX - textWidth / 2 - 4, screenY - 30, textWidth + 8, 18);
+                
+                // Texto del nombre
+                ctx.fillStyle = '#00ff00';
+                ctx.shadowBlur = 0;
+                ctx.fillText(player.username, screenX, screenY - 15);
+                
+                // Mostrar score del jugador
+                ctx.font = '10px Arial';
+                ctx.fillStyle = '#aaffaa';
+                ctx.fillText(`${player.score || 0} XP`, screenX, screenY - 32);
+              }
+            }
+          });
+          ctx.shadowBlur = 0;
+        });
+      }
+
       // Draw bullets
       game.bullets.forEach(bullet => {
         const screenX = bullet.x - camX;
@@ -3668,14 +4102,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.stroke();
       ctx.shadowBlur = 0;
       
-      // === LEVEL BADGE ===
+      // === LEVEL BADGE (o ARENA en modo arena) ===
       const levelX = hudX + 12;
       const levelY = hudY + 10;
-      ctx.fillStyle = '#33ffff';
+      ctx.fillStyle = arenaMode ? '#ff3366' : '#33ffff';
       ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
+      ctx.shadowColor = arenaMode ? '#ff3366' : '#33ffff';
       ctx.font = 'bold 16px monospace';
-      ctx.fillText(`LV ${game.level}`, levelX, levelY + 14);
+      ctx.fillText(arenaMode ? '⚔️ ARENA' : `LV ${game.level}`, levelX, levelY + 14);
       ctx.shadowBlur = 0;
       
       // === STARS BAR ===
@@ -3839,6 +4273,49 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const xpTextWidth = ctx.measureText(xpText).width;
       ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 12);
       ctx.shadowBlur = 0;
+      
+      // === ARENA MODE: Kills and players counter ===
+      if (arenaMode) {
+        const arenaInfoX = xpCounterX + xpCounterWidth + 10;
+        const arenaInfoY = hudY + 10;
+        
+        // Kills counter
+        ctx.fillStyle = 'rgba(255, 51, 102, 0.3)';
+        ctx.beginPath();
+        ctx.roundRect(arenaInfoX, arenaInfoY, 70, 16, 4);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#ff3366';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(arenaInfoX, arenaInfoY, 70, 16, 4);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#ff3366';
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = '#ff3366';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(`⚔️ ${arenaKills}`, arenaInfoX + 8, arenaInfoY + 12);
+        ctx.shadowBlur = 0;
+        
+        // Players count
+        ctx.fillStyle = 'rgba(0, 255, 136, 0.3)';
+        ctx.beginPath();
+        ctx.roundRect(arenaInfoX + 75, arenaInfoY, 70, 16, 4);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(arenaInfoX + 75, arenaInfoY, 70, 16, 4);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#00ff88';
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = '#00ff88';
+        ctx.fillText(`👥 ${arenaPlayerCount}`, arenaInfoX + 83, arenaInfoY + 12);
+        ctx.shadowBlur = 0;
+      }
       
       // === TOTAL XP/STARS (compact, next to minimap) ===
       const statsX = minimapX - 90;
@@ -4052,7 +4529,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
   const initGame = () => {
     const game = gameRef.current;
-    const levelConfig = getLevelConfig(game.level, levelConfigs);
+    const levelConfig = getActiveLevelConfig(game.level, levelConfigs);
     
     // Central rectangle (1 screen size = 800x600) - solo si el nivel lo requiere
     if (levelConfig.hasCentralCell) {
@@ -4243,6 +4720,107 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
     setCurrentLevelXP(0);
     setCurrentLevelStars(0);
+  };
+
+  // Función específica para inicializar el juego en modo arena
+  const initArenaGame = () => {
+    const game = gameRef.current;
+    const config = arenaConfig || defaultArenaConfig;
+    
+    // Configurar el nivel como "arena" (level 0 o especial)
+    game.level = 0;
+    game.gameStartTime = Date.now();
+    game.sessionXP = 0;
+    game.headHits = 0;
+    game.bodyHits = 0;
+    setScore(0);
+    setArenaKills(0);
+    
+    // Configurar tamaño del mundo para arena
+    game.worldWidth = config.mapSize * BASE_UNIT;
+    game.worldHeight = config.mapSize * BASE_UNIT;
+    
+    // Sin celda central en arena
+    game.centralRect = null;
+    
+    // Crear comida
+    game.food = Array.from({ length: config.xpDensity || 300 }, () => createFood());
+    game.initialFoodCount = game.food.length;
+    
+    // Crear enemigos con variabilidad 50/50
+    game.enemies = Array.from({ length: config.enemyCount || 500 }, () => {
+      return createEnemy(config, 1); // Nivel base 1 para arena
+    });
+    
+    // Crear otros elementos
+    game.killerSaws = Array.from({ length: config.killerSawCount || 30 }, () => createKillerSaw(config));
+    game.floatingCannons = Array.from({ length: config.floatingCannonCount || 25 }, () => createFloatingCannon(config));
+    game.resentfulSnakes = Array.from({ length: config.resentfulSnakeCount || 15 }, () => createResentfulSnake(config));
+    game.healthBoxes = Array.from({ length: config.healthBoxCount || 50 }, () => createHealthBox(config));
+    
+    console.log(`⚔️ Iniciando ARENA con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} cañones, ${game.resentfulSnakes.length} víboras resentidas`);
+    
+    // Spawn del jugador en posición aleatoria segura
+    const margin = 100;
+    let spawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+    let spawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+    
+    // Buscar posición segura lejos de enemigos
+    const attempts = 50;
+    let bestX = spawnX;
+    let bestY = spawnY;
+    let bestMinDistance = 0;
+    
+    for (let i = 0; i < attempts; i++) {
+      const testX = margin + Math.random() * (game.worldWidth - margin * 2);
+      const testY = margin + Math.random() * (game.worldHeight - margin * 2);
+      
+      let minDistance = Infinity;
+      for (const enemy of game.enemies) {
+        if (enemy.segments && enemy.segments.length > 0) {
+          const head = enemy.segments[0];
+          const dx = testX - head.x;
+          const dy = testY - head.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          minDistance = Math.min(minDistance, distance);
+        }
+      }
+      
+      if (minDistance > bestMinDistance) {
+        bestMinDistance = minDistance;
+        bestX = testX;
+        bestY = testY;
+      }
+    }
+    
+    game.snake = [{ x: bestX, y: bestY }];
+    game.direction = { x: 1, y: 0 };
+    game.nextDirection = { x: 1, y: 0 };
+    game.speed = config.playerSpeed || 2.5;
+    game.baseSpeed = config.playerSpeed || 2.5;
+    game.snakeSize = SNAKE_SIZE;
+    game.bullets = [];
+    game.particles = [];
+    game.stars = [];
+    game.currentXP = 0;
+    game.currentStars = 0;
+    game.starsNeeded = 0; // No estrellas necesarias en arena
+    game.maxHealth = 2 + (healthLevel * 2);
+    game.currentHealth = game.maxHealth;
+    game.damageFlash = 0;
+    game.healFlash = 0;
+    game.invulnerable = 0;
+    game.magnetLevel = magnetLevel;
+    game.lastWsUpdate = 0;
+    game.lastEnemyRespawn = Date.now();
+    game.camera = { 
+      x: bestX - CANVAS_WIDTH / 2, 
+      y: bestY - CANVAS_HEIGHT / 2 
+    };
+    
+    setCurrentLevelXP(0);
+    setCurrentLevelStars(0);
+    setGameState('playing');
   };
 
   const nextLevel = () => {
@@ -6034,6 +6612,220 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           >
             VOLVER AL MENÚ
           </button>
+        </div>
+      )}
+
+      {/* === ARENA LOBBY === */}
+      {gameState === 'arenaLobby' && (
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.85)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #ff3366',
+          boxShadow: '0 0 40px rgba(255, 51, 102, 0.6)',
+          maxWidth: '600px',
+          width: '90%'
+        }}>
+          <h1 style={{ 
+            color: '#ff3366', 
+            textShadow: '0 0 30px #ff3366',
+            fontSize: '36px',
+            marginBottom: '10px'
+          }}>
+            ⚔️ ARENA MULTIJUGADOR ⚔️
+          </h1>
+          <p style={{ 
+            fontSize: '18px', 
+            color: '#aaa',
+            marginBottom: '30px'
+          }}>
+            {arenaConfig?.arena_name || 'Arena Clásica'}
+          </p>
+          
+          <div style={{ 
+            background: 'rgba(51, 255, 255, 0.1)',
+            padding: '20px',
+            borderRadius: '8px',
+            marginBottom: '30px',
+            border: '1px solid rgba(51, 255, 255, 0.3)'
+          }}>
+            <h3 style={{ color: '#33ffff', marginBottom: '15px' }}>Tus Mejoras Base</h3>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(2, 1fr)', 
+              gap: '10px',
+              fontSize: '14px',
+              textAlign: 'left'
+            }}>
+              <div><Shield size={14} style={{ marginRight: '5px' }} />Escudo: Nv.{shieldLevel}</div>
+              <div><Magnet size={14} style={{ marginRight: '5px' }} />Imán: Nv.{magnetLevel}</div>
+              <div><Zap size={14} style={{ marginRight: '5px' }} />Cañón: Nv.{cannonLevel}</div>
+              <div><Gauge size={14} style={{ marginRight: '5px' }} />Velocidad: Nv.{speedLevel}</div>
+              <div><Heart size={14} style={{ marginRight: '5px' }} />Vida: Nv.{healthLevel}</div>
+              <div><Sparkles size={14} style={{ marginRight: '5px' }} />Cabeza: Nv.{headLevel}</div>
+            </div>
+          </div>
+          
+          <div style={{ 
+            background: 'rgba(255, 51, 102, 0.1)',
+            padding: '15px',
+            borderRadius: '8px',
+            marginBottom: '30px',
+            border: '1px solid rgba(255, 51, 102, 0.3)'
+          }}>
+            <p style={{ margin: '5px 0', fontSize: '14px' }}>
+              🗺️ Mapa: {arenaConfig?.mapSize || 100}x{arenaConfig?.mapSize || 100}
+            </p>
+            <p style={{ margin: '5px 0', fontSize: '14px' }}>
+              👾 Enemigos: {arenaConfig?.enemyCount || 500}
+            </p>
+            <p style={{ margin: '5px 0', fontSize: '14px' }}>
+              ⚠️ Los enemigos reaparecen constantemente
+            </p>
+            <p style={{ margin: '5px 0', fontSize: '14px', color: '#ff6666' }}>
+              💀 Al morir pierdes todo el progreso de la partida
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button 
+              onClick={() => {
+                connectArenaWebSocket();
+                // El estado cambiará a 'playing' cuando se conecte
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #ff3366, #ff6699)',
+                border: 'none',
+                color: '#fff',
+                padding: '18px 50px',
+                fontSize: '22px',
+                cursor: 'pointer',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                boxShadow: '0 0 30px rgba(255, 51, 102, 0.6)',
+                transition: 'all 0.3s'
+              }}
+            >
+              🎮 ENTRAR A LA ARENA
+            </button>
+            <button 
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '2px solid #888',
+                color: '#888',
+                padding: '15px 30px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                borderRadius: '8px',
+                transition: 'all 0.3s'
+              }}
+            >
+              ← Volver
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === ARENA DEATH SCREEN === */}
+      {gameState === 'arenaDeath' && (
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.9)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #ff3366',
+          boxShadow: '0 0 50px rgba(255, 51, 102, 0.7)',
+          maxWidth: '500px',
+          width: '90%'
+        }}>
+          <h2 style={{ 
+            color: '#ff3366', 
+            textShadow: '0 0 30px #ff3366',
+            fontSize: '42px',
+            marginBottom: '10px'
+          }}>
+            💀 HAS MUERTO 💀
+          </h2>
+          
+          {arenaDeathInfo && (
+            <p style={{ 
+              fontSize: '18px', 
+              color: '#ffaa66',
+              marginBottom: '20px'
+            }}>
+              {arenaDeathInfo.killMethod === 'bullet' 
+                ? `Fuiste eliminado por la bala de ${arenaDeathInfo.killerUsername}`
+                : arenaDeathInfo.killMethod === 'collision'
+                ? `Chocaste con ${arenaDeathInfo.killerUsername}`
+                : 'Fuiste eliminado'
+              }
+            </p>
+          )}
+          
+          <div style={{ 
+            background: 'rgba(51, 255, 255, 0.1)',
+            padding: '20px',
+            borderRadius: '8px',
+            marginBottom: '25px',
+            border: '1px solid rgba(51, 255, 255, 0.3)'
+          }}>
+            <h3 style={{ color: '#33ffff', marginBottom: '15px' }}>Estadísticas de Partida</h3>
+            <p style={{ fontSize: '28px', color: '#ffff00', margin: '10px 0' }}>
+              {score} XP
+            </p>
+            <p style={{ fontSize: '18px', color: '#00ff00', margin: '10px 0' }}>
+              ⚔️ Jugadores eliminados: {arenaKills}
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button 
+              onClick={() => {
+                setScore(0);
+                setArenaKills(0);
+                setArenaDeathInfo(null);
+                connectArenaWebSocket();
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #ff3366, #ff6699)',
+                border: 'none',
+                color: '#fff',
+                padding: '15px 40px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                boxShadow: '0 0 25px rgba(255, 51, 102, 0.5)'
+              }}
+            >
+              🔄 REINTENTAR
+            </button>
+            <button 
+              onClick={() => {
+                if (wsRef.current) {
+                  wsRef.current.close();
+                  wsRef.current = null;
+                }
+                setScore(0);
+                setArenaKills(0);
+                setArenaDeathInfo(null);
+                setGameState('arenaLobby');
+              }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #33ffff',
+                color: '#33ffff',
+                padding: '15px 40px',
+                fontSize: '18px',
+                cursor: 'pointer',
+                borderRadius: '8px'
+              }}
+            >
+              📊 VER LOBBY
+            </button>
+          </div>
         </div>
       )}
 
