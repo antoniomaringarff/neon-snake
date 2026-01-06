@@ -185,6 +185,19 @@ export function setupArenaWebSocket(fastify) {
                 bullet: data.bullet
               });
               break;
+            
+            case 'player_bullets':
+              // Recibir múltiples balas del jugador y retransmitirlas a otros
+              if (!playerState || !data.bullets || !Array.isArray(data.bullets)) return;
+              
+              // Enviar las balas a todos los demás jugadores
+              broadcastToOthers(socketId, {
+                type: 'remote_bullets',
+                shooterId: playerState.userId,
+                shooterUsername: playerState.username,
+                bullets: data.bullets
+              });
+              break;
 
             case 'player_killed':
               if (!playerState || !data.victimUserId || !data.killMethod) return;
@@ -305,6 +318,48 @@ export function setupArenaWebSocket(fastify) {
               const killCount = data.kills || playerState.kills || 0;
               const xpReward = data.xpReward || Math.floor(sessionXP * 0.1);
               const starsFromKills = data.starsFromKills || killCount * 5;
+              const killerInfo = data.killerInfo;
+
+              // Si hay killerInfo, notificar al killer y registrar el kill
+              if (killerInfo && killerInfo.killerUsername) {
+                // Buscar al killer por username
+                let killerSocketId = null;
+                let killerState = null;
+                arenaState.players.forEach((p, sid) => {
+                  if (p.username === killerInfo.killerUsername) {
+                    killerSocketId = sid;
+                    killerState = p;
+                  }
+                });
+                
+                if (killerState && killerSocketId) {
+                  // Incrementar kills del killer
+                  killerState.kills = (killerState.kills || 0) + 1;
+                  
+                  // Notificar al killer que consiguió un kill
+                  const killerSocket = arenaState.connections.get(killerSocketId);
+                  if (killerSocket && killerSocket.readyState === 1) {
+                    killerSocket.send(JSON.stringify({
+                      type: 'kill_confirmed',
+                      victimUsername: playerState.username,
+                      victimId: playerState.userId,
+                      killMethod: killerInfo.killMethod || 'bullet'
+                    }));
+                  }
+                  
+                  // Broadcast a todos que hubo un kill
+                  broadcastToAll({
+                    type: 'player_killed',
+                    killerId: killerState.userId,
+                    killerUsername: killerState.username,
+                    victimId: playerState.userId,
+                    victimUsername: playerState.username,
+                    killMethod: killerInfo.killMethod || 'bullet'
+                  });
+                  
+                  console.log(`[Arena] ${killerState.username} killed ${playerState.username} via ${killerInfo.killMethod}`);
+                }
+              }
 
               // Guardar sesión en la base de datos
               try {

@@ -784,6 +784,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           setTotalStars(prev => prev + 5);
           console.log('[Arena] Kill confirmado! +5⭐');
           break;
+        
+        case 'remote_bullets':
+          // Recibir balas de otros jugadores
+          if (data.bullets && gameRef.current) {
+            data.bullets.forEach(bullet => {
+              gameRef.current.bullets.push({
+                x: bullet.x,
+                y: bullet.y,
+                vx: bullet.vx,
+                vy: bullet.vy,
+                life: 100,
+                owner: 'otherPlayer',
+                shooterId: data.shooterId
+              });
+            });
+          }
+          break;
+        
+        case 'player_hit':
+          // Otro jugador nos disparó - recibir daño
+          if (data.victimId === user.id && gameRef.current) {
+            const game = gameRef.current;
+            const damage = data.damage || 1;
+            game.currentHealth -= damage;
+            game.damageFlash = 30;
+            
+            if (game.currentHealth <= 0) {
+              // Morimos por disparo de otro jugador
+              handlePlayerDeathRef.current && handlePlayerDeathRef.current('bullet', data.shooterUsername);
+            }
+          }
+          break;
           
         case 'error':
           console.error('[Arena] Error:', data.message);
@@ -1645,6 +1677,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ? 4 + ((bulletSpeedLevel - 1) * 8 / 9)
         : 4; // Sin mejora = velocidad mínima
       
+      const bulletsToSend = []; // Para enviar al servidor en modo arena
+      
       if (cannonLevel >= 1) {
         // Head cannons (always forward)
         // Velocidad relativa a la víbora: bala + velocidad de la víbora
@@ -1652,15 +1686,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const snakeSpeed = game.speed || 2; // Velocidad actual de la víbora
         for (let i = 0; i < headBulletCount; i++) {
           const offset = headBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-        game.bullets.push({
+          const bullet = {
             x: head.x + Math.cos(headPerpAngle) * offset,
             y: head.y + Math.sin(headPerpAngle) * offset,
-            // Sumar velocidad de la víbora para que la bala salga adelante
             vx: game.direction.x * (bulletSpeed + snakeSpeed),
             vy: game.direction.y * (bulletSpeed + snakeSpeed),
           life: 100,
           owner: 'player'
-        });
+          };
+          game.bullets.push(bullet);
+          bulletsToSend.push({ x: bullet.x, y: bullet.y, vx: bullet.vx, vy: bullet.vy });
       }
       }
       
@@ -1674,15 +1709,25 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         
         for (let i = 0; i < tailBulletCount; i++) {
           const offset = tailBulletCount === 2 ? (i === 0 ? -15 : 15) : 0;
-          game.bullets.push({
+          const bullet = {
             x: tail.x + Math.cos(tailPerpAngle) * offset,
             y: tail.y + Math.sin(tailPerpAngle) * offset,
             vx: tailDir.x * bulletSpeed,
             vy: tailDir.y * bulletSpeed,
             life: 100,
             owner: 'player'
-          });
+          };
+          game.bullets.push(bullet);
+          bulletsToSend.push({ x: bullet.x, y: bullet.y, vx: bullet.vx, vy: bullet.vy });
         }
+      }
+      
+      // Enviar balas al servidor en modo arena
+      if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && bulletsToSend.length > 0) {
+        wsRef.current.send(JSON.stringify({
+          type: 'player_bullets',
+          bullets: bulletsToSend
+        }));
       }
     };
     
@@ -2163,8 +2208,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           
           // Mover la cabeza del jugador basándose en su dirección
           const head = player.segments[0];
-          head.x += player.direction.x * playerSpeed * normalizedDelta;
-          head.y += player.direction.y * playerSpeed * normalizedDelta;
+          let newX = head.x + player.direction.x * playerSpeed * normalizedDelta;
+          let newY = head.y + player.direction.y * playerSpeed * normalizedDelta;
+          
+          // IMPORTANTE: Limitar la posición dentro del mapa para evitar que 
+          // la interpolación mueva al jugador fuera de los límites
+          const margin = BORDER_WIDTH + 10;
+          newX = Math.max(margin, Math.min(game.worldWidth - margin, newX));
+          newY = Math.max(margin, Math.min(game.worldHeight - margin, newY));
+          
+          head.x = newX;
+          head.y = newY;
           
           // Actualizar segmentos (el resto sigue a la cabeza)
           for (let i = 1; i < player.segments.length; i++) {
@@ -2458,8 +2512,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           if (hit) return false; // Remove bullet if it hit
         }
         
-        // Check collision with player (enemy and cannon bullets)
-        if ((bullet.owner === 'enemy' || bullet.owner === 'cannon') && game.snake.length > 0) {
+        // Check collision with player (enemy, cannon, and OTHER PLAYER bullets)
+        if ((bullet.owner === 'enemy' || bullet.owner === 'cannon' || bullet.owner === 'otherPlayer') && game.snake.length > 0) {
           const playerHead = game.snake[0];
           let hitHead = false;
           let hitBody = false;
@@ -2498,8 +2552,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const damage = hitHead ? 2 : 1;
             const died = applyDamage(damage, bullet.x, bullet.y);
               
-            // Si la vida llega a 0 o menos, el jugador muere
+            // Si la bala era de otro jugador, notificar
+            if (bullet.owner === 'otherPlayer' && bullet.shooterId && arenaMode) {
+              // Buscar el nombre del shooter
+              const shooter = otherPlayersRef.current.find(p => p.userId === bullet.shooterId);
+              const shooterName = shooter?.username || 'Jugador';
+              
             if (died) {
+                // Morimos por disparo de otro jugador
+                handlePlayerDeath({
+                  killerUsername: shooterName,
+                  killMethod: 'bullet'
+                });
+                return false;
+              }
+            } else if (died) {
+              // Muerte por enemigo/cañón
                 const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
                 saveGameSession(game.sessionXP, level, game.sessionXP, duration);
                 createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
@@ -3471,11 +3539,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.stroke();
       }
 
-      // Draw world borders in RED
+      // Draw world borders in RED (sin shadows para mejor rendimiento)
       ctx.strokeStyle = '#ff0000';
       ctx.lineWidth = BORDER_WIDTH;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#ff0000';
       
       // Top border
       if (camY < BORDER_WIDTH * 2) {
@@ -3508,8 +3574,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         ctx.lineTo(game.worldWidth - BORDER_WIDTH / 2 - camX, game.worldHeight - camY);
         ctx.stroke();
       }
-      
-      ctx.shadowBlur = 0;
 
       // Draw central rectangle with moving openings
       if (game.centralRect) {
@@ -3517,11 +3581,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const rectX = rect.x - camX;
         const rectY = rect.y - camY;
         
-        // Draw walls as red lines (like borders) - only visible parts
+        // Draw walls as red lines (sin shadows)
         ctx.strokeStyle = '#ff0000';
         ctx.lineWidth = 4;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = '#ff0000';
         
         // Calculate opening positions
         const openingRects = rect.openings.map(opening => {
@@ -3651,25 +3713,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.lineTo(rectX + rect.width, rectY + rect.height);
           ctx.stroke();
         }
-        
-        ctx.shadowBlur = 0;
       }
 
-      // Draw food with rainbow colors - OPTIMIZADO (sin gradientes ni shadows)
+      // Draw food - SUPER OPTIMIZADO (solo círculos simples)
       game.food.forEach(food => {
         const screenX = food.x - camX;
         const screenY = food.y - camY;
         
-        // Only draw if visible on screen
-        if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-            screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-          // Simple glow circle (más rápido que radialGradient)
-          ctx.fillStyle = `hsla(${food.hue}, 100%, 50%, 0.3)`;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, food.size * 2, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // The orb itself (sin shadow)
+        if (screenX > -20 && screenX < CANVAS_WIDTH + 20 && 
+            screenY > -20 && screenY < CANVAS_HEIGHT + 20) {
           ctx.fillStyle = food.color;
           ctx.beginPath();
           ctx.arc(screenX, screenY, food.size, 0, Math.PI * 2);
@@ -3677,31 +3729,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       });
 
-      // Draw stars (golden 5-pointed stars) - OPTIMIZADO
+      // Draw stars - forma de estrella sin shadows
+      ctx.fillStyle = '#FFD700';
+      ctx.strokeStyle = '#FFA500';
+      ctx.lineWidth = 1.5;
       game.stars.forEach(star => {
-        // Update star animation
-        star.rotation += star.rotationSpeed;
-        star.pulse += star.pulseSpeed;
-        
         const screenX = star.x - camX;
         const screenY = star.y - camY;
         
-        // Only draw if visible on screen
-        if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-            screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-          const pulseSize = star.size + Math.sin(star.pulse) * 3;
-          
-          // Simple glow (sin radialGradient)
-          ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, pulseSize * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Draw the star (sin shadow)
-          ctx.fillStyle = '#FFD700';
-          ctx.strokeStyle = '#FFA500';
-          ctx.lineWidth = 2;
-          drawStar(ctx, screenX, screenY, pulseSize, star.rotation);
+        if (screenX > -20 && screenX < CANVAS_WIDTH + 20 && 
+            screenY > -20 && screenY < CANVAS_HEIGHT + 20) {
+          // Rotar lentamente la estrella
+          star.rotation = (star.rotation || 0) + 0.02;
+          drawStar(ctx, screenX, screenY, star.size, star.rotation);
           ctx.fill();
           ctx.stroke();
         }
@@ -3736,477 +3776,371 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       });
 
-      // Draw player snake with skin support
-      const defaultColors = [
-        { r: 0, g: 255, b: 0 },      // Verde brillante
-        { r: 128, g: 255, b: 0 },    // Verde-amarillo
-        { r: 255, g: 255, b: 0 },    // Amarillo
-        { r: 255, g: 200, b: 0 },    // Amarillo-naranja
-        { r: 255, g: 136, b: 0 },    // Naranja
-        { r: 255, g: 100, b: 100 },  // Naranja-rosa
-        { r: 255, g: 0, b: 255 }     // Rosa/Magenta
-      ];
+      // Draw player snake con skins (sin shadows)
+      const snakeLen = game.snake.length;
+      const dir = game.direction;
+      const perpX = -dir.y;
+      const perpY = dir.x;
       
-      const dragonColors = [
-        { r: 255, g: 200, b: 50 },   // Amarillo dorado
-        { r: 255, g: 150, b: 0 },    // Naranja brillante
-        { r: 255, g: 100, b: 0 },    // Naranja oscuro
-        { r: 255, g: 50, b: 0 },     // Rojo-naranja
-        { r: 200, g: 30, b: 0 },     // Rojo oscuro
-        { r: 150, g: 20, b: 0 },     // Rojo muy oscuro
-        { r: 100, g: 10, b: 0 }      // Casi negro-rojo
-      ];
-      
-      const cyberColors = [
-        { r: 0, g: 255, b: 255 },    // Cyan brillante
-        { r: 0, g: 200, b: 255 },    // Cyan-azul
-        { r: 0, g: 150, b: 200 },    // Azul medio
-        { r: 0, g: 100, b: 150 },    // Azul oscuro
-        { r: 0, g: 50, b: 100 },     // Azul muy oscuro
-        { r: 0, g: 30, b: 60 },      // Casi negro-azul
-        { r: 0, g: 20, b: 40 }       // Negro-azul
-      ];
-      
-      // Seleccionar colores según skin
-      let snakeColors = defaultColors;
-      if (currentSkin === 'dragon') {
-        snakeColors = dragonColors;
-      } else if (currentSkin === 'cyber') {
-        snakeColors = cyberColors;
-      }
-      
-      // Dibujar víbora (sin parpadeo para evitar lag)
       game.snake.forEach((seg, i) => {
         const screenX = seg.x - camX;
         const screenY = seg.y - camY;
-        let alpha = 1 - (i / game.snake.length) * 0.2;
+        const progress = i / Math.max(snakeLen - 1, 1); // 0 = cabeza, 1 = cola
         
-        let r, g, b;
+        let fillColor, strokeColor, eyeColor = '#ffffff', pupilColor = '#000000';
         
+        // Calcular colores según skin
         if (currentSkin === 'rainbow') {
-          // SKIN ARCOÍRIS: Colores animados que fluyen
-          const rainbowHue = (i * 25 + Date.now() / 15) % 360;
-          // Convertir HSL a RGB
-          const hslToRgb = (h, s, l) => {
-            s /= 100;
-            l /= 100;
-            const k = n => (n + h / 30) % 12;
-            const a = s * Math.min(l, 1 - l);
-            const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-            return [Math.round(255 * f(0)), Math.round(255 * f(8)), Math.round(255 * f(4))];
-          };
-          [r, g, b] = hslToRgb(rainbowHue, 100, 55);
+          // 🌈 RAINBOW: Colores arcoíris animados fluyendo
+          const hue = (i * 20 + Date.now() / 30) % 360;
+          fillColor = `hsl(${hue}, 100%, 55%)`;
+          strokeColor = `hsl(${(hue + 30) % 360}, 100%, 40%)`;
+          
+        } else if (currentSkin === 'dragon') {
+          // 🐉 DRAGON: Gradiente dorado → rojo → negro
+          const r = Math.round(255 - progress * 155);
+          const g = Math.round(180 - progress * 160);
+          const b = Math.round(50 - progress * 50);
+          fillColor = `rgb(${r}, ${g}, ${b})`;
+          strokeColor = `rgb(${Math.max(0, r - 40)}, ${Math.max(0, g - 40)}, 0)`;
+          eyeColor = '#ffff00';
+          pupilColor = '#ff0000';
+          
+        } else if (currentSkin === 'cyber') {
+          // ⚡ CYBER: Cyan brillante → azul oscuro
+          const r = Math.round(0 + progress * 0);
+          const g = Math.round(255 - progress * 200);
+          const b = Math.round(255 - progress * 155);
+          fillColor = `rgb(${r}, ${g}, ${b})`;
+          strokeColor = '#00ffff';
+          eyeColor = '#00ffff';
+          pupilColor = '#000033';
+          
         } else {
-          // Otros skins: usar gradiente de colores
-        const colorProgress = Math.min(i / Math.max(game.snake.length - 1, 1), 1);
-        const colorIndex = colorProgress * (snakeColors.length - 1);
-        const colorLow = Math.floor(colorIndex);
-        const colorHigh = Math.min(colorLow + 1, snakeColors.length - 1);
-        const colorMix = colorIndex - colorLow;
-        
-          r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
-          g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
-          b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
+          // 🟢 DEFAULT: Verde brillante → verde oscuro → azul
+          const r = Math.round(0 + progress * 50);
+          const g = Math.round(255 - progress * 100);
+          const b = Math.round(100 + progress * 155);
+          fillColor = `rgb(${r}, ${g}, ${b})`;
+          strokeColor = `rgb(0, ${Math.max(100, 200 - progress * 100)}, ${Math.round(50 + progress * 100)})`;
         }
         
-        // Apply damage flash (red tint)
-        if (game.damageFlash > 0) {
-          const flashIntensity = game.damageFlash / 30;
-          r = Math.min(255, r + Math.round(100 * flashIntensity));
-          g = Math.round(g * (1 - flashIntensity * 0.5));
-          b = Math.round(b * (1 - flashIntensity * 0.5));
+        // Flash de daño/curación
+        if (game.damageFlash > 0 && i < 8) {
+          fillColor = '#ff4444';
+          strokeColor = '#ff0000';
+        }
+        if (game.healFlash > 0 && i < 8) {
+          fillColor = '#44ff44';
+          strokeColor = '#00ff00';
         }
         
-        // Apply heal flash (green tint)
-        if (game.healFlash > 0) {
-          const healIntensity = game.healFlash / 20;
-          g = Math.min(255, g + Math.round(100 * healIntensity));
-        }
-        
-        const segmentColor = `rgb(${r}, ${g}, ${b})`;
-        
-        // Shield visual effects
-        if (shieldLevel > 0 && i < 5) {
-          const shieldAlpha = shieldLevel === 1 ? 0.3 : 0.6;
-          ctx.strokeStyle = `rgba(100, 150, 255, ${alpha * shieldAlpha})`;
-          ctx.lineWidth = shieldLevel === 1 ? 3 : 5;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, game.snakeSize + 4, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        
-        // SKIN CYBER: Agregar anillo de neón interior
-        if (currentSkin === 'cyber' && i > 0) {
-          ctx.strokeStyle = '#00ffff';
-          ctx.lineWidth = 2;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#00ffff';
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, game.snakeSize - 3, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        
-        // SKIN DRAGON: Agregar efecto de escamas/fuego
-        if (currentSkin === 'dragon' && i === 0) {
-          // Pequeñas "llamas" alrededor de la cabeza
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#ff6600';
-        }
-        
-        // Draw segment with gradient color
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : (currentSkin === 'rainbow' ? 15 : 12));
-        ctx.shadowColor = game.damageFlash > 0 ? '#ff0000' : (game.healFlash > 0 ? '#00ff00' : segmentColor);
+        // Dibujar segmento con borde
+        ctx.fillStyle = fillColor;
         ctx.beginPath();
         ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw eyes on the head (segment 0)
+        // Borde para definición (más grueso en cabeza)
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = i === 0 ? 2 : 1;
+        ctx.stroke();
+        
+        // === CYBER: Línea de neón interior ===
+        if (currentSkin === 'cyber' && i > 0 && i % 3 === 0) {
+          ctx.strokeStyle = '#00ffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, game.snakeSize - 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // Shield (anillo azul)
+        if (shieldLevel > 0 && i === 0) {
+          ctx.strokeStyle = 'rgba(100, 180, 255, 0.7)';
+          ctx.lineWidth = shieldLevel >= 5 ? 4 : 2;
+        ctx.beginPath();
+          ctx.arc(screenX, screenY, game.snakeSize + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // === CABEZA: Ojos y detalles de skin ===
         if (i === 0) {
-          ctx.shadowBlur = 0;
+          const eyeOffset = 5;
+          const eyeSize = 4;
+          const pupilSize = 2;
           
-          // Calculate eye positions based on direction
-          const dir = game.direction;
+          // Posiciones de ojos
+          const leftEyeX = screenX + perpX * eyeOffset + dir.x * 2;
+          const leftEyeY = screenY + perpY * eyeOffset + dir.y * 2;
+          const rightEyeX = screenX - perpX * eyeOffset + dir.x * 2;
+          const rightEyeY = screenY - perpY * eyeOffset + dir.y * 2;
           
-          // Ojos más grandes y visibles - tamaño fijo que no depende del snakeSize
-          const eyeOffset = 5;  // Separación entre ojos
-          const eyeRadius = 4;  // Tamaño del ojo blanco
-          const pupilRadius = 2; // Tamaño de la pupila
-          
-          // Perpendicular direction for eye placement
-          const perpX = -dir.y;
-          const perpY = dir.x;
-          
-          // Posición de los ojos más hacia adelante
-          const forwardOffset = 3;
-          
-          // Left eye position
-          const leftEyeX = screenX + perpX * eyeOffset + dir.x * forwardOffset;
-          const leftEyeY = screenY + perpY * eyeOffset + dir.y * forwardOffset;
-          
-          // Right eye position  
-          const rightEyeX = screenX - perpX * eyeOffset + dir.x * forwardOffset;
-          const rightEyeY = screenY - perpY * eyeOffset + dir.y * forwardOffset;
-          
-          // === MÁSCARAS DE SKINS ===
-          
-          // 🐉 DRAGÓN: Cuernos de fuego
+          // === DRAGON: Cuernos simples ===
           if (currentSkin === 'dragon') {
-            ctx.shadowBlur = 12;
-            ctx.shadowColor = '#ff6600';
+            ctx.fillStyle = '#ffcc00';
+            ctx.strokeStyle = '#ff6600';
+            ctx.lineWidth = 1;
             
             // Cuerno izquierdo
-            const hornSize = 10;
-            const hornAngle = Math.atan2(dir.y, dir.x) - Math.PI / 3;
-            ctx.fillStyle = '#ffaa00';
             ctx.beginPath();
-            ctx.moveTo(screenX + perpX * 6, screenY + perpY * 6);
-            ctx.lineTo(
-              screenX + perpX * 6 + Math.cos(hornAngle) * hornSize,
-              screenY + perpY * 6 + Math.sin(hornAngle) * hornSize
-            );
-            ctx.lineTo(
-              screenX + perpX * 4 + dir.x * 3,
-              screenY + perpY * 4 + dir.y * 3
-            );
+            ctx.moveTo(screenX + perpX * 7, screenY + perpY * 7);
+            ctx.lineTo(screenX + perpX * 10 + dir.x * 8, screenY + perpY * 10 + dir.y * 8);
+            ctx.lineTo(screenX + perpX * 3 + dir.x * 4, screenY + perpY * 3 + dir.y * 4);
             ctx.closePath();
             ctx.fill();
+            ctx.stroke();
             
             // Cuerno derecho
-            const hornAngle2 = Math.atan2(dir.y, dir.x) + Math.PI / 3;
             ctx.beginPath();
-            ctx.moveTo(screenX - perpX * 6, screenY - perpY * 6);
-            ctx.lineTo(
-              screenX - perpX * 6 + Math.cos(hornAngle2) * hornSize,
-              screenY - perpY * 6 + Math.sin(hornAngle2) * hornSize
-            );
-            ctx.lineTo(
-              screenX - perpX * 4 + dir.x * 3,
-              screenY - perpY * 4 + dir.y * 3
-            );
+            ctx.moveTo(screenX - perpX * 7, screenY - perpY * 7);
+            ctx.lineTo(screenX - perpX * 10 + dir.x * 8, screenY - perpY * 10 + dir.y * 8);
+            ctx.lineTo(screenX - perpX * 3 + dir.x * 4, screenY - perpY * 3 + dir.y * 4);
             ctx.closePath();
             ctx.fill();
-            
-            // Efecto de llama en la punta de los cuernos
-            ctx.fillStyle = '#ff3300';
-            ctx.beginPath();
-            ctx.arc(
-              screenX + perpX * 6 + Math.cos(hornAngle) * (hornSize - 2),
-              screenY + perpY * 6 + Math.sin(hornAngle) * (hornSize - 2),
-              3, 0, Math.PI * 2
-            );
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(
-              screenX - perpX * 6 + Math.cos(hornAngle2) * (hornSize - 2),
-              screenY - perpY * 6 + Math.sin(hornAngle2) * (hornSize - 2),
-              3, 0, Math.PI * 2
-            );
-            ctx.fill();
-            ctx.shadowBlur = 0;
+            ctx.stroke();
           }
           
-          // 🌈 ARCOÍRIS: Corona/Aura brillante
+          // === RAINBOW: Corona de rayos ===
           if (currentSkin === 'rainbow') {
-            const crownTime = Date.now() / 100;
             for (let ray = 0; ray < 5; ray++) {
-              const rayAngle = Math.atan2(dir.y, dir.x) + (ray - 2) * 0.4;
-              const rayHue = (ray * 60 + crownTime * 5) % 360;
-              const rayLength = 8 + Math.sin(crownTime + ray) * 3;
+              const rayAngle = Math.atan2(dir.y, dir.x) + (ray - 2) * 0.35;
+              const rayHue = (ray * 60 + Date.now() / 50) % 360;
+              const rayLen = 10;
               
-              ctx.strokeStyle = `hsl(${rayHue}, 100%, 60%)`;
-              ctx.shadowBlur = 8;
-              ctx.shadowColor = `hsl(${rayHue}, 100%, 60%)`;
-              ctx.lineWidth = 3;
+              ctx.strokeStyle = `hsl(${rayHue}, 100%, 50%)`;
+              ctx.lineWidth = 2.5;
               ctx.lineCap = 'round';
-              
               ctx.beginPath();
-              ctx.moveTo(screenX + dir.x * 5, screenY + dir.y * 5);
+              ctx.moveTo(screenX + dir.x * 6, screenY + dir.y * 6);
               ctx.lineTo(
-                screenX + Math.cos(rayAngle) * rayLength + dir.x * 5,
-                screenY + Math.sin(rayAngle) * rayLength + dir.y * 5
+                screenX + Math.cos(rayAngle) * rayLen + dir.x * 6,
+                screenY + Math.sin(rayAngle) * rayLen + dir.y * 6
               );
               ctx.stroke();
             }
-            ctx.shadowBlur = 0;
           }
           
-          // ⚡ CYBER: Visera estilo Tron
+          // === CYBER: Visera horizontal ===
           if (currentSkin === 'cyber') {
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00ffff';
-            
-            // Visera horizontal brillante
             ctx.strokeStyle = '#00ffff';
             ctx.lineWidth = 3;
             ctx.lineCap = 'round';
-            
-            // Línea de la visera
             ctx.beginPath();
-            ctx.moveTo(screenX + perpX * 7, screenY + perpY * 7);
-            ctx.lineTo(screenX - perpX * 7, screenY - perpY * 7);
+            ctx.moveTo(screenX + perpX * 8, screenY + perpY * 8);
+            ctx.lineTo(screenX - perpX * 8, screenY - perpY * 8);
             ctx.stroke();
             
-            // Punto central brillante
-          ctx.fillStyle = '#ffffff';
+            // Punto central
+            ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(screenX + dir.x * 2, screenY + dir.y * 2, 2, 0, Math.PI * 2);
+            ctx.arc(screenX + dir.x * 3, screenY + dir.y * 3, 2, 0, Math.PI * 2);
             ctx.fill();
-            
-            // Antenas laterales
-            ctx.strokeStyle = '#0099ff';
-            ctx.lineWidth = 2;
-            const antennaLength = 6;
-            
-            ctx.beginPath();
-            ctx.moveTo(screenX + perpX * 6 - dir.x * 2, screenY + perpY * 6 - dir.y * 2);
-            ctx.lineTo(
-              screenX + perpX * 6 - dir.x * 2 + perpX * antennaLength,
-              screenY + perpY * 6 - dir.y * 2 + perpY * antennaLength
-            );
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.moveTo(screenX - perpX * 6 - dir.x * 2, screenY - perpY * 6 - dir.y * 2);
-            ctx.lineTo(
-              screenX - perpX * 6 - dir.x * 2 - perpX * antennaLength,
-              screenY - perpY * 6 - dir.y * 2 - perpY * antennaLength
-            );
-            ctx.stroke();
-            
-            ctx.shadowBlur = 0;
           }
           
-          // Draw white part of eyes with glow
-          ctx.fillStyle = currentSkin === 'cyber' ? '#00ffff' : '#ffffff';
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = currentSkin === 'cyber' ? '#00ffff' : '#ffffff';
-          
+          // Ojos (blanco)
+          ctx.fillStyle = eyeColor;
           ctx.beginPath();
-          ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI * 2);
+          ctx.arc(leftEyeX, leftEyeY, eyeSize, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(rightEyeX, rightEyeY, eyeSize, 0, Math.PI * 2);
           ctx.fill();
           
+          // Pupilas (mirando hacia dirección)
+          ctx.fillStyle = pupilColor;
           ctx.beginPath();
-          ctx.arc(rightEyeX, rightEyeY, eyeRadius, 0, Math.PI * 2);
+          ctx.arc(leftEyeX + dir.x * 1.5, leftEyeY + dir.y * 1.5, pupilSize, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(rightEyeX + dir.x * 1.5, rightEyeY + dir.y * 1.5, pupilSize, 0, Math.PI * 2);
           ctx.fill();
           
-          // Draw pupils (looking in movement direction)
-          ctx.fillStyle = currentSkin === 'dragon' ? '#ff3300' : '#000000';
-          ctx.shadowBlur = 0;
-          
-          const pupilOffsetX = dir.x * 1.5;
-          const pupilOffsetY = dir.y * 1.5;
-          
-          ctx.beginPath();
-          ctx.arc(leftEyeX + pupilOffsetX, leftEyeY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.beginPath();
-          ctx.arc(rightEyeX + pupilOffsetX, rightEyeY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
-          ctx.fill();
+          // Brillo en ojos (excepto cyber)
+          if (currentSkin !== 'cyber') {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(leftEyeX - 1, leftEyeY - 1, 1, 0, Math.PI * 2);
+            ctx.arc(rightEyeX - 1, rightEyeY - 1, 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       });
-      ctx.shadowBlur = 0;
 
-      // === ARENA MODE: Draw other players ===
+      // === ARENA MODE: Draw other players con skins completas ===
       if (arenaMode && otherPlayersRef.current.length > 0) {
         otherPlayersRef.current.forEach(player => {
           if (!player.segments || player.segments.length === 0) return;
           
-          // Color único para cada jugador basado en su hue
-          const playerHue = player.hue !== undefined ? player.hue : 120;
           const playerSkin = player.skin || 'default';
-          
-          // Calcular dirección para los ojos
           const dir = player.direction || { x: 1, y: 0 };
+          const perpX = -dir.y;
+          const perpY = dir.x;
+          const segLen = player.segments.length;
           
-          // Dibujar segmentos del otro jugador
-          player.segments.forEach((segment, index) => {
+          let eyeColor = '#ffffff', pupilColor = '#000000';
+          if (playerSkin === 'dragon') { eyeColor = '#ffff00'; pupilColor = '#ff0000'; }
+          if (playerSkin === 'cyber') { eyeColor = '#00ffff'; pupilColor = '#000033'; }
+          
+          player.segments.forEach((segment, i) => {
             const screenX = segment.x - camX;
             const screenY = segment.y - camY;
             
-            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 &&
-                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            if (screenX > -30 && screenX < CANVAS_WIDTH + 30 &&
+                screenY > -30 && screenY < CANVAS_HEIGHT + 30) {
               
-              // Renderizado según skin
-              if (playerSkin === 'dragon') {
-                // 🐉 SKIN DRAGÓN - Gradiente naranja/rojo con escamas
-                const gradient = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, SNAKE_SIZE);
-                gradient.addColorStop(0, index === 0 ? '#ffaa00' : '#ff6600');
-                gradient.addColorStop(1, index === 0 ? '#ff4400' : '#cc2200');
-                ctx.fillStyle = gradient;
-                ctx.shadowBlur = 12;
-                ctx.shadowColor = '#ff4400';
-                
-              } else if (playerSkin === 'rainbow') {
-                // 🌈 SKIN ARCOÍRIS - Colores animados
-                const rainbowHue = (index * 30 + Date.now() / 20) % 360;
-                ctx.fillStyle = `hsl(${rainbowHue}, 100%, 55%)`;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = `hsl(${rainbowHue}, 100%, 50%)`;
-                
+              const progress = i / Math.max(segLen - 1, 1);
+              let fillColor, strokeColor;
+              
+              // Colores según skin (igual que el jugador local)
+              if (playerSkin === 'rainbow') {
+                const hue = (i * 20 + Date.now() / 30) % 360;
+                fillColor = `hsl(${hue}, 100%, 55%)`;
+                strokeColor = `hsl(${(hue + 30) % 360}, 100%, 40%)`;
+              } else if (playerSkin === 'dragon') {
+                const r = Math.round(255 - progress * 155);
+                const g = Math.round(180 - progress * 160);
+                const b = Math.round(50 - progress * 50);
+                fillColor = `rgb(${r}, ${g}, ${b})`;
+                strokeColor = `rgb(${Math.max(0, r - 40)}, ${Math.max(0, g - 40)}, 0)`;
               } else if (playerSkin === 'cyber') {
-                // ⚡ SKIN CYBER - Neón con líneas
-                ctx.fillStyle = index === 0 ? '#00ffff' : '#001133';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#00ffff';
-                
+                const g = Math.round(255 - progress * 200);
+                const b = Math.round(255 - progress * 155);
+                fillColor = `rgb(0, ${g}, ${b})`;
+                strokeColor = '#00ffff';
               } else {
-                // DEFAULT - Color basado en hue
-                const lightness = index === 0 ? 55 : 40;
-                ctx.fillStyle = `hsl(${playerHue}, 100%, ${lightness}%)`;
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = `hsl(${playerHue}, 100%, 50%)`;
+                const r = Math.round(0 + progress * 50);
+                const g = Math.round(255 - progress * 100);
+                const b = Math.round(100 + progress * 155);
+                fillColor = `rgb(${r}, ${g}, ${b})`;
+                strokeColor = `rgb(0, ${Math.max(100, 200 - progress * 100)}, ${Math.round(50 + progress * 100)})`;
               }
               
-              // Dibujar segmento
-              ctx.beginPath();
+              // Segmento con borde
+              ctx.fillStyle = fillColor;
+          ctx.beginPath();
               ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
-              ctx.fill();
-              
-              // Borde para mejor definición
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-              ctx.lineWidth = 1;
+          ctx.fill();
+              ctx.strokeStyle = strokeColor;
+              ctx.lineWidth = i === 0 ? 2 : 1;
               ctx.stroke();
-              
-              // Detalles especiales para skin cyber
-              if (playerSkin === 'cyber' && index > 0) {
+          
+              // Cyber: anillos de neón
+              if (playerSkin === 'cyber' && i > 0 && i % 3 === 0) {
                 ctx.strokeStyle = '#00ffff';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(screenX, screenY, SNAKE_SIZE - 3, 0, Math.PI * 2);
+                ctx.lineWidth = 1.5;
+          ctx.beginPath();
+                ctx.arc(screenX, screenY, SNAKE_SIZE - 4, 0, Math.PI * 2);
                 ctx.stroke();
               }
               
-              // === CABEZA: Ojos y detalles ===
-              if (index === 0) {
-                ctx.shadowBlur = 0;
+              // === CABEZA ===
+              if (i === 0) {
+                const eyeOffset = 5;
+                const leftEyeX = screenX + perpX * eyeOffset + dir.x * 2;
+                const leftEyeY = screenY + perpY * eyeOffset + dir.y * 2;
+                const rightEyeX = screenX - perpX * eyeOffset + dir.x * 2;
+                const rightEyeY = screenY - perpY * eyeOffset + dir.y * 2;
                 
-                // Calcular posición de los ojos basado en dirección
-                const eyeOffset = SNAKE_SIZE * 0.4;
-                const eyeSize = SNAKE_SIZE * 0.35;
-                const perpX = -dir.y;
-                const perpY = dir.x;
+                // Dragon: cuernos
+                if (playerSkin === 'dragon') {
+                  ctx.fillStyle = '#ffcc00';
+                  ctx.strokeStyle = '#ff6600';
+                  ctx.lineWidth = 1;
+                  ctx.beginPath();
+                  ctx.moveTo(screenX + perpX * 7, screenY + perpY * 7);
+                  ctx.lineTo(screenX + perpX * 10 + dir.x * 8, screenY + perpY * 10 + dir.y * 8);
+                  ctx.lineTo(screenX + perpX * 3 + dir.x * 4, screenY + perpY * 3 + dir.y * 4);
+                  ctx.closePath();
+          ctx.fill();
+                  ctx.stroke();
+                  ctx.beginPath();
+                  ctx.moveTo(screenX - perpX * 7, screenY - perpY * 7);
+                  ctx.lineTo(screenX - perpX * 10 + dir.x * 8, screenY - perpY * 10 + dir.y * 8);
+                  ctx.lineTo(screenX - perpX * 3 + dir.x * 4, screenY - perpY * 3 + dir.y * 4);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.stroke();
+                }
                 
-                // Ojo izquierdo
-                const leftEyeX = screenX + dir.x * eyeOffset * 0.5 + perpX * eyeOffset;
-                const leftEyeY = screenY + dir.y * eyeOffset * 0.5 + perpY * eyeOffset;
+                // Rainbow: corona
+                if (playerSkin === 'rainbow') {
+                  for (let ray = 0; ray < 5; ray++) {
+                    const rayAngle = Math.atan2(dir.y, dir.x) + (ray - 2) * 0.35;
+                    const rayHue = (ray * 60 + Date.now() / 50) % 360;
+                    ctx.strokeStyle = `hsl(${rayHue}, 100%, 50%)`;
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(screenX + dir.x * 6, screenY + dir.y * 6);
+                    ctx.lineTo(screenX + Math.cos(rayAngle) * 10 + dir.x * 6, screenY + Math.sin(rayAngle) * 10 + dir.y * 6);
+                    ctx.stroke();
+                  }
+                }
                 
-                // Ojo derecho
-                const rightEyeX = screenX + dir.x * eyeOffset * 0.5 - perpX * eyeOffset;
-                const rightEyeY = screenY + dir.y * eyeOffset * 0.5 - perpY * eyeOffset;
+                // Cyber: visera
+                if (playerSkin === 'cyber') {
+                  ctx.strokeStyle = '#00ffff';
+                  ctx.lineWidth = 3;
+                  ctx.lineCap = 'round';
+                  ctx.beginPath();
+                  ctx.moveTo(screenX + perpX * 8, screenY + perpY * 8);
+                  ctx.lineTo(screenX - perpX * 8, screenY - perpY * 8);
+                  ctx.stroke();
+                  ctx.fillStyle = '#ffffff';
+                  ctx.beginPath();
+                  ctx.arc(screenX + dir.x * 3, screenY + dir.y * 3, 2, 0, Math.PI * 2);
+                  ctx.fill();
+                }
                 
-                // Dibujar ojos (blanco)
-                ctx.fillStyle = '#ffffff';
+                // Ojos
+                ctx.fillStyle = eyeColor;
+          ctx.beginPath();
+                ctx.arc(leftEyeX, leftEyeY, 4, 0, Math.PI * 2);
+                ctx.fill();
                 ctx.beginPath();
-                ctx.arc(leftEyeX, leftEyeY, eyeSize, 0, Math.PI * 2);
-                ctx.arc(rightEyeX, rightEyeY, eyeSize, 0, Math.PI * 2);
+                ctx.arc(rightEyeX, rightEyeY, 4, 0, Math.PI * 2);
+          ctx.fill();
+          
+                // Pupilas
+                ctx.fillStyle = pupilColor;
+          ctx.beginPath();
+                ctx.arc(leftEyeX + dir.x * 1.5, leftEyeY + dir.y * 1.5, 2, 0, Math.PI * 2);
+          ctx.fill();
+                ctx.beginPath();
+                ctx.arc(rightEyeX + dir.x * 1.5, rightEyeY + dir.y * 1.5, 2, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Pupilas (negras, mirando hacia la dirección)
-                const pupilSize = eyeSize * 0.6;
-                const pupilOffset = eyeSize * 0.2;
-                ctx.fillStyle = '#000000';
-                ctx.beginPath();
-                ctx.arc(leftEyeX + dir.x * pupilOffset, leftEyeY + dir.y * pupilOffset, pupilSize, 0, Math.PI * 2);
-                ctx.arc(rightEyeX + dir.x * pupilOffset, rightEyeY + dir.y * pupilOffset, pupilSize, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Brillo en los ojos
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(leftEyeX - pupilSize * 0.3, leftEyeY - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
-                ctx.arc(rightEyeX - pupilSize * 0.3, rightEyeY - pupilSize * 0.3, pupilSize * 0.3, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Etiqueta con nombre del jugador
+                // Nombre del jugador
                 if (player.username) {
-                  ctx.font = 'bold 12px Arial';
+                  ctx.font = 'bold 11px Arial';
                   ctx.textAlign = 'center';
-                  ctx.textBaseline = 'bottom';
-                  
-                  // Score arriba del nombre
-                  const scoreText = `${player.score || 0} XP`;
-                  ctx.font = 'bold 10px Arial';
-                  ctx.fillStyle = `hsl(${playerHue}, 70%, 80%)`;
-                  ctx.fillText(scoreText, screenX, screenY - 28);
-                  
-                  // Fondo para el nombre
-                  ctx.font = 'bold 12px Arial';
-                  const textWidth = ctx.measureText(player.username).width;
-                  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                  ctx.fillRect(screenX - textWidth / 2 - 4, screenY - 26, textWidth + 8, 16);
-                  
-                  // Nombre
-                  ctx.fillStyle = `hsl(${playerHue}, 100%, 70%)`;
-                  ctx.fillText(player.username, screenX, screenY - 12);
+                  const nameWidth = ctx.measureText(player.username).width;
+                  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                  ctx.fillRect(screenX - nameWidth/2 - 4, screenY - 26, nameWidth + 8, 14);
+                  ctx.fillStyle = playerSkin === 'dragon' ? '#ffcc00' : 
+                                 playerSkin === 'rainbow' ? '#ff66ff' :
+                                 playerSkin === 'cyber' ? '#00ffff' : '#00ff00';
+                  ctx.fillText(player.username, screenX, screenY - 14);
                 }
               }
             }
           });
-          ctx.shadowBlur = 0;
         });
       }
 
-      // Draw bullets
+      // Draw bullets - OPTIMIZADO (sin shadows)
       game.bullets.forEach(bullet => {
         const screenX = bullet.x - camX;
         const screenY = bullet.y - camY;
         
-        // Different colors for player vs enemy bullets
-        if (bullet.owner === 'player') {
-        ctx.fillStyle = '#ffff00';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#ffff00';
-        } else {
-          ctx.fillStyle = '#ff0000';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#ff0000';
-        }
+        if (screenX > -10 && screenX < CANVAS_WIDTH + 10 &&
+            screenY > -10 && screenY < CANVAS_HEIGHT + 10) {
+          ctx.fillStyle = bullet.owner === 'player' ? '#ffff00' : '#ff0000';
         ctx.beginPath();
         ctx.arc(screenX, screenY, 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
+        }
       });
 
       // Draw particles - DESACTIVADO para mejor rendimiento
@@ -4268,9 +4202,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             
             // Cannon body (sin shadow)
             ctx.fillStyle = '#555';
-            ctx.beginPath();
+      ctx.beginPath();
             ctx.arc(0, 0, 20, 0, Math.PI * 2);
-            ctx.fill();
+      ctx.fill();
             
             // Cannon barrel
             ctx.fillStyle = '#333';
@@ -4283,140 +4217,81 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             ctx.fill();
             
             ctx.restore();
-      ctx.shadowBlur = 0;
           }
         });
       }
 
-      // Draw Resentful Snakes (BOSS-like enemies - 7 colores al inicio, negro en el medio, 7 colores al final)
+      // Draw Resentful Snakes - SUPER OPTIMIZADO (sin shadows)
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
-        // Colores del arcoíris (7 colores)
-        const rainbowColors = [
-          '#ff0000', // Rojo
-          '#ff7f00', // Naranja
-          '#ffff00', // Amarillo
-          '#00ff00', // Verde
-          '#0000ff', // Azul
-          '#4b0082', // Índigo
-          '#9400d3'  // Violeta
-        ];
+        const rainbowColors = ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#4b0082', '#9400d3'];
         
         game.resentfulSnakes.forEach(snake => {
           if (!snake.segments || snake.segments.length === 0) return;
           
           const totalSegments = snake.segments.length;
-          const colorSegments = 7; // 7 segmentos de color en cada extremo
           
           snake.segments.forEach((seg, i) => {
             const screenX = seg.x - camX;
             const screenY = seg.y - camY;
             
-            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+            if (screenX > -30 && screenX < CANVAS_WIDTH + 30 && 
+                screenY > -30 && screenY < CANVAS_HEIGHT + 30) {
               
-              let segmentColor;
-              let glowColor;
-              let hasGlow = false;
-              
-              // Determinar si es un segmento de color o negro
-              if (i < colorSegments) {
-                // Primeros 7 segmentos: arcoíris desde la cabeza
-                const colorIndex = i % rainbowColors.length;
-                segmentColor = rainbowColors[colorIndex];
-                glowColor = segmentColor;
-                hasGlow = true;
-              } else if (i >= totalSegments - colorSegments) {
-                // Últimos 7 segmentos: arcoíris hacia la cola
-                const colorIndex = (totalSegments - 1 - i) % rainbowColors.length;
-                segmentColor = rainbowColors[colorIndex];
-                glowColor = segmentColor;
-                hasGlow = true;
+              // Color: arcoíris en extremos, negro en el medio
+              if (i < 7) {
+                ctx.fillStyle = rainbowColors[i % 7];
+              } else if (i >= totalSegments - 7) {
+                ctx.fillStyle = rainbowColors[(totalSegments - 1 - i) % 7];
               } else {
-                // Segmentos del medio: negro
-                segmentColor = '#0a0a0a';
-                glowColor = '#333333';
-                hasGlow = false;
+                ctx.fillStyle = '#1a1a1a';
               }
               
-              // Dibujar segmento
-              if (hasGlow) {
-                // Segmentos de color con glow
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = glowColor;
-              } else {
-                // Segmentos negros sin glow (o glow sutil)
-                ctx.shadowBlur = 5;
-                ctx.shadowColor = '#222222';
-              }
-              
-              ctx.fillStyle = segmentColor;
               ctx.beginPath();
               ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
               ctx.fill();
               
-              // Borde sutil para todos
-              ctx.strokeStyle = hasGlow ? 'rgba(255,255,255,0.3)' : 'rgba(50,50,50,0.5)';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-              
-              // Ojos furiosos en la cabeza
+              // Ojos rojos simples en cabeza
               if (i === 0) {
-                ctx.shadowBlur = 0;
-                // Ojos blancos con pupila roja (mirada amenazante)
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(screenX - 4, screenY - 2, 4, 0, Math.PI * 2);
-                ctx.arc(screenX + 4, screenY - 2, 4, 0, Math.PI * 2);
+                ctx.arc(screenX - 4, screenY - 2, 3, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 3, 0, Math.PI * 2);
                 ctx.fill();
-                
-                // Pupilas rojas brillantes
                 ctx.fillStyle = '#ff0000';
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = '#ff0000';
                 ctx.beginPath();
-                ctx.arc(screenX - 4, screenY - 2, 2, 0, Math.PI * 2);
-                ctx.arc(screenX + 4, screenY - 2, 2, 0, Math.PI * 2);
+                ctx.arc(screenX - 4, screenY - 2, 1.5, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 1.5, 0, Math.PI * 2);
                 ctx.fill();
               }
             }
           });
-          ctx.shadowBlur = 0;
         });
       }
 
-      // Draw Health Boxes
+      // Draw Health Boxes - OPTIMIZADO (sin shadows)
       if (game.healthBoxes && game.healthBoxes.length > 0) {
         game.healthBoxes.forEach(box => {
           const screenX = box.x - camX;
           const screenY = box.y - camY;
           
-          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-            const pulseSize = box.size + Math.sin(box.pulse) * 3;
-            
-            // Glow effect
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00ff00';
+          if (screenX > -30 && screenX < CANVAS_WIDTH + 30 && 
+              screenY > -30 && screenY < CANVAS_HEIGHT + 30) {
+            const size = box.size;
             
             // Box body
             ctx.fillStyle = '#00aa00';
-            ctx.fillRect(screenX - pulseSize/2, screenY - pulseSize/2, pulseSize, pulseSize);
+            ctx.fillRect(screenX - size/2, screenY - size/2, size, size);
             
             // White cross
             ctx.fillStyle = '#ffffff';
-            const crossWidth = pulseSize * 0.25;
-            const crossLength = pulseSize * 0.7;
-            ctx.fillRect(screenX - crossWidth/2, screenY - crossLength/2, crossWidth, crossLength);
-            ctx.fillRect(screenX - crossLength/2, screenY - crossWidth/2, crossLength, crossWidth);
+            ctx.fillRect(screenX - 2, screenY - size*0.35, 4, size*0.7);
+            ctx.fillRect(screenX - size*0.35, screenY - 2, size*0.7, 4);
             
             // Health points indicator
-            ctx.font = 'bold 12px monospace';
-            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`+${box.healthPoints}`, screenX, screenY + pulseSize/2 + 15);
+            ctx.fillText(`+${box.healthPoints}`, screenX, screenY + size/2 + 12);
             ctx.textAlign = 'left';
-            
-            ctx.shadowBlur = 0;
           }
         });
       }
@@ -4429,10 +4304,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const minimapWidth = 120;
       const minimapX = CANVAS_WIDTH - minimapWidth - 10;
       
-      // HUD Container with neon border
+      // HUD Container with neon border - ancho dinámico según modo
       const hudX = 8;
       const hudY = 8;
-      const hudWidth = 520; // Expandido para incluir XP
+      const hudWidth = arenaMode ? 680 : 520; // Más ancho en arena para kills/players
       const hudHeight = 36;
       const hudRadius = 8;
       
@@ -4442,30 +4317,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
       ctx.fill();
       
-      // Neon border glow
-      ctx.strokeStyle = '#33ffff';
+      // Neon border (sin shadow)
+      ctx.strokeStyle = arenaMode ? '#ff3366' : '#33ffff';
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#33ffff';
       ctx.beginPath();
       ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
       ctx.stroke();
-      ctx.shadowBlur = 0;
       
       // === LEVEL BADGE (o ARENA en modo arena) ===
       const levelX = hudX + 12;
       const levelY = hudY + 10;
       ctx.fillStyle = arenaMode ? '#ff3366' : '#33ffff';
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = arenaMode ? '#ff3366' : '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(arenaMode ? '⚔️ ARENA' : `LV ${game.level}`, levelX, levelY + 14);
-      ctx.shadowBlur = 0;
+      ctx.font = 'bold 14px monospace';
+      const levelText = arenaMode ? 'ARENA' : `Nivel ${game.level}`;
+      ctx.fillText(levelText, levelX, levelY + 12);
       
       // === STARS BAR ===
-      const starsBarX = levelX + 65;
+      const labelWidth = arenaMode ? 55 : 65; // Ajustar según texto
+      const starsBarX = levelX + labelWidth;
       const starsBarY = hudY + 10;
-      const starsBarWidth = 130;
+      const starsBarWidth = 120;
       const starsBarHeight = 16;
       
       // Stars bar background with rounded corners
@@ -4481,29 +4352,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.roundRect(starsBarX, starsBarY, starsBarWidth, starsBarHeight, 4);
       ctx.stroke();
       
-      // Stars bar fill with glow
+      // Stars bar fill (sin shadow)
       const starsPercent = Math.min(game.currentStars / game.starsNeeded, 1);
       if (starsPercent > 0) {
       ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 6;
-      ctx.shadowColor = '#FFD700';
         ctx.beginPath();
         ctx.roundRect(starsBarX + 2, starsBarY + 2, (starsBarWidth - 4) * starsPercent, starsBarHeight - 4, 3);
         ctx.fill();
-      ctx.shadowBlur = 0;
       }
       
       // Stars icon and text
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 10px monospace';
       const starsText = `⭐ ${game.currentStars}/${game.starsNeeded}`;
       const starsTextWidth = ctx.measureText(starsText).width;
-      ctx.fillText(starsText, starsBarX + starsBarWidth / 2 - starsTextWidth / 2, starsBarY + 12);
+      ctx.fillText(starsText, starsBarX + starsBarWidth / 2 - starsTextWidth / 2, starsBarY + 11);
       
       // === HEALTH BAR ===
-      const healthBarX = starsBarX + starsBarWidth + 15;
+      const healthBarX = starsBarX + starsBarWidth + 10;
       const healthBarY = hudY + 10;
-      const healthBarWidth = 130;
+      const healthBarWidth = 120;
       const healthBarHeight2 = 16;
       
       // Health bar background with rounded corners
@@ -4519,46 +4387,42 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.roundRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight2, 4);
       ctx.stroke();
       
-      // Health bar fill with glow
+      // Health bar fill (sin shadow)
       const healthPercent = Math.max(0, game.currentHealth / game.maxHealth);
       if (healthPercent > 0) {
-        // Color changes based on health level
         const healthColor = healthPercent > 0.5 ? '#00ff88' : healthPercent > 0.25 ? '#ffaa00' : '#ff3333';
         ctx.fillStyle = healthColor;
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = healthColor;
         ctx.beginPath();
         ctx.roundRect(healthBarX + 2, healthBarY + 2, (healthBarWidth - 4) * healthPercent, healthBarHeight2 - 4, 3);
         ctx.fill();
-        ctx.shadowBlur = 0;
       }
       
       // Health icon and text
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 10px monospace';
       const healthText = isImmune ? `🛡️ INMUNE` : `❤️ ${game.currentHealth}/${game.maxHealth}`;
       const healthTextWidth = ctx.measureText(healthText).width;
-      ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 12);
+      ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 11);
       
-      // Special status indicators
+      // Special status indicators (debajo del HUD si hay)
       if (isImmune || freeShots) {
         ctx.font = 'bold 10px monospace';
-        let statusY = hudY + 30;
+        let statusY = hudY + hudHeight + 5;
         if (isImmune) {
           ctx.fillStyle = '#00ffff';
-          ctx.fillText('🛡️ INMUNIDAD', healthBarX, statusY);
-          statusY += 12;
+          ctx.fillText('🛡️ INMUNIDAD', hudX + 10, statusY + 10);
+          statusY += 14;
         }
         if (freeShots) {
           ctx.fillStyle = '#00ff88';
-          ctx.fillText('🔫 BALAS GRATIS', healthBarX, statusY);
+          ctx.fillText('🔫 BALAS GRATIS', hudX + 10, statusY + 10);
         }
       }
       
       // === SESSION XP COUNTER (with dynamic color) ===
-      const xpCounterX = healthBarX + healthBarWidth + 15;
+      const xpCounterX = healthBarX + healthBarWidth + 10;
       const xpCounterY = hudY + 10;
-      const xpCounterWidth = 80;
+      const xpCounterWidth = 75;
       const xpCounterHeight = 16;
       
       // Calcular color dinámico basado en el XP de sesión
@@ -4604,137 +4468,91 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
       ctx.fill();
       
-      // XP counter border with dynamic color
+      // XP counter border (sin shadow)
       ctx.strokeStyle = xpColor;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = xpColor;
       ctx.beginPath();
       ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
       ctx.stroke();
-      ctx.shadowBlur = 0;
       
-      // XP text with dynamic color
+      // XP text
       ctx.fillStyle = xpColor;
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = xpColor;
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 10px monospace';
       const xpText = `⚡ ${sessionXP}`;
       const xpTextWidth = ctx.measureText(xpText).width;
-      ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 12);
-      ctx.shadowBlur = 0;
+      ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 11);
       
       // === ARENA MODE: Kills and players counter ===
       if (arenaMode) {
-        const arenaInfoX = xpCounterX + xpCounterWidth + 10;
+        const arenaInfoX = xpCounterX + xpCounterWidth + 8;
         const arenaInfoY = hudY + 10;
         
         // Kills counter
         ctx.fillStyle = 'rgba(255, 51, 102, 0.3)';
         ctx.beginPath();
-        ctx.roundRect(arenaInfoX, arenaInfoY, 70, 16, 4);
+        ctx.roundRect(arenaInfoX, arenaInfoY, 60, 16, 4);
         ctx.fill();
-        
         ctx.strokeStyle = '#ff3366';
         ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(arenaInfoX, arenaInfoY, 70, 16, 4);
         ctx.stroke();
-        
         ctx.fillStyle = '#ff3366';
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = '#ff3366';
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText(`⚔️ ${arenaKills}`, arenaInfoX + 8, arenaInfoY + 12);
-        ctx.shadowBlur = 0;
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(`⚔️ ${arenaKills}`, arenaInfoX + 6, arenaInfoY + 11);
         
         // Players count
         ctx.fillStyle = 'rgba(0, 255, 136, 0.3)';
         ctx.beginPath();
-        ctx.roundRect(arenaInfoX + 75, arenaInfoY, 70, 16, 4);
+        ctx.roundRect(arenaInfoX + 65, arenaInfoY, 60, 16, 4);
         ctx.fill();
-        
         ctx.strokeStyle = '#00ff88';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(arenaInfoX + 75, arenaInfoY, 70, 16, 4);
         ctx.stroke();
-        
         ctx.fillStyle = '#00ff88';
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = '#00ff88';
-        ctx.fillText(`👥 ${arenaPlayerCount}`, arenaInfoX + 83, arenaInfoY + 12);
-        ctx.shadowBlur = 0;
+        ctx.fillText(`👥 ${arenaPlayerCount}`, arenaInfoX + 71, arenaInfoY + 11);
       }
       
-      // === TOTAL XP/STARS (compact, next to minimap) ===
+      // === TOTAL XP/STARS (sin shadow) ===
       const statsX = minimapX - 90;
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#33ffff';
       ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = '#33ffff';
       ctx.fillText(`XP: ${totalXP}`, statsX, 22);
       ctx.fillStyle = '#FFD700';
-      ctx.shadowColor = '#FFD700';
       ctx.fillText(`⭐: ${totalStars}`, statsX, 36);
-      ctx.shadowBlur = 0;
       
-      // Draw minimap in top-right corner (after HUD so it's visible)
-      // minimapWidth and minimapX already declared above for HUD spacing
+      // Draw minimap (sin shadows)
       const minimapHeight = 90;
-      const minimapY = 10; // Fixed at top-right corner, close to edge
+      const minimapY = 10;
       
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
-      
       ctx.strokeStyle = '#33ffff';
       ctx.lineWidth = 2;
       ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
       
-      // Draw player position on minimap (distinctive marker)
+      // Player position on minimap
       const playerMinimapX = minimapX + (game.snake[0].x / game.worldWidth) * minimapWidth;
       const playerMinimapY = minimapY + (game.snake[0].y / game.worldHeight) * minimapHeight;
       
-      // Outer ring for player
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
+      ctx.fillStyle = '#33ffff';
       ctx.beginPath();
       ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Inner filled circle for player
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
 
-      // Draw enemy positions on minimap as BLUE dots
+      // Draw enemy positions on minimap as BLUE dots (sin shadows)
+      ctx.fillStyle = '#4488ff';
       game.enemies.forEach(enemy => {
         if (enemy.segments && enemy.segments.length > 0) {
           const enemyHead = enemy.segments[0];
           const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
           const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
-          
-          // Enemigos en AZUL
-          ctx.fillStyle = '#4488ff';
-          ctx.shadowBlur = 4;
-          ctx.shadowColor = '#4488ff';
           ctx.beginPath();
           ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
           ctx.fill();
-      ctx.shadowBlur = 0;
         }
       });
       
-      // Draw stars on minimap as small golden dots
+      // Draw stars on minimap (sin shadows)
       if (game.stars && game.stars.length > 0) {
         ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 3;
-        ctx.shadowColor = '#FFD700';
         game.stars.forEach(star => {
           const starMinimapX = minimapX + (star.x / game.worldWidth) * minimapWidth;
           const starMinimapY = minimapY + (star.y / game.worldHeight) * minimapHeight;
@@ -4742,7 +4560,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
           ctx.fill();
         });
-        ctx.shadowBlur = 0;
       }
       
       // Draw resentful snakes on minimap as RED dots (sin shadows)
