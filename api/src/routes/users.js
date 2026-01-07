@@ -38,8 +38,9 @@ export default async function usersRoutes(fastify, options) {
       const rebirthCount = rebirthResult.rows[0].rebirth_count;
       const currentSeries = rebirthResult.rows[0].current_series;
       
-      // Resetear progreso a nivel 1, pero con los upgrades según rebirth_count
-      // Los niveles base de la tienda serán rebirth_count (0->1->2->3...)
+      // Resetear progreso a nivel 1, pero con los upgrades según rebirth_count + 1
+      // Los niveles base serán: nuevo=1, 1er rebirth=2, 2do rebirth=3, etc.
+      const upgradeLevel = rebirthCount + 1;
       await query(`
         UPDATE user_progress
         SET current_level = 1,
@@ -52,13 +53,13 @@ export default async function usersRoutes(fastify, options) {
             health_level = $2,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = $1
-      `, [id, rebirthCount]);
+      `, [id, upgradeLevel]);
       
       return {
         message: 'Rebirth completado',
         rebirthCount: rebirthCount,
         currentSeries: currentSeries,
-        startingLevel: rebirthCount
+        startingUpgradeLevel: upgradeLevel
       };
     } catch (error) {
       console.error('Error en rebirth:', error);
