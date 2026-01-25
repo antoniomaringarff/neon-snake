@@ -25,6 +25,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
       floatingCannonCount: dbConfig.floatingCannonCount ?? 0,
       resentfulSnakeCount: dbConfig.resentfulSnakeCount ?? 0,
       healthBoxCount: dbConfig.healthBoxCount ?? 0,
+      enemyUpgradeLevel: dbConfig.enemyUpgradeLevel ?? Math.floor((level - 1) * 10 / 24),
       hasCentralCell: dbConfig.hasCentralCell,
       centralCellOpeningSpeed: dbConfig.centralCellOpeningSpeed,
     };
@@ -48,6 +49,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
     floatingCannonCount: 0,
     resentfulSnakeCount: 0,
     healthBoxCount: 0,
+    enemyUpgradeLevel: Math.floor((level - 1) * 10 / 24), // 0-10 basado en nivel
     hasCentralCell: level >= 2,
     centralCellOpeningSpeed: 0.002, // Velocidad fija igual para todos los niveles
   };
@@ -126,6 +128,35 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
 const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // Calculate canvas dimensions based on screen size
+  // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
+  // En desktop: usar tamaño fijo 800x600
+  const getCanvasDimensions = () => {
+    if (window.innerWidth <= 768) {
+      // Mobile: usar todo el ancho y casi toda la altura
+      const width = window.innerWidth - 4; // Pequeño margen para el borde
+      const height = window.innerHeight - 80; // Solo dejar espacio mínimo para header
+      return { width: Math.floor(width), height: Math.floor(height) };
+    }
+    return { width: 800, height: 600 };
+  };
+  
+  const [canvasDimensions, setCanvasDimensions] = useState(getCanvasDimensions());
+  
+  // Update dimensions on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setCanvasDimensions(getCanvasDimensions());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Dynamic canvas dimensions
+  const CANVAS_WIDTH = canvasDimensions.width;
+  const CANVAS_HEIGHT = canvasDimensions.height;
   
   // Mobile controls state
   const [joystickActive, setJoystickActive] = useState(false);
@@ -581,6 +612,190 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const FOOD_SIZE = 6;
   const BORDER_WIDTH = 20;
   
+  // Función helper para convertir números a texto en español
+  const numberToSpanish = (num) => {
+    if (num <= 0) return 'cero';
+    if (num === 1) return 'Una';
+    if (num === 2) return 'Dos';
+    if (num === 3) return 'Tres';
+    if (num === 4) return 'Cuatro';
+    if (num === 5) return 'Cinco';
+    if (num === 6) return 'Seis';
+    if (num === 7) return 'Siete';
+    if (num === 8) return 'Ocho';
+    if (num === 9) return 'Nueve';
+    if (num === 10) return 'Diez';
+    if (num === 11) return 'Once';
+    if (num === 12) return 'Doce';
+    if (num === 13) return 'Trece';
+    if (num === 14) return 'Catorce';
+    if (num === 15) return 'Quince';
+    if (num === 16) return 'Dieciséis';
+    if (num === 17) return 'Diecisiete';
+    if (num === 18) return 'Dieciocho';
+    if (num === 19) return 'Diecinueve';
+    if (num === 20) return 'Veinte';
+    if (num <= 30) return `Unos ${num}`;
+    // Para números redondos mayores
+    if (num % 10 === 0 && num <= 100) {
+      const tens = num / 10;
+      const tensWords = ['', '', 'Veinte', 'Treinta', 'Cuarenta', 'Cincuenta', 'Sesenta', 'Setenta', 'Ochenta', 'Noventa', 'Cien'];
+      return tensWords[tens];
+    }
+    // Para otros números, usar "Unos X"
+    return `Unos ${num}`;
+  };
+  
+  // Función para generar mensajes de intro dinámicamente desde la DB
+  const getLevelIntroMessage = (levelNum, levelConfigsFromDB) => {
+    const levelConfig = getLevelConfig(levelNum, levelConfigsFromDB);
+    
+    // Si no hay configuración, retornar null (no mostrar intro)
+    if (!levelConfig || !levelConfig.enemyCount) {
+      return null;
+    }
+    
+    // Títulos y tips hardcodeados (texto descriptivo)
+    const titles = {
+      1: "Primeros Pasos", 2: "Calentando", 3: "Nuevos Obstáculos", 4: "Territorio Hostil",
+      5: "Zona de Guerra", 6: "Sin Tregua", 7: "Supervivencia", 8: "Último Respiro",
+      9: "Sierras Asesinas", 10: "La Resentida", 11: "Infierno", 12: "Sin Escape",
+      13: "Velocidad Mortal", 14: "Emboscada", 15: "Campo Abierto", 16: "Fuego Cruzado",
+      17: "Tormenta", 18: "Jugador Rápido", 19: "Resistencia", 20: "Elite",
+      21: "Veterano", 22: "Enemigos Veloces", 23: "Penúltimo", 24: "La Antesala",
+      25: "EL FINAL"
+    };
+    
+    const tips = {
+      1: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada.",
+      2: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas",
+      3: "Cuidado! Algunos enemigos ahora disparan",
+      4: "Los enemigos con escudo brillan azul",
+      5: "Busca las cajas verdes con vida extra",
+      6: "Tu escudo te da chance de esquivar balas",
+      7: "Mejora tu velocidad de bala en la tienda",
+      8: "El imán atrae XP y estrellas hacia ti",
+      9: "Las sierras rebotan por el mapa. Evítalas!",
+      10: "La víbora arcoíris te persigue. Es un duelo!",
+      11: "Los cañones flotantes disparan doble",
+      12: "Las sierras grandes hacen más daño",
+      13: "Los enemigos ahora son más rápidos",
+      14: "Tocar a la resentida la mata y reaparece",
+      15: "Sin estructuras donde esconderte",
+      16: "Las resentidas dejan caja de vida al morir",
+      17: "Dispara con click izquierdo o ESPACIO",
+      18: "Aprovecha tu mayor velocidad",
+      19: "Cada estrella del mismo enemigo cura 1 vez",
+      20: "Las resentidas disparan doble y rápido",
+      21: "Mira el minimapa para ubicar enemigos",
+      22: "Los enemigos ahora corren a tu velocidad",
+      23: "Ya casi! Un nivel más!",
+      24: "Prepara todo para el nivel final",
+      25: "100 estrellas. Esto es todo. Buena suerte!"
+    };
+    
+    // Generar peligros dinámicamente desde la DB
+    const dangers = [];
+    
+    // Víboras enemigas (siempre presente)
+    dangers.push(`${levelConfig.enemyCount} víboras enemigas`);
+    
+    // Estructuras
+    if (levelConfig.structuresCount > 0) {
+      if (levelNum === 3) {
+        dangers.push("Si buscas XP, encuentra las estructuras");
+      } else if (levelNum === 4) {
+        dangers.push("Las estructuras esconden tesoros de XP");
+      } else {
+        dangers.push(`${levelConfig.structuresCount} estructuras`);
+      }
+    } else if (levelNum === 15) {
+      dangers.push("Sin estructuras");
+    }
+    
+    // Sierras asesinas
+    if (levelConfig.killerSawCount > 0) {
+      dangers.push(`${levelConfig.killerSawCount} sierras asesinas`);
+    } else if (levelConfig.killerSawCount === 0 && levelNum >= 9) {
+      dangers.push("Sierras");
+    }
+    
+    // Cañones flotantes
+    if (levelConfig.floatingCannonCount > 0) {
+      dangers.push(`${levelConfig.floatingCannonCount} cañones flotantes`);
+    } else if (levelConfig.floatingCannonCount === 0 && levelNum >= 9) {
+      dangers.push("Cañones");
+    }
+    
+    // Víboras resentidas
+    if (levelConfig.resentfulSnakeCount > 0) {
+      if (levelConfig.resentfulSnakeCount === 1) {
+        dangers.push("1 víbora resentida");
+      } else {
+        dangers.push(`${levelConfig.resentfulSnakeCount} víboras resentidas`);
+      }
+    } else if (levelConfig.resentfulSnakeCount === 0 && levelNum >= 10) {
+      dangers.push("VIBORA RESENTIDA");
+    }
+    
+    // Enemigos que disparan (calcular desde porcentaje)
+    const shootPercentage = levelConfig.enemyShootPercentage || 0;
+    if (shootPercentage > 0) {
+      const enemiesThatShoot = Math.round((levelConfig.enemyCount * shootPercentage) / 100);
+      const spanishNum = numberToSpanish(enemiesThatShoot);
+      if (enemiesThatShoot === 1) {
+        dangers.push(`${spanishNum} dispara`);
+      } else {
+        dangers.push(`${spanishNum} disparan`);
+      }
+    }
+    
+    // Enemigos con escudo (calcular desde porcentaje)
+    const shieldPercentage = levelConfig.enemyShieldPercentage || 0;
+    if (shieldPercentage > 0) {
+      const enemiesWithShield = Math.round((levelConfig.enemyCount * shieldPercentage) / 100);
+      // Caso especial: si es 2 o 3, decir "Dos o tres"
+      if (enemiesWithShield === 2 || enemiesWithShield === 3) {
+        dangers.push("Dos o tres tienen escudo");
+      } else {
+        const spanishNum = numberToSpanish(enemiesWithShield);
+        if (enemiesWithShield === 1) {
+          dangers.push(`${spanishNum} tiene escudo`);
+        } else {
+          dangers.push(`${spanishNum} tienen escudo`);
+        }
+      }
+    }
+    
+    // Velocidad de enemigos (solo para algunos niveles)
+    if (levelNum === 13 || levelNum === 22) {
+      dangers.push("Enemigos MÁS RÁPIDOS");
+    }
+    
+    // Velocidad del jugador
+    if (levelNum === 18) {
+      dangers.push("TU velocidad aumenta");
+    }
+    
+    // Mapa gigante y todo
+    if (levelNum === 25) {
+      dangers.push("Mapa GIGANTE");
+      dangers.push("TODO");
+    }
+    
+    // Bordes del mapa (solo niveles iniciales)
+    if (levelNum <= 2) {
+      dangers.push("Bordes del mapa");
+    }
+    
+    return {
+      title: titles[levelNum] || `Nivel ${levelNum}`,
+      objective: levelConfig.starsNeeded,
+      dangers: dangers,
+      tip: tips[levelNum] || "Buena suerte!"
+    };
+  };
+  
   const gameRef = useRef({
     snake: [{ x: 300, y: 300 }],
     direction: { x: 1, y: 0 },
@@ -904,7 +1119,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   // Load leaderboard
   const loadLeaderboard = async () => {
     try {
-      const response = await fetch('/api/leaderboard?limit=10');
+      const response = await fetch('/api/leaderboard?type=xp&limit=10');
       if (response.ok) {
         const data = await response.json();
         setLeaderboard(data);
@@ -926,16 +1141,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     }
   }, [gameState]);
 
-  // Auto-save progress when it changes (debounced)
+  // Auto-save progress ONLY when in safe states (menu, shop, levelComplete, levelIntro)
+  // NOT during gameplay - if you refresh mid-game, you lose that session's progress
   useEffect(() => {
     if (loading) return; // Don't save while loading initial data
     
+    // Only auto-save when NOT in active gameplay
+    const safeStates = ['menu', 'shop', 'levelComplete', 'gameComplete', 'levelIntro'];
+    if (!safeStates.includes(gameState)) return;
+    
     const timeoutId = setTimeout(() => {
       saveUserProgress();
-    }, 2000); // Save 2 seconds after last change
+    }, 1000); // Save 1 second after state change
 
     return () => clearTimeout(timeoutId);
-  }, [totalXP, totalStars, level, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel, healthLevel]);
+  }, [gameState, shieldLevel, magnetLevel, cannonLevel, speedLevel, bulletSpeedLevel, healthLevel]);
 
   // Sincronizar magnetLevel con gameRef para el game loop
   useEffect(() => {
@@ -1006,44 +1226,43 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const baseLength = 15 + Math.random() * 20;
     const initialXP = Math.floor(baseLength * 2); // Initial XP based on length
     
-    // Sistema de mejoras progresivo según nivel del juego (1-25)
-    // Nivel 1: sin mejoras, Nivel 25: mezcla de todo
-    const getEnemyUpgrades = (level) => {
-      if (level === 1) {
-        // Nivel 1: sin mejoras
+    // Sistema de mejoras progresivo según enemyUpgradeLevel del admin (0-10)
+    // Este valor se puede controlar desde el admin panel para ecualizar la dificultad
+    const getEnemyUpgrades = (level, configUpgradeLevel) => {
+      // Usar el valor del admin si está definido, sino calcular del nivel
+      const maxUpgradeLevel = configUpgradeLevel ?? Math.min(10, Math.ceil(level / 2.5));
+      
+      if (maxUpgradeLevel === 0) {
+        // Sin mejoras
         return { shieldLevel: 0, cannonLevel: 0, speedLevel: 0, bulletSpeedLevel: 0, magnetLevel: 0, healthLevel: 0 };
       }
       
-      // Probabilidad base de tener mejoras: aumenta con el nivel
-      // Nivel 2: 10%, Nivel 25: 100%
-      const upgradeChance = Math.min(1, (level - 1) / 24);
-      
-      // Nivel máximo de mejoras disponible: aumenta con el nivel
-      // Nivel 2-5: max 1-2, Nivel 6-10: max 3-4, Nivel 11-15: max 5-6, etc.
-      const maxUpgradeLevel = Math.min(10, Math.ceil(level / 2.5));
+      // Probabilidad base de tener mejoras: basada en maxUpgradeLevel
+      // upgradeLevel 0-1: 20-30%, upgradeLevel 10: 100%
+      const upgradeChance = Math.min(1, 0.2 + (maxUpgradeLevel * 0.08));
       
       // Función para determinar el nivel de una mejora
+      // Genera valores aleatorios en rango [maxUpgradeLevel-4, maxUpgradeLevel+4] limitados a [0, maxPossible]
       const getUpgradeLevel = (maxPossible) => {
         if (Math.random() > upgradeChance) return 0;
-        // En niveles altos, algunos enemigos tienen mejoras al máximo
-        if (level >= 20 && Math.random() < 0.2) {
-          return maxPossible; // 20% chance de tener al máximo en niveles 20+
-        }
-        // Random entre 0 y el máximo disponible para este nivel
-        return Math.floor(Math.random() * (maxPossible + 1));
+        // Generar valor en torno al maxUpgradeLevel ±4
+        const variance = Math.floor(Math.random() * 9) - 4; // -4 a +4
+        const targetLevel = maxUpgradeLevel + variance;
+        // Limitar a [0, maxPossible]
+        return Math.max(0, Math.min(maxPossible, targetLevel));
       };
       
       return {
-        shieldLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        cannonLevel: getUpgradeLevel(Math.min(5, Math.ceil(maxUpgradeLevel / 2))),
-        speedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        bulletSpeedLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        magnetLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel)),
-        healthLevel: getUpgradeLevel(Math.min(10, maxUpgradeLevel))
+        shieldLevel: getUpgradeLevel(10),
+        cannonLevel: getUpgradeLevel(5),
+        speedLevel: getUpgradeLevel(10),
+        bulletSpeedLevel: getUpgradeLevel(10),
+        magnetLevel: getUpgradeLevel(10),
+        healthLevel: getUpgradeLevel(10)
       };
     };
     
-    const upgrades = getEnemyUpgrades(gameLevel);
+    const upgrades = getEnemyUpgrades(gameLevel, levelConfig.enemyUpgradeLevel);
     
     // Vida basada en healthLevel: nivel 0 = 2, nivel 1 = 4, nivel 2 = 6... nivel 10 = 22
     const enemyMaxHealth = 2 + (upgrades.healthLevel * 2);
@@ -1130,23 +1349,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
   };
 
-  // Helper function to create Resentful Snake
+  // Helper function to create Resentful Snake (BOSS-like enemy)
+  // Negra con borde arcoíris, dispara doble, agresiva, si te toca muere y reaparece
   const createResentfulSnake = (levelConfig) => {
     const game = gameRef.current;
-    const x = Math.random() * game.worldWidth;
-    const y = Math.random() * game.worldHeight;
+    const margin = 200;
+    const x = margin + Math.random() * (game.worldWidth - margin * 2);
+    const y = margin + Math.random() * (game.worldHeight - margin * 2);
     const angle = Math.random() * Math.PI * 2;
     
     return {
       segments: [{ x, y }],
       direction: { x: Math.cos(angle), y: Math.sin(angle) },
-      speed: levelConfig.enemySpeed * 1.2,
-      length: 20 + Math.random() * 15,
-      hue: 0, // Red hue for resentful
+      speed: levelConfig.enemySpeed * 1.8, // Más rápida
+      length: 25 + Math.random() * 10,
+      hue: 0,
+      rainbowOffset: Math.random() * 360, // Offset para el arcoíris animado
       isResentful: true,
       lastShotTime: 0,
-      shootCooldown: 1500,
-      chaseRange: 500
+      shootCooldown: 400, // Dispara muy rápido (400ms)
+      chaseRange: 800, // Rango de caza más amplio
+      bulletSpeed: 10 // Balas más rápidas
     };
   };
 
@@ -1256,6 +1479,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.structures = [];
       
       console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, mapa ${levelConfig.mapSize}x${levelConfig.mapSize}`);
+      game.totalStarsGenerated = 0; // Reset star counter for level
       game.particles = [];
       game.currentXP = 0;
       game.currentStars = 0;
@@ -1663,6 +1887,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     // starsToCreate: número de estrellas a crear (1 + estrellas que había comido el enemigo)
     const createFoodFromEnemy = (x, y, totalXP, starsToCreate = 1) => {
       const game = gameRef.current;
+      
+      // Debug: contar estrellas generadas
+      game.totalStarsGenerated = (game.totalStarsGenerated || 0) + starsToCreate;
+      console.log(`⭐ Estrella generada! Total generadas: ${game.totalStarsGenerated}, En mapa: ${game.stars.length + starsToCreate}`);
       const foodCount = Math.min(20, Math.max(5, Math.floor(totalXP / 5))); // 5-20 food items
       const xpPerFood = Math.floor(totalXP / foodCount);
       const spreadRadius = 100; // Spread food in 100px radius
@@ -1985,6 +2213,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Enemy eats star - contador y recuperar vida
             enemy.starsEaten = (enemy.starsEaten || 0) + 1;
             
+            // Debug: log cuando un enemigo come una estrella
+            console.log(`🐍 Enemigo comió estrella! starsEaten ahora: ${enemy.starsEaten}, Estrellas en mapa: ${game.stars.length - 1}`);
+            
             // Recuperar vida hasta el máximo
             enemy.currentHealth = Math.min(enemy.currentHealth + enemy.maxHealth, enemy.maxHealth);
             
@@ -2045,33 +2276,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         const enemyHead = enemy.segments[0];
         for (let i = 1; i < game.snake.length; i++) {
           if (checkCollision(enemyHead, game.snake[i], SNAKE_SIZE + game.snakeSize)) {
-            // Enemy dies - create food and stars (1 propia + las que comió)
-            const deathX = enemyHead.x;
-            const deathY = enemyHead.y;
-            const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
-            const starsToCreate = 1 + (enemy.starsEaten || 0);
-            createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-            createParticle(deathX, deathY, '#ff3366', 15);
-            enemiesToRemove.push(enemyIndex);
+            // Only process if not already marked for death
+            if (!enemy.markedForDeath && !enemiesToRemove.includes(enemyIndex)) {
+              enemy.markedForDeath = true;
+              // Enemy dies - create food and stars (1 propia + las que comió)
+              const deathX = enemyHead.x;
+              const deathY = enemyHead.y;
+              const enemyXP = enemy.totalXP || (enemy.length * 2); // Base XP on length if no XP tracked
+              const starsToCreate = 1 + (enemy.starsEaten || 0);
+              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+              createParticle(deathX, deathY, '#ff3366', 15);
+              enemiesToRemove.push(enemyIndex);
+            }
             break;
           }
         }
 
         // Enemy head vs Enemy body collisions (enemies can kill each other)
         game.enemies.forEach((otherEnemy, otherIndex) => {
-          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex)) return;
+          if (enemyIndex === otherIndex || enemiesToRemove.includes(otherIndex) || otherEnemy.markedForDeath) return;
           
           const otherHead = otherEnemy.segments[0];
           for (let i = 1; i < enemy.segments.length; i++) {
             if (checkCollision(otherHead, enemy.segments[i], SNAKE_SIZE + SNAKE_SIZE)) {
-              // Other enemy dies - create food and stars (1 propia + las que comió)
-              const deathX = otherHead.x;
-              const deathY = otherHead.y;
-              const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
-              const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
-              createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
-              createParticle(deathX, deathY, '#ff3366', 15);
-              if (!enemiesToRemove.includes(otherIndex)) {
+              // Only process if not already marked for death
+              if (!otherEnemy.markedForDeath && !enemiesToRemove.includes(otherIndex)) {
+                otherEnemy.markedForDeath = true;
+                // Other enemy dies - create food and stars (1 propia + las que comió)
+                const deathX = otherHead.x;
+                const deathY = otherHead.y;
+                const enemyXP = otherEnemy.totalXP || (otherEnemy.length * 2);
+                const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
+                createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
+                createParticle(deathX, deathY, '#ff3366', 15);
                 enemiesToRemove.push(otherIndex);
               }
               break;
@@ -2096,7 +2333,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         if (bullet.owner === 'player') {
         let hit = false;
           game.enemies.forEach((enemy, enemyIndex) => {
-          if (!hit && enemy.segments.length > 0) {
+          // Skip if enemy is already marked for death or already hit this frame
+          if (!hit && enemy.segments.length > 0 && !enemiesToKill.includes(enemyIndex) && !enemy.markedForDeath) {
               // Check collision with enemy head (most important)
               const enemyHead = enemy.segments[0];
               let hitEnemyHead = false;
@@ -2129,7 +2367,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 hit = true;
                 
                 // Si la vida llega a 0 o menos, el enemigo muere
-                if (enemy.currentHealth <= 0) {
+                if (enemy.currentHealth <= 0 && !enemy.markedForDeath) {
+                  enemy.markedForDeath = true; // Prevent duplicate death processing
                   const deathX = enemyHead.x;
                   const deathY = enemyHead.y;
                   const enemyXP = enemy.totalXP || (enemy.length * 2);
@@ -2142,6 +2381,88 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             }
           }
         });
+        
+          // Check collision with Resentful Snakes (player bullets)
+          if (!hit && game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+            game.resentfulSnakes.forEach((snake, snakeIndex) => {
+              if (hit || !snake.segments || snake.segments.length === 0) return;
+              
+              const snakeHead = snake.segments[0];
+              let hitHead = false;
+              let hitBody = false;
+              
+              if (checkCollision(bullet, snakeHead, 15)) {
+                hitHead = true;
+              } else {
+                for (let i = 1; i < snake.segments.length; i++) {
+                  if (checkCollision(bullet, snake.segments[i], 12)) {
+                    hitBody = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (hitHead || hitBody) {
+                // La resentful snake recibe daño - necesita varios disparos para morir
+                snake.health = snake.health ?? 10; // 10 de vida por defecto
+                const damage = hitHead ? 3 : 1; // Cabeza = más daño
+                snake.health -= damage;
+                
+                // Efecto visual arcoíris al recibir daño
+                const hue = (snake.rainbowOffset || 0) % 360;
+                createParticle(bullet.x, bullet.y, `hsl(${hue}, 100%, 60%)`, 12);
+                hit = true;
+                
+                // Si la resentful snake muere, reaparece en otro lugar
+                if (snake.health <= 0) {
+                  // Efecto de muerte espectacular
+                  for (let p = 0; p < 20; p++) {
+                    const particleHue = (hue + p * 18) % 360;
+                    createParticle(snakeHead.x, snakeHead.y, `hsl(${particleHue}, 100%, 60%)`, 8);
+                  }
+                  createParticle(snakeHead.x, snakeHead.y, '#ffffff', 25);
+                  
+                  // Crear estrella y XP como recompensa
+                  createFoodFromEnemy(snakeHead.x, snakeHead.y, 100, 3); // 3 estrellas por matar a la resentful
+                  
+                  // Dejar caja de vida de 5 puntos
+                  game.healthBoxes.push({
+                    x: snakeHead.x,
+                    y: snakeHead.y,
+                    healthPoints: 5,
+                    size: 25, // Tamaño grande
+                    pulse: 0,
+                    pulseSpeed: 0.05
+                  });
+                  
+                  // Respawn en otro lugar (lejos del jugador)
+                  const playerHead = game.snake[0];
+                  let newSpawnX, newSpawnY, attempts = 0;
+                  do {
+                    const margin = 200;
+                    newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+                    newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+                    const distToPlayer = Math.sqrt(
+                      Math.pow(newSpawnX - playerHead.x, 2) + 
+                      Math.pow(newSpawnY - playerHead.y, 2)
+                    );
+                    attempts++;
+                    if (distToPlayer > 600 || attempts > 20) break;
+                  } while (true);
+                  
+                  snake.segments = [{ x: newSpawnX, y: newSpawnY }];
+                  snake.direction = {
+                    x: Math.cos(Math.random() * Math.PI * 2),
+                    y: Math.sin(Math.random() * Math.PI * 2)
+                  };
+                  snake.health = 10; // Reset vida
+                  snake.lastShotTime = Date.now();
+                  
+                  createParticle(newSpawnX, newSpawnY, '#ff00ff', 15);
+                }
+              }
+            });
+          }
         
           if (hit) return false; // Remove bullet if it hit
         }
@@ -2651,7 +2972,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           game.currentXP += xpGain;
           game.sessionXP += xpGain;
           setCurrentLevelXP(prev => prev + xpGain);
-          setTotalXP(prev => prev + xpGain);
+          // NO sumar a totalXP durante el juego - solo cuando ganas el nivel
           setScore(prev => prev + xpGain); // Update score
           
           // El tamaño NO cambia al comer - solo crece la cola
@@ -2676,7 +2997,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           // Collect star
           game.currentStars += 1;
           setCurrentLevelStars(prev => prev + 1);
-          setTotalStars(prev => prev + 1);
+          // NO sumar a totalStars durante el juego - solo cuando ganas el nivel
           
           // Recuperar vida SOLO si este grupo de estrellas no ha curado todavía
           // (máximo 1 vida por víbora muerta, sin importar cuántas estrellas tenía)
@@ -2724,9 +3045,23 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
       // Check level completion - based on stars now
       if (game.currentStars >= game.starsNeeded) {
+        // ¡VICTORIA! Ahora sí sumamos XP y estrellas ganadas al total
+        const earnedXP = game.sessionXP;
+        const earnedStars = game.currentStars;
+        setTotalXP(prev => prev + earnedXP);
+        setTotalStars(prev => prev + earnedStars);
+        
+        // Incrementar nivel AHORA (no cuando presiona el botón)
+        // Así si hace refresh, ya está en el nivel siguiente
+        const nextLevelNum = level < 25 ? level + 1 : level;
+        setLevel(nextLevelNum);
+        
         // Save game session when completing level
         const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-        saveGameSession(game.sessionXP, level, game.sessionXP, duration);
+        saveGameSession(earnedXP, level, earnedXP, duration);
+        
+        // Guardar progreso inmediatamente (incluyendo el nuevo nivel)
+        setTimeout(() => saveUserProgress(), 100);
         
         // Si es el nivel 25, mostrar pantalla especial de victoria
         if (level === 25) {
@@ -2737,10 +3072,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               const previousBestScore = data.bestScore || 0;
               
               setVictoryData({
-                score: game.sessionXP,
+                score: earnedXP,
                 previousBestScore: previousBestScore,
                 position: data.rank || '?',
-                isNewRecord: game.sessionXP > previousBestScore,
+                isNewRecord: earnedXP > previousBestScore,
                 series: currentSeries
               });
               setGameState('gameComplete');
@@ -2749,7 +3084,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               console.error('Error obteniendo ranking:', err);
               // Fallback si falla el endpoint
               setVictoryData({
-                score: game.sessionXP,
+                score: earnedXP,
                 previousBestScore: 0,
                 position: '?',
                 isNewRecord: true,
@@ -2872,11 +3207,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       }
 
-      // Update Resentful Snakes
+      // Update Resentful Snakes (BOSS-like enemies - duelo a muerte)
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
         const currentTime = Date.now();
         game.resentfulSnakes.forEach(snake => {
           if (!snake.segments || snake.segments.length === 0) return;
+          
+          // Animar el arcoíris
+          snake.rainbowOffset = (snake.rainbowOffset || 0) + 2;
           
           const snakeHead = snake.segments[0];
           const playerHead = game.snake[0];
@@ -2886,14 +3224,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const dy = playerHead.y - snakeHead.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
-            // Chase player if in range
+            // Chase player if in range (rango amplio)
             if (dist < snake.chaseRange) {
-              // Aim at player
+              // Aim at player - giro más rápido y agresivo
               const targetDir = { x: dx / dist, y: dy / dist };
               
-              // Smooth turning
-              snake.direction.x += (targetDir.x - snake.direction.x) * 0.1 * normalizedDelta;
-              snake.direction.y += (targetDir.y - snake.direction.y) * 0.1 * normalizedDelta;
+              // Giro más rápido cuando está cerca
+              const turnSpeed = 0.15 + (1 - dist / snake.chaseRange) * 0.1;
+              snake.direction.x += (targetDir.x - snake.direction.x) * turnSpeed * normalizedDelta;
+              snake.direction.y += (targetDir.y - snake.direction.y) * turnSpeed * normalizedDelta;
               
               // Normalize
               const dirLen = Math.sqrt(snake.direction.x * snake.direction.x + snake.direction.y * snake.direction.y);
@@ -2902,17 +3241,36 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                 snake.direction.y /= dirLen;
               }
               
-              // Shoot at player
+              // DISPARO DOBLE agresivo
               if (currentTime - snake.lastShotTime > snake.shootCooldown) {
                 snake.lastShotTime = currentTime;
+                const bulletSpeed = snake.bulletSpeed || 10;
+                const spreadAngle = 0.12; // Separación entre las dos balas
+                
+                // Bala 1 (ligeramente a la izquierda)
+                const angle1 = Math.atan2(snake.direction.y, snake.direction.x) - spreadAngle;
                 game.bullets.push({
-                  x: snakeHead.x + snake.direction.x * 15,
-                  y: snakeHead.y + snake.direction.y * 15,
-                  vx: snake.direction.x * 6,
-                  vy: snake.direction.y * 6,
-                  life: 100,
+                  x: snakeHead.x + Math.cos(angle1) * 20,
+                  y: snakeHead.y + Math.sin(angle1) * 20,
+                  vx: Math.cos(angle1) * bulletSpeed,
+                  vy: Math.sin(angle1) * bulletSpeed,
+                  life: 150,
                   owner: 'enemy'
                 });
+                
+                // Bala 2 (ligeramente a la derecha)
+                const angle2 = Math.atan2(snake.direction.y, snake.direction.x) + spreadAngle;
+                game.bullets.push({
+                  x: snakeHead.x + Math.cos(angle2) * 20,
+                  y: snakeHead.y + Math.sin(angle2) * 20,
+                  vx: Math.cos(angle2) * bulletSpeed,
+                  vy: Math.sin(angle2) * bulletSpeed,
+                  life: 150,
+                  owner: 'enemy'
+                });
+                
+                // Efecto visual de disparo
+                createParticle(snakeHead.x, snakeHead.y, '#ff00ff', 8);
               }
             } else {
               // Random movement when not chasing
@@ -2924,7 +3282,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }
             }
             
-            // Move snake
+            // Move snake (más rápida)
             const newX = snakeHead.x + snake.direction.x * snake.speed * normalizedDelta;
             const newY = snakeHead.y + snake.direction.y * snake.speed * normalizedDelta;
             
@@ -2947,44 +3305,54 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }
             }
             
-            // Check collision with player
-            if (dist < game.snakeSize * 2) {
-              // Player hit by resentful snake! - Empujar al jugador
-              const pushForce = 40;
+            // DUELO: Si la resentful toca al jugador, ELLA muere y reaparece
+            if (dist < game.snakeSize * 2.5) {
+              // ¡La víbora resentida murió al tocarte!
+              createParticle(snakeHead.x, snakeHead.y, '#ff00ff', 20);
+              createParticle(snakeHead.x, snakeHead.y, '#00ffff', 15);
+              createParticle(snakeHead.x, snakeHead.y, '#ffffff', 12);
+              
+              // Dejar caja de vida de 5 puntos
+              game.healthBoxes.push({
+                x: snakeHead.x,
+                y: snakeHead.y,
+                healthPoints: 5,
+                size: 25, // Tamaño grande
+                pulse: 0,
+                pulseSpeed: 0.05
+              });
+              
+              // Respawn en otro lugar del mapa (lejos del jugador)
+              let newSpawnX, newSpawnY, attempts = 0;
+              do {
+                const margin = 200;
+                newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+                newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
+                const distToPlayer = Math.sqrt(
+                  Math.pow(newSpawnX - playerHead.x, 2) + 
+                  Math.pow(newSpawnY - playerHead.y, 2)
+                );
+                attempts++;
+                // Asegurar que aparezca lejos del jugador (mínimo 500px)
+                if (distToPlayer > 500 || attempts > 20) break;
+              } while (true);
+              
+              // Reset snake position
+              snake.segments = [{ x: newSpawnX, y: newSpawnY }];
+              snake.direction = {
+                x: Math.cos(Math.random() * Math.PI * 2),
+                y: Math.sin(Math.random() * Math.PI * 2)
+              };
+              snake.lastShotTime = currentTime; // Cooldown para no disparar inmediatamente
+              
+              // Efecto visual en el nuevo spawn
+              createParticle(newSpawnX, newSpawnY, '#ff00ff', 10);
+              
+              // El jugador también recibe un pequeño empujón pero NO daño
+              const pushForce = 30;
               if (dist > 0) {
                 playerHead.x += (dx / dist) * pushForce;
                 playerHead.y += (dy / dist) * pushForce;
-              }
-              
-              let damage = 3;
-              
-              if (shieldLevel >= 4) {
-                damage = 0; // Full protection
-              } else if (shieldLevel >= 1) {
-                damage = Math.ceil(damage / 2);
-              }
-              
-              if (damage > 0) {
-                const died = applyDamage(damage, playerHead.x, playerHead.y);
-                
-                // ¡CORTAR LA VÍBORA! - Quitar segmentos según el daño
-                if (game.snake.length > 1) {
-                  const segmentsToCut = Math.min(damage * 3, game.snake.length - 1); // Cortar 3 segmentos por punto de daño
-                  for (let cut = 0; cut < segmentsToCut; cut++) {
-                    const removedSegment = game.snake.pop();
-                    if (removedSegment) {
-                      // Crear partículas rojas donde se cortó
-                      createParticle(removedSegment.x, removedSegment.y, '#ff3366', 5);
-                    }
-                  }
-                }
-                
-                if (died) {
-                  const duration = game.gameStartTime ? Math.floor((Date.now() - game.gameStartTime) / 1000) : 0;
-                  saveGameSession(game.sessionXP || 0, level, game.sessionXP || 0, duration);
-                  setGameState('gameOver');
-                  return;
-                }
               }
             }
           }
@@ -3582,7 +3950,102 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       });
 
-      // Draw stars
+      // Draw Resentful Snakes (BOSS-like enemies - 7 colores al inicio, negro en el medio, 7 colores al final)
+      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
+        // Colores del arcoíris (7 colores)
+        const rainbowColors = [
+          '#ff0000', // Rojo
+          '#ff7f00', // Naranja
+          '#ffff00', // Amarillo
+          '#00ff00', // Verde
+          '#0000ff', // Azul
+          '#4b0082', // Índigo
+          '#9400d3'  // Violeta
+        ];
+        
+        game.resentfulSnakes.forEach(snake => {
+          if (!snake.segments || snake.segments.length === 0) return;
+          
+          const totalSegments = snake.segments.length;
+          const colorSegments = 7; // 7 segmentos de color en cada extremo
+          
+          snake.segments.forEach((seg, i) => {
+            const screenX = seg.x - camX;
+            const screenY = seg.y - camY;
+            
+            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+              
+              let segmentColor;
+              let glowColor;
+              let hasGlow = false;
+              
+              // Determinar si es un segmento de color o negro
+              if (i < colorSegments) {
+                // Primeros 7 segmentos: arcoíris desde la cabeza
+                const colorIndex = i % rainbowColors.length;
+                segmentColor = rainbowColors[colorIndex];
+                glowColor = segmentColor;
+                hasGlow = true;
+              } else if (i >= totalSegments - colorSegments) {
+                // Últimos 7 segmentos: arcoíris hacia la cola
+                const colorIndex = (totalSegments - 1 - i) % rainbowColors.length;
+                segmentColor = rainbowColors[colorIndex];
+                glowColor = segmentColor;
+                hasGlow = true;
+              } else {
+                // Segmentos del medio: negro
+                segmentColor = '#0a0a0a';
+                glowColor = '#333333';
+                hasGlow = false;
+              }
+              
+              // Dibujar segmento
+              if (hasGlow) {
+                // Segmentos de color con glow
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = glowColor;
+              } else {
+                // Segmentos negros sin glow (o glow sutil)
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = '#222222';
+              }
+              
+              ctx.fillStyle = segmentColor;
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Borde sutil para todos
+              ctx.strokeStyle = hasGlow ? 'rgba(255,255,255,0.3)' : 'rgba(50,50,50,0.5)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              
+              // Ojos furiosos en la cabeza
+              if (i === 0) {
+                ctx.shadowBlur = 0;
+                // Ojos blancos con pupila roja (mirada amenazante)
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(screenX - 4, screenY - 2, 4, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Pupilas rojas brillantes
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(screenX - 4, screenY - 2, 2, 0, Math.PI * 2);
+                ctx.arc(screenX + 4, screenY - 2, 2, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+          });
+        }
+      });
+      
+      // Draw stars in main canvas
       game.stars.forEach(star => {
         const screenX = star.x - camX;
         const screenY = star.y - camY;
@@ -3609,6 +4072,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.shadowBlur = 0;
         }
       });
+      
+      // Shop hint (only on desktop, not mobile)
+      if (!isMobile) {
+        ctx.fillStyle = '#ff00ff';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+        
+        // Cannon hint (if cannon is equipped)
+        if (cannonLevel > 0) {
+          // Calcular cuántas balas consume
+          let bulletCost = 1;
+          if (cannonLevel >= 2) bulletCost = 2;
+          if (cannonLevel >= 3) bulletCost = 3;
+          if (cannonLevel >= 4) bulletCost = 4;
+          
+          const canShootNow = game.sessionXP >= bulletCost;
+          ctx.fillStyle = canShootNow ? '#00ff00' : '#ff0000';
+          ctx.fillText(`[ESPACIO] Disparar (-${bulletCost} XP)`, 120, CANVAS_HEIGHT - 15);
+        }
+      }
 
       // Draw UI overlay
       if (gameState === 'playing') {
@@ -3648,20 +4131,2515 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
   }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, selectedSkin, isImmune]);
 
-  // Rest of component JSX...
+  const startGame = () => {
+    // Mostrar intro del nivel primero
+    setGameState('levelIntro');
+  };
+
+  const beginLevel = () => {
+    // Esta función realmente inicia el juego después de la intro
+    gameRef.current.level = level;
+    const levelConfig = getLevelConfig(level, levelConfigs);
+    gameRef.current.starsNeeded = levelConfig.starsNeeded;
+    gameRef.current.gameStartTime = Date.now();
+    gameRef.current.sessionXP = 0;
+    gameRef.current.headHits = 0; // Reset head hits counter
+    gameRef.current.bodyHits = 0; // Reset body hits counter
+    setScore(0);
+    initGame();
+    setShopOpen(false);
+    setGameState('playing');
+  };
+
+  const initGame = () => {
+    const game = gameRef.current;
+    const levelConfig = getLevelConfig(game.level, levelConfigs);
+    
+    // Central rectangle (1 screen size = 800x600) - solo si el nivel lo requiere
+    if (levelConfig.hasCentralCell) {
+      const centralRect = {
+        x: game.worldWidth / 2 - CANVAS_WIDTH / 2,
+        y: game.worldHeight / 2 - CANVAS_HEIGHT / 2,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        openings: [
+          { 
+            side: 'top', 
+            position: 0, // Position along the side (0 to 1)
+            direction: 1, // Always moving forward (will wrap)
+            speed: levelConfig.centralCellOpeningSpeed, // Velocidad basada en nivel
+            width: 60, 
+            height: 20,
+            paused: false // Pause when player is passing through
+          },
+          { 
+            side: 'bottom', 
+            position: 0.5,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 60, 
+            height: 20,
+            paused: false
+          },
+          { 
+            side: 'left', 
+            position: 0.3,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 20, 
+            height: 60,
+            paused: false
+          },
+          { 
+            side: 'right', 
+            position: 0.7,
+            direction: 1,
+            speed: levelConfig.centralCellOpeningSpeed,
+            width: 20, 
+            height: 60,
+            paused: false
+          }
+        ]
+      };
+      game.centralRect = centralRect;
+    } else {
+      game.centralRect = null; // Sin celda del medio en niveles bajos
+    }
+    
+    // Create regular food across the map - usar xpPoints del nivel
+    game.food = Array.from({ length: levelConfig.xpPoints }, () => createFood());
+    
+    // Add yellow/orange orbs inside central rectangle (solo si existe)
+    if (game.centralRect) {
+      const centralFoodCount = Math.floor(levelConfig.xpPoints * 0.3); // 30% de la comida en el centro
+      for (let i = 0; i < centralFoodCount; i++) {
+        const color = Math.random() < 0.5 ? 'yellow' : 'orange';
+        const food = createFood(color);
+        food.x = game.centralRect.x + 50 + Math.random() * (game.centralRect.width - 100);
+        food.y = game.centralRect.y + 50 + Math.random() * (game.centralRect.height - 100);
+        game.food.push(food);
+      }
+    }
+    
+    // Guardar la cantidad inicial de comida para mantenerla constante
+    game.initialFoodCount = game.food.length;
+    
+    // Crear enemigos PRIMERO para luego buscar spawn seguro para el jugador
+    game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
+      return createEnemy(levelConfig, game.level);
+    });
+    
+    // Create new entities based on level config
+    game.killerSaws = Array.from({ length: levelConfig.killerSawCount }, () => createKillerSaw(levelConfig));
+    game.floatingCannons = Array.from({ length: levelConfig.floatingCannonCount }, () => createFloatingCannon(levelConfig));
+    game.resentfulSnakes = Array.from({ length: levelConfig.resentfulSnakeCount }, () => createResentfulSnake(levelConfig));
+    game.healthBoxes = Array.from({ length: levelConfig.healthBoxCount }, () => createHealthBox(levelConfig));
+    
+    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} canones, ${game.resentfulSnakes.length} viboras resentidas`);
+    
+    // Spawn player: lejos del borde, lejos de enemigos, fuera del centralRect
+    const EDGE_MARGIN = 300; // Distancia mínima del borde
+    const ENEMY_SAFE_DISTANCE = 200; // Distancia mínima de cualquier enemigo
+    
+    let spawnX, spawnY;
+    let attempts = 0;
+    let validSpawn = false;
+    
+    do {
+      // Random position con margen del borde
+      spawnX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
+      spawnY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
+      
+      validSpawn = true;
+      
+      // Check if it's outside the central rectangle (with margin for safety) - solo si existe
+      if (game.centralRect) {
+        const margin = 50;
+        const isOutside = spawnX < game.centralRect.x - margin || 
+                         spawnX > game.centralRect.x + game.centralRect.width + margin ||
+                         spawnY < game.centralRect.y - margin || 
+                         spawnY > game.centralRect.y + game.centralRect.height + margin;
+        
+        if (!isOutside) {
+          validSpawn = false;
+        }
+      }
+      
+      // Verificar distancia de todos los enemigos
+      if (validSpawn) {
+        for (const enemy of game.enemies) {
+          if (enemy.segments && enemy.segments.length > 0) {
+            const head = enemy.segments[0];
+            const dx = spawnX - head.x;
+            const dy = spawnY - head.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < ENEMY_SAFE_DISTANCE) {
+              validSpawn = false;
+        break;
+      }
+          }
+        }
+      }
+      
+      attempts++;
+    } while (!validSpawn && attempts < 100); // Safety limit
+    
+    // Fallback: si no encontró posición segura, buscar la más alejada de enemigos
+    if (!validSpawn) {
+      let bestX = game.worldWidth / 2;
+      let bestY = game.worldHeight / 2;
+      let bestMinDistance = 0;
+      
+      // Probar varias posiciones y elegir la mejor
+      for (let i = 0; i < 20; i++) {
+        const testX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
+        const testY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
+        
+        let minDistance = Infinity;
+        for (const enemy of game.enemies) {
+          if (enemy.segments && enemy.segments.length > 0) {
+            const head = enemy.segments[0];
+            const dx = testX - head.x;
+            const dy = testY - head.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            minDistance = Math.min(minDistance, distance);
+          }
+        }
+        
+        if (minDistance > bestMinDistance) {
+          bestMinDistance = minDistance;
+          bestX = testX;
+          bestY = testY;
+        }
+      }
+      
+      spawnX = bestX;
+      spawnY = bestY;
+    }
+    
+    game.snake = [{ x: spawnX, y: spawnY }];
+    game.direction = { x: 1, y: 0 };
+    game.nextDirection = { x: 1, y: 0 };
+    // Aplicar velocidad del nivel
+    game.speed = levelConfig.playerSpeed;
+    game.baseSpeed = levelConfig.playerSpeed;
+    game.snakeSize = SNAKE_SIZE;
+    game.bullets = [];
+    game.particles = [];
+    game.stars = []; // Reset stars
+    game.currentXP = 0;
+    game.currentStars = 0;
+    game.starsNeeded = levelConfig.starsNeeded;
+    // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
+    game.maxHealth = 2 + (healthLevel * 2);
+    game.currentHealth = game.maxHealth;
+    // Reset efectos visuales
+    game.damageFlash = 0;
+    game.healFlash = 0;
+    game.invulnerable = 0;
+    game.camera = { 
+      x: game.worldWidth / 2 - CANVAS_WIDTH / 2, 
+      y: game.worldHeight / 2 - CANVAS_HEIGHT / 2 
+    };
+    setCurrentLevelXP(0);
+    setCurrentLevelStars(0);
+  };
+
+  const nextLevel = () => {
+    // Mostrar intro del siguiente nivel primero
+    setGameState('levelIntro');
+  };
+
+  const handleRebirth = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/users/${user.id}/rebirth`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({}) // Body vacío requerido por Fastify con Content-Type JSON
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al hacer rebirth');
+      }
+      
+      const data = await response.json();
+      
+      // Actualizar estados locales
+      setRebirthCount(data.rebirthCount);
+      setCurrentSeries(data.currentSeries);
+      setLevel(1);
+      setTotalXP(0);
+      setTotalStars(0);
+      setCurrentLevelXP(0);
+      setCurrentLevelStars(0);
+      
+      // Actualizar niveles de tienda según rebirth
+      const baseLevel = data.rebirthCount;
+      setShieldLevel(baseLevel);
+      setCannonLevel(baseLevel);
+      setMagnetLevel(baseLevel);
+      setSpeedLevel(baseLevel);
+      setBulletSpeedLevel(baseLevel);
+      setHealthLevel(baseLevel);
+      setHeadLevel(1 + baseLevel);
+      
+      // Volver al menú
+      setGameState('menu');
+      setVictoryData(null);
+      
+      console.log(`🔄 Rebirth completado! Serie ${data.currentSeries}, Base Level: ${baseLevel}`);
+    } catch (error) {
+      console.error('Error en rebirth:', error);
+      alert('Error al hacer rebirth. Intenta de nuevo.');
+    }
+  };
+
+  const buyItem = (item) => {
+    if (!shopConfigs) return;
+    
+    // Parse item type and level from item string (e.g., "shield1" -> type: "shield", level: 1)
+    const match = item.match(/^(\w+)(\d+)$/);
+    if (!match) return;
+    
+    const [, type, levelStr] = match;
+    const level = parseInt(levelStr);
+    
+    // Find the upgrade configuration
+    const upgrades = shopConfigs[type];
+    if (!upgrades) return;
+    
+    const upgrade = upgrades.find(u => Number(u.level) === level);
+    if (!upgrade) return;
+    
+    const cost = { xp: upgrade.xpCost, stars: upgrade.starsCost };
+    
+    // Check if user has enough resources
+    if (totalXP >= cost.xp && totalStars >= cost.stars) {
+      setTotalXP(prev => prev - cost.xp);
+      setTotalStars(prev => prev - cost.stars);
+      
+      // Update the appropriate level state
+      if (type === 'shield') {
+        setShieldLevel(level);
+      } else if (type === 'magnet') {
+        setMagnetLevel(level);
+      } else if (type === 'cannon') {
+        setCannonLevel(level);
+      } else if (type === 'speed') {
+        setSpeedLevel(level);
+      } else if (type === 'bullet_speed') {
+        setBulletSpeedLevel(level);
+      } else if (type === 'head') {
+        setHeadLevel(level);
+      } else if (type === 'health') {
+        setHealthLevel(level);
+      }
+      
+      // NO cerrar la tienda al comprar - el usuario puede querer seguir comprando
+      // setShopOpen(false);
+      
+      // Save progress after purchase
+      setTimeout(() => saveUserProgress(), 100);
+    }
+  };
+  
+  // Helper to get next upgrade level and cost for each type
+  const getNextUpgrade = (type) => {
+    if (!shopConfigs || !shopConfigs[type]) {
+      return null;
+    }
+
+    const upgrades = shopConfigs[type];
+    let currentLevel = 0;
+
+    if (type === 'shield') {
+      currentLevel = shieldLevel;
+    } else if (type === 'magnet') {
+      currentLevel = magnetLevel;
+    } else if (type === 'cannon') {
+      currentLevel = cannonLevel;
+    } else if (type === 'speed') {
+      currentLevel = speedLevel;
+    } else if (type === 'bullet_speed') {
+      currentLevel = bulletSpeedLevel;
+    } else if (type === 'head') {
+      currentLevel = headLevel;
+    } else if (type === 'health') {
+      currentLevel = healthLevel;
+    }
+
+    // Find the next upgrade level
+    // Ensure we're comparing numbers, not strings
+    const nextLevel = currentLevel + 1;
+    const nextUpgrade = upgrades.find(upgrade => Number(upgrade.level) === nextLevel);
+    
+    if (!nextUpgrade) {
+      return null; // Max level reached
+    }
+
+    return {
+      level: nextUpgrade.level,
+      item: `${type}${nextUpgrade.level}`,
+      cost: { xp: nextUpgrade.xpCost, stars: nextUpgrade.starsCost },
+      desc: nextUpgrade.description
+    };
+  };
+
+  if (loading) {
   return (
-    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)' }}>
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        style={{
+    <div style={{ 
+      display: 'flex', 
+        justifyContent: 'center',
+      alignItems: 'center', 
+        height: '100vh',
+        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+        color: '#33ffff',
+        fontSize: '24px',
+        fontFamily: 'monospace'
+      }}>
+        Cargando progreso...
+      </div>
+    );
+  }
+
+  // Header component with user info
+  const UserHeader = () => {
+    const game = gameRef.current;
+    const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
+    
+    // Compact styles for playing state
+    if (gameState === 'playing') {
+      const compactPadding = isMobile ? '4px 8px' : '6px 12px';
+      const compactFontSize = isMobile ? '11px' : '13px';
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '1px solid #33ffff',
+          padding: compactPadding,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
+          zIndex: 1000
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? '12px' : '20px', 
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff', fontWeight: 'bold' }}>
+              Nivel {game.level}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#33ffff' }}>
+              XP: {currentLevelXP}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#FFD700' }}>
+              ⭐ {currentLevelStars} / {game.starsNeeded}
+            </span>
+          </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #33ffff',
+                color: '#33ffff',
+                padding: isMobile ? '4px 8px' : '5px 10px',
+                fontSize: isMobile ? '9px' : '11px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Admin
+            </button>
+          )}
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+                  padding: isMobile ? '4px 8px' : '5px 10px',
+                  fontSize: isMobile ? '9px' : '11px',
+              cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            Salir
+          </button>
+        </div>
+        </div>
+      );
+    }
+    
+    // Mobile styles
+    const headerPadding = isMobile ? '8px 10px' : '15px 20px';
+    const labelFontSize = isMobile ? '8px' : '11px';
+    const valueFontSize = isMobile ? '12px' : '16px';
+    const gap = isMobile ? '8px' : '30px';
+    const iconSize = isMobile ? 14 : 18;
+    const iconTextSize = isMobile ? '10px' : '12px';
+    
+    if (isMobile) {
+      // Mobile layout: column
+      return (
+        <div style={{
+          width: '100%',
+          background: 'rgba(0, 0, 0, 0.95)',
+          borderBottom: '2px solid #33ffff',
+          padding: headerPadding,
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
+          zIndex: 1000,
+          gap: '8px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: gap, 
+            alignItems: 'center', 
+            flexWrap: 'wrap',
+            width: '100%'
+          }}>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {user?.username || 'Usuario'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {totalXP}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+                {totalStars}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+                {level}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+                {currentSeries}
+              </div>
+            </div>
+            {rebirthCount > 0 && (
+              <div>
+                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+                </div>
+              </div>
+            )}
+          </div>
+          {gameState === 'playing' && (
+            <div style={{ width: '100%' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
+                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255, 215, 0, 0.2)',
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
+                  height: '100%',
+                  background: '#FFD700',
+                  boxShadow: '0 0 10px #FFD700',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
+                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255, 80, 80, 0.2)',
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
+                  height: '100%',
+                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
+                  boxShadow: '0 0 10px #ff5050',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+            </div>
+          )}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'center', 
+            width: '100%'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              alignItems: 'center', 
+              flexWrap: 'wrap'
+          }}>
+            {shieldLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+              </div>
+            )}
+            {headLevel > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                  {headLevel === 2 ? 'Doble' : 'Triple'}
+                </span>
+              </div>
+            )}
+            {cannonLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
+                  Cañón {cannonLevel === 2 ? 'x2' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '4px 8px',
+                  fontSize: '10px',
+                  cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                Admin
+              </button>
+            )}
+          <button
+            onClick={onLogout}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ff3366',
+              color: '#ff3366',
+                  padding: '4px 8px',
+                  fontSize: '10px',
+              cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+                Salir
+          </button>
+          </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Desktop layout: original horizontal design
+    return (
+      <div style={{
+        width: '100%',
+        background: 'rgba(0, 0, 0, 0.95)',
+        borderBottom: '2px solid #33ffff',
+        padding: headerPadding,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
+        zIndex: 1000
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: gap, 
+          alignItems: 'center', 
+          flex: 1
+        }}>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              {user?.username || 'Usuario'}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              {totalXP}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+              {totalStars}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              {level}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+              {currentSeries}
+            </div>
+          </div>
+          {rebirthCount > 0 && (
+            <div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+              </div>
+            </div>
+          )}
+          {gameState === 'playing' && (
+            <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
+                Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                background: 'rgba(255, 215, 0, 0.2)',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
+                  height: '100%',
+                  background: '#FFD700',
+                  boxShadow: '0 0 10px #FFD700',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
+                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
+              </div>
+              <div style={{
+                width: '100%',
+                height: '8px',
+                background: 'rgba(255, 80, 80, 0.2)',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
+                  height: '100%',
+                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
+                  boxShadow: '0 0 10px #ff5050',
+                  transition: 'width 0.3s'
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
+          <div style={{ 
+            display: 'flex', 
+          gap: '12px', 
+          alignItems: 'center'
+          }}>
+            {shieldLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+              </div>
+            )}
+            {headLevel > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
+                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
+                  {headLevel === 2 ? 'Doble' : 'Triple'}
+                </span>
+              </div>
+            )}
+            {cannonLevel > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
+                  Cañón {cannonLevel === 2 ? 'x2' : ''}
+                </span>
+              </div>
+            )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #33ffff',
+                color: '#33ffff',
+                padding: '5px 10px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Admin
+            </button>
+          )}
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'transparent',
+            border: '1px solid #ff3366',
+            color: '#ff3366',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+            cursor: 'pointer',
+                  borderRadius: '3px',
+            transition: 'all 0.3s',
+                  marginLeft: '10px'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'transparent';
+          }}
+        >
+                Salir
+        </button>
+        </div>
+          </div>
+      </div>
+    );
+  };
+
+  // Show banned message if user is banned
+  if (isBanned) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+        color: '#ff3366',
+        fontSize: '24px',
+        fontFamily: 'monospace',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <h1 style={{ color: '#ff3366', margin: 0 }}>Cuenta Suspendida</h1>
+        <p style={{ color: '#888', fontSize: '16px' }}>
+          Tu cuenta ha sido suspendida. Por favor contacta al administrador.
+        </p>
+        <button
+          onClick={onLogout}
+          style={{
+            padding: '10px 20px',
+            background: 'transparent',
+            border: '2px solid #ff3366',
+            color: '#ff3366',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          Cerrar Sesión
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      height: '100vh',
+      background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+      color: '#33ffff',
+      fontFamily: 'monospace',
+      overflow: 'hidden'
+    }}>
+      {/* Admin Panel */}
+      {showAdminPanel && (
+        <AdminPanel onClose={() => {
+          setShowAdminPanel(false);
+          // Reload level configs after admin changes
+          if (isAdmin) {
+            loadLevelConfigs();
+          }
+        }} />
+      )}
+      
+      {/* Header siempre visible */}
+      <UserHeader />
+      
+      {/* Content area */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: gameState === 'playing' ? '0' : '20px',
+        overflow: gameState === 'playing' ? 'hidden' : 'auto',
+        position: 'relative',
+        width: '100%',
+        height: '100%'
+      }}>
+
+      {gameState === 'menu' && (
+        <div style={{ 
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: '20px',
+          width: '100%',
+          maxWidth: '1200px',
+          padding: '20px',
+          alignItems: isMobile ? 'center' : 'flex-start',
+          justifyContent: 'center'
+        }}>
+          {/* Left side: Main action buttons */}
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.7)',
+            padding: '30px',
+          borderRadius: '10px',
           border: '2px solid #33ffff',
-          borderRadius: '8px',
-          boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)'
-        }}
-      />
-      {/* Add other UI elements here */}
+            boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '0 0 400px'
+          }}>
+            <img 
+              src="/logo.png" 
+              alt="Neon Snake" 
+              style={{ 
+                width: '100%', 
+                maxWidth: '400px', 
+                height: 'auto',
+                marginBottom: '20px',
+                filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
+              }} 
+            />
+            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
+            Mueve el mouse/trackpad para controlar tu serpiente<br/>
+            Come puntos brillantes para ganar XP<br/>
+            ⭐ Recoge estrellas para avanzar de nivel
+          </p>
+            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
+          <button 
+            onClick={startGame}
+            style={{
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '15px 40px',
+                  fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #33ffff',
+              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+            }}
+          >
+            JUGAR
+          </button>
+          <button 
+            onClick={() => setGameState('shop')}
+            style={{
+              background: 'transparent',
+              border: '2px solid #ff00ff',
+              color: '#ff00ff',
+              padding: '15px 40px',
+                  fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #ff00ff',
+                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+                  flex: 1,
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 0, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+            }}
+          >
+            TIENDA
+          </button>
+            </div>
+          </div>
+
+          {/* Right side: Leaderboard */}
+          <div style={{ 
+            background: 'rgba(0, 0, 0, 0.7)',
+            padding: '25px',
+            borderRadius: '10px',
+            border: '2px solid #FFD700',
+            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? 'auto' : '400px',
+            flex: isMobile ? 'none' : '1'
+          }}>
+            <h2 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 20px #FFD700', 
+              textAlign: 'center',
+              marginBottom: '20px',
+              fontSize: '22px'
+            }}>
+              🏆 RANKING
+            </h2>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {leaderboard.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
+                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.map((entry, index) => (
+                      <tr 
+                        key={index}
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
+                        </td>
+                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
+                          {entry.username}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                          {entry.totalXp?.toLocaleString() || 0}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
+                          {entry.highestLevel || 1}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'shop' && (
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.95)',
+          padding: '30px',
+          borderRadius: '10px',
+          border: '3px solid #ff00ff',
+          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
+          maxWidth: '1400px',
+          width: '100%',
+          margin: '20px auto',
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto',
+          position: 'relative'
+        }}>
+          <button
+            onClick={() => setGameState('menu')}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'transparent',
+              border: '2px solid #33ffff',
+              color: '#33ffff',
+              padding: '8px 16px',
+              fontSize: '14px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+            }}
+          >
+            VOLVER
+          </button>
+          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
+            TIENDA
+          </h2>
+          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
+            XP Total: {totalXP} | ⭐ Total: {totalStars}
+          </p>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
+            {/* Escudo */}
+            {(() => {
+              const next = getNextUpgrade('shield');
+              const currentLevel = shieldLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #6495ed', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Shield size={36} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  {next ? (
+                    <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #6495ed',
+                          color: '#6495ed',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                            marginTop: 'auto'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Imán XP */}
+            {(() => {
+              const next = getNextUpgrade('magnet');
+              const currentLevel = magnetLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #00ff88', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Magnet size={36} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  {next ? (
+                    <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #00ff88',
+                          color: '#00ff88',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                            marginTop: 'auto'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Cañón */}
+            {(() => {
+              const next = getNextUpgrade('cannon');
+              const currentLevel = cannonLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #ffff00', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Sparkles size={36} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  {next ? (
+                    <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #ffff00',
+                          color: '#ffff00',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                            marginTop: 'auto'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Velocidad */}
+            {(() => {
+              const next = getNextUpgrade('speed');
+              const currentLevel = speedLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #ff3366', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Gauge size={36} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  {next ? (
+                    <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                      </p>
+                      <button 
+                        onClick={() => buyItem(next.item)}
+                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                        style={{
+                          background: 'transparent',
+                          border: '2px solid #ff3366',
+                          color: '#ff3366',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                          borderRadius: '5px',
+                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                          width: '100%',
+                            marginTop: 'auto'
+                        }}
+                      >
+                        COMPRAR NIVEL {next.level}
+                      </button>
+                    </>
+                  ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                      Nivel Máximo
+                    </p>
+                  )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Velocidad de Bala */}
+            {(() => {
+              const next = getNextUpgrade('bullet_speed');
+              const currentLevel = bulletSpeedLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #00ff00', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Sparkles size={36} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+          <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+            style={{
+              background: 'transparent',
+                            border: '2px solid #00ff00',
+                            color: '#00ff00',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+          </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
+                      </p>
+                    )}
+          </div>
+                </div>
+              );
+            })()}
+
+            {/* Puntos de Vida */}
+            {(() => {
+              const next = getNextUpgrade('health');
+              const currentLevel = healthLevel;
+              return (
+                <div style={{ 
+                  border: '2px solid #ff5050', 
+                  padding: '15px', 
+                  borderRadius: '10px',
+                  background: currentLevel > 0 ? 'rgba(255, 80, 80, 0.2)' : 'transparent',
+                  minWidth: '200px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
+                }}>
+                  <Heart size={36} style={{ color: '#ff5050', display: 'block', margin: '0 auto' }} />
+                  <h3 style={{ color: '#ff5050', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
+                    VIDA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''} ({2 + currentLevel * 2} ❤️)
+                  </h3>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {next ? (
+                      <>
+                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
+                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
+                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        </p>
+          <button 
+                          onClick={() => buyItem(next.item)}
+                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+            style={{
+              background: 'transparent',
+                            border: '2px solid #ff5050',
+                            color: '#ff5050',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                            borderRadius: '5px',
+                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                            width: '100%',
+                            marginTop: 'auto'
+                          }}
+                        >
+                          COMPRAR NIVEL {next.level}
+          </button>
+                      </>
+                    ) : (
+                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
+                        Nivel Máximo
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {gameState === 'levelIntro' && (() => {
+        const introMessage = getLevelIntroMessage(level, levelConfigs);
+        if (!introMessage) return null;
+        
+        return (
+        <div style={{ 
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: '600px',
+          padding: '20px'
+        }}>
+          <div style={{ 
+            textAlign: 'center',
+            background: 'rgba(0, 0, 0, 0.95)',
+            padding: '40px',
+            borderRadius: '10px',
+            border: '3px solid #33ffff',
+            boxShadow: '0 0 40px rgba(51, 255, 255, 0.5)',
+            width: '100%'
+          }}>
+            {/* Título del nivel */}
+            <h1 style={{ 
+              color: '#33ffff', 
+              textShadow: '0 0 20px #33ffff', 
+              marginBottom: '10px',
+              fontSize: isMobile ? '28px' : '36px'
+            }}>
+              NIVEL {level}
+            </h1>
+            <h2 style={{ 
+              color: '#ff00ff', 
+              textShadow: '0 0 15px #ff00ff', 
+              marginBottom: '30px',
+              fontSize: isMobile ? '20px' : '24px',
+              fontStyle: 'italic'
+            }}>
+              "{introMessage.title}"
+            </h2>
+
+            {/* Objetivo */}
+            <div style={{ 
+              marginBottom: '25px',
+              padding: '15px',
+              background: 'rgba(51, 255, 255, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #33ffff'
+            }}>
+              <p style={{ 
+                color: '#33ffff', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '5px'
+              }}>
+                OBJETIVO:
+              </p>
+              <p style={{ 
+                color: '#ffffff', 
+                fontSize: isMobile ? '18px' : '20px'
+              }}>
+                Recolecta {introMessage.objective} estrellas ⭐
+              </p>
+            </div>
+
+            {/* Peligros */}
+            <div style={{ 
+              marginBottom: '25px',
+              padding: '15px',
+              background: 'rgba(255, 0, 0, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #ff3366'
+            }}>
+              <p style={{ 
+                color: '#ff3366', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '10px'
+              }}>
+                PELIGROS:
+              </p>
+              {introMessage.dangers.map((danger, idx) => (
+                <p key={idx} style={{ 
+                  color: '#ffaaaa', 
+                  fontSize: isMobile ? '14px' : '16px',
+                  marginBottom: '5px',
+                  textAlign: 'left'
+                }}>
+                  • {danger}
+                </p>
+              ))}
+            </div>
+
+            {/* Consejo */}
+            <div style={{ 
+              marginBottom: '30px',
+              padding: '15px',
+              background: 'rgba(255, 215, 0, 0.1)',
+              borderRadius: '5px',
+              border: '1px solid #FFD700'
+            }}>
+              <p style={{ 
+                color: '#FFD700', 
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: 'bold',
+                marginBottom: '10px'
+              }}>
+                CONSEJO:
+              </p>
+              <p style={{ 
+                color: '#ffffaa', 
+                fontSize: isMobile ? '14px' : '16px',
+                lineHeight: '1.5',
+                textAlign: 'left'
+              }}>
+                {introMessage.tip}
+              </p>
+            </div>
+
+            {/* Botón COMENZAR */}
+            <button 
+              onClick={beginLevel}
+              style={{
+                background: 'transparent',
+                border: '3px solid #33ffff',
+                color: '#33ffff',
+                padding: '15px 50px',
+                fontSize: isMobile ? '18px' : '22px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #33ffff',
+                boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
+                transition: 'all 0.3s',
+                width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                e.target.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              COMENZAR
+            </button>
+          </div>
+        </div>
+        );
+      })()}
+
+      {gameState === 'levelComplete' && (
+        <div style={{ 
+          display: 'flex',
+          gap: '30px',
+          width: '100%',
+          maxWidth: '1200px',
+          padding: '20px',
+          alignItems: 'flex-start'
+        }}>
+          {/* Left side: Level complete info */}
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.9)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #00ff88',
+          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
+            zIndex: 100,
+            flex: '0 0 400px'
+        }}>
+          <Sparkles size={64} style={{ color: '#00ff88' }} />
+          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
+            ¡NIVEL COMPLETADO!
+          </h2>
+          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
+          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <button 
+            onClick={nextLevel}
+            style={{
+              background: 'transparent',
+              border: '2px solid #00ff88',
+              color: '#00ff88',
+              padding: '15px 40px',
+                fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #00ff88',
+                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+            }}
+          >
+            SIGUIENTE NIVEL
+          </button>
+            <button 
+              onClick={() => {
+                setGameState('playing');
+                setShopOpen(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #ff00ff',
+                color: '#ff00ff',
+                padding: '15px 40px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #ff00ff',
+                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              IR A LA TIENDA
+          </button>
+            </div>
+          </div>
+
+          {/* Right side: Leaderboard */}
+          <div style={{ 
+            background: 'rgba(0, 0, 0, 0.7)',
+            padding: '30px',
+            borderRadius: '10px',
+            border: '2px solid #FFD700',
+            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+            flex: '1',
+            minWidth: '300px'
+          }}>
+            <h2 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 20px #FFD700', 
+              textAlign: 'center',
+              marginBottom: '20px',
+              fontSize: '24px'
+            }}>
+              🏆 RANKING
+            </h2>
+            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              {leaderboard.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
+                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
+                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>XP</th>
+                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.map((entry, index) => (
+                      <tr 
+                        key={index}
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '10px', color: index < 3 ? '#FFD700' : '#33ffff' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
+                        </td>
+                        <td style={{ padding: '10px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal' }}>
+                          {entry.username}
+                        </td>
+                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                          {entry.totalXp?.toLocaleString() || 0}
+                        </td>
+                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
+                          {entry.highestLevel || 1}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'gameComplete' && victoryData && (
+        <div style={{ 
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: '800px',
+          padding: '40px',
+          gap: '30px'
+        }}>
+          {/* Pantalla de Victoria */}
+          <div style={{ 
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
+            padding: '60px',
+            borderRadius: '20px',
+            border: '3px solid #FFD700',
+            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
+            width: '100%'
+          }}>
+            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
+            <h1 style={{ 
+              color: '#FFD700', 
+              textShadow: '0 0 30px #FFD700, 0 0 50px #ff00ff',
+              fontSize: '48px',
+              marginBottom: '20px',
+              fontWeight: 'bold',
+              letterSpacing: '2px'
+            }}>
+              ¡FELICITACIONES!
+            </h1>
+            <h2 style={{ 
+              color: '#00ff88', 
+              textShadow: '0 0 20px #00ff88',
+              fontSize: '32px',
+              marginBottom: '20px'
+            }}>
+              ¡Completaste los 25 niveles!
+            </h2>
+            
+            {/* Serie Actual */}
+            <div style={{ 
+              fontSize: '20px', 
+              color: '#ff00ff', 
+              marginBottom: '30px',
+              textShadow: '0 0 10px #ff00ff'
+            }}>
+              ⚡ Serie {victoryData.series} Completada ⚡
+            </div>
+            
+            {/* Puntuación */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '30px',
+              borderRadius: '15px',
+              marginBottom: '30px',
+              border: '2px solid #33ffff'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Tu Puntuación Final
+              </div>
+              <div style={{ 
+                fontSize: '56px', 
+                color: '#33ffff', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #33ffff',
+                marginBottom: '20px'
+              }}>
+                {victoryData.score.toLocaleString()} XP
+              </div>
+              
+              {victoryData.isNewRecord ? (
+                <div style={{
+                  fontSize: '28px',
+                  color: '#FFD700',
+                  textShadow: '0 0 20px #FFD700',
+                  fontWeight: 'bold',
+                  marginTop: '15px'
+                }}>
+                  ✨ ¡NUEVO RÉCORD PERSONAL! ✨
+                </div>
+              ) : (
+                <div style={{ fontSize: '18px', color: '#888', marginTop: '10px' }}>
+                  Tu récord anterior: {victoryData.previousBestScore.toLocaleString()} XP
+                </div>
+              )}
+            </div>
+            
+            {/* Posición en Ranking */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              padding: '25px',
+              borderRadius: '15px',
+              border: '2px solid #FFD700'
+            }}>
+              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
+                Ranking Mundial
+              </div>
+              <div style={{ 
+                fontSize: '48px', 
+                color: '#FFD700', 
+                fontWeight: 'bold',
+                textShadow: '0 0 20px #FFD700'
+              }}>
+                {victoryData.position === 1 && '🥇 '}
+                {victoryData.position === 2 && '🥈 '}
+                {victoryData.position === 3 && '🥉 '}
+                Posición #{victoryData.position}
+              </div>
+            </div>
+            
+            {/* Caja de Rebirth */}
+            <div style={{
+              background: 'rgba(255, 0, 0, 0.2)',
+              padding: '25px',
+              borderRadius: '15px',
+              marginTop: '30px',
+              border: '2px solid #ff3366',
+              boxShadow: '0 0 20px rgba(255, 51, 102, 0.4)'
+            }}>
+              <div style={{ 
+                marginBottom: '15px',
+                filter: 'drop-shadow(0 0 10px rgba(255, 51, 102, 0.8))'
+              }}>
+                <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '48px', height: '48px' }} />
+              </div>
+              <h3 style={{ 
+                color: '#ff3366', 
+                fontSize: '24px',
+                marginBottom: '15px',
+                textShadow: '0 0 15px #ff3366'
+              }}>
+                ¿Querés mejorar tu marca?
+              </h3>
+              <p style={{ 
+                color: '#fff', 
+                fontSize: '16px',
+                marginBottom: '10px',
+                lineHeight: '1.6'
+              }}>
+                Hacé <strong>Rebirth</strong> para volver a nivel 1
+              </p>
+              <p style={{ 
+                color: '#00ff88', 
+                fontSize: '18px',
+                marginBottom: '20px',
+                fontWeight: 'bold',
+                textShadow: '0 0 10px #00ff88'
+              }}>
+                ✨ Ventaja: Todos los upgrades empiezan en nivel {rebirthCount + 1} ✨
+              </p>
+            </div>
+            
+            {/* Botones */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '20px', 
+              justifyContent: 'center',
+              marginTop: '40px',
+              flexWrap: 'wrap'
+            }}>
+              <button 
+                onClick={handleRebirth}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #ff3366',
+                  color: '#ff3366',
+                  padding: '20px 40px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #ff3366',
+                  boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 51, 102, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                <span style={{ fontSize: '28px' }}>♻️</span> REBIRTH
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameState('menu');
+                  setVictoryData(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '20px 50px',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  borderRadius: '10px',
+                  textShadow: '0 0 10px #FFD700',
+                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
+                  transition: 'all 0.3s',
+                  fontWeight: 'bold'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 215, 0, 0.3)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                VOLVER AL MENÚ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === 'gameOver' && (
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.7)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #ff3366',
+          boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)'
+        }}>
+          <h2 style={{ color: '#ff3366', textShadow: '0 0 20px #ff3366' }}>
+            GAME OVER
+          </h2>
+          <p style={{ fontSize: '20px' }}>Nivel alcanzado: {level}</p>
+          <p style={{ fontSize: '20px' }}>XP Total: {totalXP}</p>
+          <button 
+            onClick={() => {
+              // Save progress before returning to menu
+              // NO resetear el nivel - mantener el nivel alcanzado
+              saveUserProgress();
+              setGameState('menu');
+            }}
+            style={{
+              background: 'transparent',
+              border: '2px solid #ff3366',
+              color: '#ff3366',
+              padding: '15px 40px',
+              fontSize: '24px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #ff3366',
+              marginTop: '20px'
+            }}
+          >
+            VOLVER AL MENÚ
+          </button>
+        </div>
+      )}
+
+      {gameState === 'playing' && (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+          backgroundColor: '#0a0a0a'
+        }}>
+          <canvas 
+            ref={canvasRef} 
+            width={CANVAS_WIDTH} 
+            height={CANVAS_HEIGHT}
+            style={{
+              width: isMobile ? '100%' : '100%',
+              height: isMobile ? '100%' : '100%',
+              border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
+              boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
+              borderRadius: '0',
+              display: 'block',
+              imageRendering: 'pixelated',
+              touchAction: 'none', // Prevent default touch behaviors
+              WebkitTouchCallout: 'none', // Prevent iOS callout
+              WebkitUserSelect: 'none', // Prevent text selection
+              userSelect: 'none'
+            }}
+          />
+          
+          {/* Mobile Controls */}
+          {isMobile && gameState === 'playing' && (
+            <>
+              {/* Joystick - Bottom Right */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '20px',
+                  right: '20px',
+                  width: '120px',
+                  height: '120px',
+                  pointerEvents: 'none',
+                  zIndex: 100
+                }}
+              >
+                {/* Joystick Base */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    background: 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid rgba(51, 255, 255, 0.5)',
+                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.3)',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)'
+                  }}
+                />
+                {/* Joystick Handle */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '50%',
+                    background: joystickActive 
+                      ? 'rgba(51, 255, 255, 0.9)' 
+                      : 'rgba(51, 255, 255, 0.4)',
+                    border: '2px solid #33ffff',
+                    boxShadow: joystickActive 
+                      ? '0 0 20px rgba(51, 255, 255, 0.8)' 
+                      : '0 0 10px rgba(51, 255, 255, 0.4)',
+                    left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.x * 35}px`
+                      : '50%',
+                    top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
+                      ? `${60 + joystickDirection.y * 35}px`
+                      : '50%',
+                    transform: 'translate(-50%, -50%)',
+                    transition: joystickActive ? 'none' : 'all 0.2s ease-out',
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Shoot Button - Bottom Left */}
+              {cannonLevel > 0 && (
+                <button
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onTouchCancel={(e) => {
+                    e.stopPropagation();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  style={{
+                    position: 'absolute',
+                    bottom: '25px',
+                    left: '25px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 51, 102, 0.6)',
+                    border: '2px solid rgba(255, 51, 102, 0.8)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+                    zIndex: 100,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    touchAction: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    transition: 'all 0.1s ease',
+                    fontSize: '0',
+                    padding: '0'
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (!isShootingRef.current && shootBulletRef.current) {
+                      isShootingRef.current = true;
+                      shootBulletRef.current(); // Disparo inmediato
+                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onMouseLeave={(e) => {
+                    if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  title="Disparar (mantener para auto-fire)"
+                />
+              )}
+            </>
+          )}
+          
+          {shopOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(0, 0, 0, 0.95)',
+              padding: '40px',
+              borderRadius: '10px',
+              border: '3px solid #ff00ff',
+              boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
+              zIndex: 1000,
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}>
+              <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center' }}>
+                TIENDA
+              </h2>
+              <p style={{ fontSize: '20px', marginBottom: '30px', textAlign: 'center' }}>
+                XP Total: {totalXP} | ⭐ Total: {totalStars}
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+                {/* Escudo */}
+                {(() => {
+                  const next = getNextUpgrade('shield');
+                  const currentLevel = shieldLevel;
+                  return (
+                <div style={{ 
+                  border: '2px solid #6495ed', 
+                      padding: '20px', 
+                  borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Shield size={48} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                      border: '2px solid #6495ed',
+                      color: '#6495ed',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Imán XP */}
+                {(() => {
+                  const next = getNextUpgrade('magnet');
+                  const currentLevel = magnetLevel;
+                  return (
+                    <div style={{ 
+                      border: '2px solid #00ff88', 
+                      padding: '20px', 
+                      borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Magnet size={48} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                              border: '2px solid #00ff88',
+                              color: '#00ff88',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+
+                {/* Cañón */}
+                {(() => {
+                  const next = getNextUpgrade('cannon');
+                  const currentLevel = cannonLevel;
+                  return (
+                <div style={{ 
+                      border: '2px solid #ffff00', 
+                      padding: '20px', 
+                  borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Sparkles size={48} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                              border: '2px solid #ffff00',
+                              color: '#ffff00',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+
+                {/* Velocidad */}
+                {(() => {
+                  const next = getNextUpgrade('speed');
+                  const currentLevel = speedLevel;
+                  return (
+                <div style={{ 
+                      border: '2px solid #ff3366', 
+                      padding: '20px', 
+                  borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Gauge size={48} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                              border: '2px solid #ff3366',
+                              color: '#ff3366',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+
+                {/* Velocidad de Bala */}
+                {(() => {
+                  const next = getNextUpgrade('bullet_speed');
+                  const currentLevel = bulletSpeedLevel;
+                  return (
+                <div style={{ 
+                      border: '2px solid #00ff00', 
+                      padding: '20px', 
+                  borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                              border: '2px solid #00ff00',
+                              color: '#00ff00',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+
+                {/* Puntos de Vida */}
+                {(() => {
+                  const next = getNextUpgrade('health');
+                  const currentLevel = healthLevel;
+                  return (
+                    <div style={{ 
+                      border: '2px solid #ff5050', 
+                      padding: '20px', 
+                      borderRadius: '10px',
+                      background: currentLevel > 0 ? 'rgba(255, 80, 80, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Heart size={48} style={{ color: '#ff5050', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#ff5050', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        VIDA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''} ({2 + currentLevel * 2} ❤️)
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                            style={{
+                              background: 'transparent',
+                              border: '2px solid #ff5050',
+                              color: '#ff5050',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                              borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                              width: '100%',
+                              marginTop: '10px'
+                            }}
+                          >
+                            COMPRAR NIVEL {next.level}
+                          </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+              </div>
+
+              <button 
+                onClick={() => setShopOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '15px 40px',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  display: 'block',
+                  margin: '0 auto'
+                }}
+              >
+                CERRAR [J]
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
     </div>
   );
 };

@@ -53,6 +53,7 @@ module.exports = {
       'pre-deploy': 'echo "🚀 Starting deployment..."',
       
       // Comandos a ejecutar DESPUÉS de hacer git pull
+      // Estos comandos se ejecutan desde el directorio del release (ej: /home/ubuntu/www/antonio/neonsnake/releases/YYYYMMDDHHmmss)
       'post-deploy': [
         // Create shared directories if they don't exist
         'echo "📁 Setting up shared directories..."',
@@ -63,7 +64,7 @@ module.exports = {
         'echo "🔗 Linking .env file..."',
         'ln -sf ../../shared/.env api/.env',
         
-        // Frontend: install dependencies and build (limpiar dist primero)
+        // Frontend: install dependencies and build
         'echo "📦 Building frontend..."',
         'cd front && rm -rf dist && npm install --production=false && npm run build',
         
@@ -73,11 +74,11 @@ module.exports = {
         
         // API: run migrations (with error handling)
         'echo "🔄 Running migrations..."',
-        'cd api && npm run migrate || (echo "❌ Migration failed!" && exit 1)',
+        'npm run migrate || (echo "❌ Migration failed!" && exit 1)',
         
-        // Restart PM2 using the root ecosystem file
+        // Restart PM2 app specifically (desde cualquier directorio funciona)
         'echo "🔄 Restarting PM2..."',
-        'cd .. && pm2 reload ecosystem.config.cjs --env production',
+        'pm2 restart viborita-api',
         
         // Save PM2 state
         'pm2 save',
