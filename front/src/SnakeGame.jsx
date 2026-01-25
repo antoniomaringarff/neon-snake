@@ -167,6 +167,410 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
   const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
   const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
+  const [selectedSkin, setSelectedSkin] = useState('rainbow'); // Skin actual
+  const [unlockedSkins, setUnlockedSkins] = useState(['rainbow']); // Skins desbloqueados
+  const [showSkinSelector, setShowSkinSelector] = useState(false); // Mostrar selector de skins
+  
+  // Definición de skins disponibles
+  const SKINS = {
+    rainbow: {
+      name: 'Arcoíris',
+      description: 'El clásico degradado multicolor',
+      price: 0,
+      colors: [
+        { r: 0, g: 255, b: 0 },      // Verde brillante
+        { r: 128, g: 255, b: 0 },    // Verde-amarillo
+        { r: 255, g: 255, b: 0 },    // Amarillo
+        { r: 255, g: 200, b: 0 },    // Amarillo-naranja
+        { r: 255, g: 136, b: 0 },    // Naranja
+        { r: 255, g: 100, b: 100 },  // Naranja-rosa
+        { r: 255, g: 0, b: 255 }     // Rosa/Magenta
+      ]
+    },
+    neon_blue: {
+      name: 'Neón Azul',
+      description: 'Brillo cibernético azul',
+      price: 50,
+      colors: [
+        { r: 0, g: 255, b: 255 },    // Cyan
+        { r: 0, g: 200, b: 255 },
+        { r: 0, g: 150, b: 255 },
+        { r: 0, g: 100, b: 255 },
+        { r: 50, g: 50, b: 255 },
+        { r: 100, g: 0, b: 255 },
+        { r: 150, g: 0, b: 200 }     // Púrpura
+      ]
+    },
+    fire: {
+      name: 'Fuego',
+      description: 'Llamas ardientes',
+      price: 75,
+      colors: [
+        { r: 255, g: 255, b: 100 },  // Amarillo claro
+        { r: 255, g: 230, b: 0 },    // Amarillo
+        { r: 255, g: 180, b: 0 },    // Naranja claro
+        { r: 255, g: 120, b: 0 },    // Naranja
+        { r: 255, g: 60, b: 0 },     // Naranja rojizo
+        { r: 255, g: 0, b: 0 },      // Rojo
+        { r: 180, g: 0, b: 0 }       // Rojo oscuro
+      ]
+    },
+    ice: {
+      name: 'Hielo',
+      description: 'Frío glacial',
+      price: 75,
+      colors: [
+        { r: 255, g: 255, b: 255 },  // Blanco
+        { r: 200, g: 240, b: 255 },
+        { r: 150, g: 220, b: 255 },
+        { r: 100, g: 200, b: 255 },
+        { r: 50, g: 180, b: 255 },
+        { r: 0, g: 150, b: 255 },
+        { r: 0, g: 100, b: 200 }     // Azul hielo
+      ]
+    },
+    toxic: {
+      name: 'Tóxico',
+      description: 'Veneno radiactivo',
+      price: 100,
+      colors: [
+        { r: 150, g: 255, b: 0 },    // Verde lima
+        { r: 100, g: 255, b: 50 },
+        { r: 50, g: 255, b: 100 },
+        { r: 0, g: 200, b: 100 },
+        { r: 0, g: 150, b: 80 },
+        { r: 50, g: 100, b: 50 },
+        { r: 30, g: 80, b: 30 }      // Verde oscuro
+      ]
+    },
+    galaxy: {
+      name: 'Galaxia',
+      description: 'Colores del cosmos',
+      price: 150,
+      colors: [
+        { r: 255, g: 100, b: 255 },  // Rosa
+        { r: 200, g: 50, b: 255 },   // Púrpura claro
+        { r: 150, g: 0, b: 255 },    // Violeta
+        { r: 100, g: 0, b: 200 },
+        { r: 50, g: 0, b: 150 },
+        { r: 0, g: 50, b: 150 },
+        { r: 0, g: 100, b: 200 }     // Azul espacial
+      ]
+    },
+    gold: {
+      name: 'Oro',
+      description: 'Lujo dorado',
+      price: 200,
+      colors: [
+        { r: 255, g: 255, b: 150 },  // Dorado claro
+        { r: 255, g: 230, b: 100 },
+        { r: 255, g: 215, b: 0 },    // Oro
+        { r: 230, g: 190, b: 0 },
+        { r: 200, g: 160, b: 0 },
+        { r: 180, g: 140, b: 0 },
+        { r: 150, g: 120, b: 0 }     // Bronce
+      ]
+    },
+    shadow: {
+      name: 'Sombra',
+      description: 'Oscuridad pura',
+      price: 250,
+      colors: [
+        { r: 80, g: 80, b: 100 },    // Gris azulado
+        { r: 60, g: 60, b: 80 },
+        { r: 50, g: 50, b: 70 },
+        { r: 40, g: 40, b: 60 },
+        { r: 30, g: 30, b: 50 },
+        { r: 20, g: 20, b: 40 },
+        { r: 10, g: 10, b: 30 }      // Casi negro
+      ]
+    },
+    unicorn: {
+      name: 'Unicornio',
+      description: 'Mágico y brillante',
+      price: 300,
+      colors: [
+        { r: 255, g: 182, b: 193 },  // Rosa pastel
+        { r: 255, g: 218, b: 185 },  // Melocotón
+        { r: 255, g: 255, b: 200 },  // Amarillo pastel
+        { r: 200, g: 255, b: 200 },  // Verde pastel
+        { r: 200, g: 220, b: 255 },  // Azul pastel
+        { r: 220, g: 200, b: 255 },  // Lavanda
+        { r: 255, g: 200, b: 255 }   // Rosa lavanda
+      ]
+    },
+    matrix: {
+      name: 'Matrix',
+      description: 'Código verde digital',
+      price: 500,
+      colors: [
+        { r: 0, g: 255, b: 0 },      // Verde brillante
+        { r: 0, g: 230, b: 0 },
+        { r: 0, g: 200, b: 0 },
+        { r: 0, g: 170, b: 0 },
+        { r: 0, g: 140, b: 0 },
+        { r: 0, g: 110, b: 0 },
+        { r: 0, g: 80, b: 0 }        // Verde oscuro
+      ]
+    },
+    spiderman: {
+      name: 'Spider-Man',
+      description: '¡Dispara telarañas! 🕷️',
+      price: 750,
+      special: 'web', // Efecto especial: telarañas en vez de balas
+      colors: [
+        { r: 255, g: 0, b: 0 },      // Rojo Spider-Man
+        { r: 220, g: 0, b: 20 },
+        { r: 180, g: 0, b: 40 },
+        { r: 0, g: 50, b: 150 },     // Azul Spider-Man
+        { r: 0, g: 30, b: 120 },
+        { r: 0, g: 20, b: 100 },
+        { r: 0, g: 10, b: 80 }       // Azul oscuro
+      ]
+    },
+    venom: {
+      name: 'Venom',
+      description: 'Simbionte oscuro 🖤',
+      price: 800,
+      special: 'venom', // Efecto especial: tentáculos negros
+      colors: [
+        { r: 30, g: 30, b: 30 },     // Negro
+        { r: 20, g: 20, b: 25 },
+        { r: 15, g: 15, b: 20 },
+        { r: 10, g: 10, b: 15 },
+        { r: 5, g: 5, b: 10 },
+        { r: 255, g: 255, b: 255 },  // Detalles blancos (ojos/dientes)
+        { r: 200, g: 200, b: 200 }
+      ]
+    },
+    captain_america: {
+      name: 'Capitán América',
+      description: '¡Lanza el escudo! 🛡️',
+      price: 750,
+      special: 'shield', // Efecto especial: escudo como proyectil
+      mask: 'captain', // Máscara especial
+      colors: [
+        { r: 0, g: 80, b: 180 },     // Azul Capitán
+        { r: 0, g: 60, b: 150 },
+        { r: 255, g: 255, b: 255 },  // Blanco
+        { r: 220, g: 220, b: 220 },
+        { r: 180, g: 0, b: 0 },      // Rojo
+        { r: 150, g: 0, b: 0 },
+        { r: 0, g: 40, b: 120 }      // Azul oscuro
+      ]
+    },
+    thor: {
+      name: 'Thor',
+      description: '¡El poder del trueno! ⚡',
+      price: 850,
+      special: 'hammer', // Efecto especial: Mjolnir con rayos
+      mask: 'thor', // Casco vikingo
+      colors: [
+        { r: 200, g: 200, b: 220 },  // Plateado/gris claro
+        { r: 150, g: 150, b: 180 },
+        { r: 100, g: 100, b: 140 },
+        { r: 180, g: 0, b: 0 },      // Capa roja
+        { r: 150, g: 0, b: 0 },
+        { r: 50, g: 50, b: 80 },
+        { r: 30, g: 30, b: 60 }      // Azul oscuro
+      ]
+    },
+    hulk: {
+      name: 'Hulk',
+      description: '¡HULK APLASTA! 💚',
+      price: 800,
+      special: 'fist', // Efecto especial: puños verdes
+      mask: 'hulk', // Pelo negro despeinado
+      colors: [
+        { r: 100, g: 200, b: 50 },   // Verde claro Hulk
+        { r: 80, g: 180, b: 40 },
+        { r: 60, g: 160, b: 30 },
+        { r: 50, g: 140, b: 25 },
+        { r: 40, g: 120, b: 20 },
+        { r: 30, g: 100, b: 15 },
+        { r: 20, g: 80, b: 10 }      // Verde oscuro
+      ]
+    },
+    harry_potter: {
+      name: 'Harry Potter',
+      description: '¡Expelliarmus! ⚡🪄',
+      price: 900,
+      special: 'spell', // Efecto especial: hechizos azul/blanco
+      mask: 'harry', // Pelo, anteojos, capa y bufanda
+      colors: [
+        { r: 116, g: 0, b: 1 },      // Rojo Gryffindor
+        { r: 148, g: 107, b: 45 },   // Dorado
+        { r: 116, g: 0, b: 1 },      // Rojo
+        { r: 148, g: 107, b: 45 },   // Dorado
+        { r: 30, g: 30, b: 30 },     // Negro (capa)
+        { r: 20, g: 20, b: 20 },
+        { r: 10, g: 10, b: 10 }
+      ]
+    },
+    stormtrooper: {
+      name: 'Stormtrooper',
+      description: '¡Por el Imperio! 🤖',
+      price: 800,
+      special: 'red_blaster', // Rayos láser rojos
+      mask: 'stormtrooper',
+      colors: [
+        { r: 255, g: 255, b: 255 },  // Blanco
+        { r: 240, g: 240, b: 240 },
+        { r: 220, g: 220, b: 220 },
+        { r: 200, g: 200, b: 200 },
+        { r: 30, g: 30, b: 30 },     // Negro (detalles)
+        { r: 20, g: 20, b: 20 },
+        { r: 10, g: 10, b: 10 }
+      ]
+    },
+    darth_vader: {
+      name: 'Darth Vader',
+      description: '¡Yo soy tu padre! ⚫',
+      price: 950,
+      special: 'sith_laser', // Rayos láser rojos
+      mask: 'vader',
+      colors: [
+        { r: 20, g: 20, b: 20 },     // Negro
+        { r: 15, g: 15, b: 15 },
+        { r: 10, g: 10, b: 10 },
+        { r: 5, g: 5, b: 5 },
+        { r: 180, g: 0, b: 0 },      // Rojo (sable)
+        { r: 150, g: 0, b: 0 },
+        { r: 120, g: 0, b: 0 }
+      ]
+    },
+    homer_simpson: {
+      name: 'Homero Simpson',
+      description: '¡Mmm... rosquillas! 🍩',
+      price: 850,
+      special: 'donut', // Dispara rosquillas
+      mask: 'homer',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 255, b: 255 },  // Blanco (chomba)
+        { r: 250, g: 250, b: 250 },  // Blanco
+        { r: 245, g: 245, b: 245 },  // Blanco
+        { r: 70, g: 130, b: 180 },   // Azul (pantalón)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 }    // Azul oscuro
+      ]
+    },
+    bart_simpson: {
+      name: 'Bart Simpson',
+      description: '¡Ay caramba! 🪨',
+      price: 800,
+      special: 'slingshot', // Dispara rocas con gomera
+      mask: 'bart',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 140, b: 0 },    // Naranja (remera)
+        { r: 255, g: 130, b: 0 },    // Naranja
+        { r: 250, g: 120, b: 0 },    // Naranja
+        { r: 70, g: 130, b: 180 },   // Azul (short)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 }    // Azul
+      ]
+    },
+    lisa_simpson: {
+      name: 'Lisa Simpson',
+      description: '¡El conocimiento es poder! 📚',
+      price: 800,
+      special: 'book', // Dispara libros
+      mask: 'lisa',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 100, b: 100 },  // Rojo (vestido)
+        { r: 250, g: 90, b: 90 },    // Rojo
+        { r: 245, g: 80, b: 80 },    // Rojo
+        { r: 240, g: 70, b: 70 },    // Rojo
+        { r: 235, g: 60, b: 60 },    // Rojo
+        { r: 230, g: 50, b: 50 }     // Rojo oscuro
+      ]
+    },
+    maggie_simpson: {
+      name: 'Maggie Simpson',
+      description: '¡Chup chup! 🍼',
+      price: 750,
+      special: 'pacifier', // Dispara chupetes
+      mask: 'maggie',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 100, g: 180, b: 255 },  // Celeste (ropa de bebé)
+        { r: 90, g: 170, b: 250 },   // Celeste
+        { r: 80, g: 160, b: 245 },   // Celeste
+        { r: 70, g: 150, b: 240 },   // Celeste
+        { r: 60, g: 140, b: 235 },   // Celeste
+        { r: 50, g: 130, b: 230 }    // Celeste
+      ]
+    },
+    minion: {
+      name: 'Minion',
+      description: '¡Banana! 🍌',
+      price: 800,
+      special: 'banana', // Dispara bananas
+      mask: 'minion',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Minion
+        { r: 255, g: 210, b: 10 },   // Amarillo
+        { r: 250, g: 200, b: 5 },    // Amarillo
+        { r: 70, g: 130, b: 180 },   // Azul (overol)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 },   // Azul
+        { r: 55, g: 100, b: 150 }    // Azul oscuro
+      ]
+    },
+    iron_man: {
+      name: 'Iron Man',
+      description: '¡Yo soy Iron Man! 🤖',
+      price: 900,
+      special: 'repulsor', // Rayos repulsores
+      mask: 'ironman',
+      colors: [
+        { r: 180, g: 0, b: 0 },      // Rojo metálico
+        { r: 160, g: 0, b: 0 },
+        { r: 255, g: 200, b: 50 },   // Dorado
+        { r: 240, g: 180, b: 40 },
+        { r: 180, g: 0, b: 0 },      // Rojo
+        { r: 255, g: 200, b: 50 },   // Dorado
+        { r: 160, g: 0, b: 0 }       // Rojo oscuro
+      ]
+    },
+    marge_simpson: {
+      name: 'Marge Simpson',
+      description: '¡Lanza chuletas! 🥩',
+      price: 850,
+      special: 'pork_chop', // Dispara chuletas
+      mask: 'marge',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 0, g: 100, b: 200 },    // Verde azulado (pelo)
+        { r: 0, g: 90, b: 190 },     // Verde azulado
+        { r: 0, g: 80, b: 180 },     // Verde azulado
+        { r: 255, g: 255, b: 255 },  // Blanco (vestido)
+        { r: 250, g: 250, b: 250 },  // Blanco
+        { r: 245, g: 245, b: 245 }   // Blanco
+      ]
+    },
+    gandalf: {
+      name: 'Gandalf',
+      description: '¡Lanza hechizos blancos! ⚪✨',
+      price: 950,
+      special: 'white_spell', // Hechizos blancos tipo balas
+      mask: 'gandalf',
+      colors: [
+        { r: 200, g: 200, b: 200 },  // Gris claro (túnica)
+        { r: 180, g: 180, b: 180 },  // Gris
+        { r: 160, g: 160, b: 160 },  // Gris
+        { r: 140, g: 140, b: 140 },  // Gris
+        { r: 255, g: 255, b: 255 },  // Blanco (barba)
+        { r: 240, g: 240, b: 240 },  // Blanco
+        { r: 220, g: 220, b: 220 }   // Blanco
+      ]
+    }
+  };
+  
+  // Actualizar Spider-Man para incluir máscara
+  SKINS.spiderman.mask = 'spiderman';
   
   // Constants for canvas and world size
   const CANVAS_WIDTH = 800;
@@ -232,6 +636,37 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Load skins from localStorage
+  useEffect(() => {
+    const savedSkin = localStorage.getItem('viborita_skin');
+    const savedUnlockedSkins = localStorage.getItem('viborita_unlocked_skins');
+    
+    if (savedSkin && SKINS[savedSkin]) {
+      setSelectedSkin(savedSkin);
+    }
+    
+    if (savedUnlockedSkins) {
+      try {
+        const parsed = JSON.parse(savedUnlockedSkins);
+        if (Array.isArray(parsed)) {
+          // Asegurar que rainbow siempre esté desbloqueado
+          setUnlockedSkins([...new Set(['rainbow', ...parsed])]);
+        }
+      } catch (e) {
+        console.error('Error parsing unlocked skins:', e);
+      }
+    }
+  }, []);
+
+  // Save skins to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('viborita_skin', selectedSkin);
+  }, [selectedSkin]);
+
+  useEffect(() => {
+    localStorage.setItem('viborita_unlocked_skins', JSON.stringify(unlockedSkins));
+  }, [unlockedSkins]);
 
   // Load level configurations from API
   const loadLevelConfigs = async () => {
@@ -2813,15 +3248,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
           // Glow effect
           const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, food.size * 3);
-          const alpha = 0.3 + Math.sin(Date.now() / 200 + food.x) * 0.2;
-          glow.addColorStop(0, `hsla(${food.hue}, 100%, 50%, ${alpha})`);
-          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          glow.addColorStop(0, food.color.replace(')', ', 0.8)').replace('rgb', 'rgba'));
+          glow.addColorStop(1, food.color.replace(')', ', 0)').replace('rgb', 'rgba'));
           ctx.fillStyle = glow;
-          ctx.fillRect(screenX - food.size * 3, screenY - food.size * 3, food.size * 6, food.size * 6);
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, food.size * 3, 0, Math.PI * 2);
+          ctx.fill();
           
-          // The orb itself
+          // Food circle
           ctx.fillStyle = food.color;
-          ctx.shadowBlur = 15;
+          ctx.shadowBlur = 10;
           ctx.shadowColor = food.color;
           ctx.beginPath();
           ctx.arc(screenX, screenY, food.size, 0, Math.PI * 2);
@@ -2830,218 +3266,114 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         }
       });
 
-      // Draw stars (golden 5-pointed stars)
-      game.stars.forEach(star => {
-        // Update star animation
-        star.rotation += star.rotationSpeed;
-        star.pulse += star.pulseSpeed;
-        
-        const screenX = star.x - camX;
-        const screenY = star.y - camY;
-        
-        // Only draw if visible on screen
-        if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-            screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-          const pulseSize = star.size + Math.sin(star.pulse) * 3;
-          const glowAlpha = 0.4 + Math.sin(star.pulse) * 0.3;
-          
-          // Outer glow
-          const glow = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, pulseSize * 2);
-          glow.addColorStop(0, `rgba(255, 215, 0, ${glowAlpha})`);
-          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = glow;
-          ctx.fillRect(screenX - pulseSize * 2, screenY - pulseSize * 2, pulseSize * 4, pulseSize * 4);
-          
-          // Draw the star
-          ctx.fillStyle = '#FFD700';
-          ctx.strokeStyle = '#FFA500';
-          ctx.lineWidth = 2;
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#FFD700';
-          drawStar(ctx, screenX, screenY, pulseSize, star.rotation);
-          ctx.fill();
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-        }
-      });
-
-      // Draw enemies
-      if (!game.enemies || game.enemies.length === 0) {
-        console.warn('⚠️ No hay enemigos para dibujar');
-      }
-      game.enemies.forEach(enemy => {
-        if (!enemy.segments || enemy.segments.length === 0) {
-          console.warn('⚠️ Enemigo sin segmentos:', enemy);
-          return;
-        }
-        enemy.segments.forEach((seg, i) => {
-          const screenX = seg.x - camX;
-          const screenY = seg.y - camY;
-          
-          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-            const alpha = 1 - (i / enemy.segments.length) * 0.5;
-            
-            // Dibujar escudo si el enemigo lo tiene (solo en la cabeza)
-            if (enemy.hasShield && i === 0) {
-              const shieldAlpha = alpha * 0.4;
-              ctx.strokeStyle = `rgba(100, 149, 237, ${shieldAlpha})`;
-              ctx.lineWidth = 4;
-              ctx.beginPath();
-              ctx.arc(screenX, screenY, SNAKE_SIZE + 4, 0, Math.PI * 2);
-              ctx.stroke();
-            }
-            
-            ctx.fillStyle = `hsla(${enemy.hue}, 100%, 50%, ${alpha})`;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        });
-        ctx.shadowBlur = 0;
-      });
-
-      // Draw player snake with rainbow gradient like the logo
-      const snakeColors = [
-        { r: 0, g: 255, b: 0 },      // Verde brillante
-        { r: 128, g: 255, b: 0 },    // Verde-amarillo
-        { r: 255, g: 255, b: 0 },    // Amarillo
-        { r: 255, g: 200, b: 0 },    // Amarillo-naranja
-        { r: 255, g: 136, b: 0 },    // Naranja
-        { r: 255, g: 100, b: 100 },  // Naranja-rosa
-        { r: 255, g: 0, b: 255 }     // Rosa/Magenta
-      ];
-      
-      // Dibujar víbora (sin parpadeo para evitar lag)
-      game.snake.forEach((seg, i) => {
-        const screenX = seg.x - camX;
-        const screenY = seg.y - camY;
-        let alpha = 1 - (i / game.snake.length) * 0.2;
-        
-        // Calculate color based on position in snake (gradient)
-        const colorProgress = Math.min(i / Math.max(game.snake.length - 1, 1), 1);
-        const colorIndex = colorProgress * (snakeColors.length - 1);
-        const colorLow = Math.floor(colorIndex);
-        const colorHigh = Math.min(colorLow + 1, snakeColors.length - 1);
-        const colorMix = colorIndex - colorLow;
-        
-        let r = Math.round(snakeColors[colorLow].r + (snakeColors[colorHigh].r - snakeColors[colorLow].r) * colorMix);
-        let g = Math.round(snakeColors[colorLow].g + (snakeColors[colorHigh].g - snakeColors[colorLow].g) * colorMix);
-        let b = Math.round(snakeColors[colorLow].b + (snakeColors[colorHigh].b - snakeColors[colorLow].b) * colorMix);
-        
-        // Apply damage flash (red tint)
-        if (game.damageFlash > 0) {
-          const flashIntensity = game.damageFlash / 30;
-          r = Math.min(255, r + Math.round(100 * flashIntensity));
-          g = Math.round(g * (1 - flashIntensity * 0.5));
-          b = Math.round(b * (1 - flashIntensity * 0.5));
-        }
-        
-        // Apply heal flash (green tint)
-        if (game.healFlash > 0) {
-          const healIntensity = game.healFlash / 20;
-          g = Math.min(255, g + Math.round(100 * healIntensity));
-        }
-        
-        const segmentColor = `rgb(${r}, ${g}, ${b})`;
-        
-        // Shield visual effects
-        if (shieldLevel > 0 && i < 5) {
-          const shieldAlpha = shieldLevel === 1 ? 0.3 : 0.6;
-          ctx.strokeStyle = `rgba(100, 150, 255, ${alpha * shieldAlpha})`;
-          ctx.lineWidth = shieldLevel === 1 ? 3 : 5;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, game.snakeSize + 4, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        
-        // Draw segment with gradient color
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        ctx.shadowBlur = game.damageFlash > 0 ? 20 : (game.healFlash > 0 ? 18 : 12);
-        ctx.shadowColor = game.damageFlash > 0 ? '#ff0000' : (game.healFlash > 0 ? '#00ff00' : segmentColor);
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Draw eyes on the head (segment 0)
-        if (i === 0) {
-          ctx.shadowBlur = 0;
-          
-          // Calculate eye positions based on direction
-          const dir = game.direction;
-          
-          // Ojos más grandes y visibles - tamaño fijo que no depende del snakeSize
-          const eyeOffset = 5;  // Separación entre ojos
-          const eyeRadius = 4;  // Tamaño del ojo blanco
-          const pupilRadius = 2; // Tamaño de la pupila
-          
-          // Perpendicular direction for eye placement
-          const perpX = -dir.y;
-          const perpY = dir.x;
-          
-          // Posición de los ojos más hacia adelante
-          const forwardOffset = 3;
-          
-          // Left eye position
-          const leftEyeX = screenX + perpX * eyeOffset + dir.x * forwardOffset;
-          const leftEyeY = screenY + perpY * eyeOffset + dir.y * forwardOffset;
-          
-          // Right eye position  
-          const rightEyeX = screenX - perpX * eyeOffset + dir.x * forwardOffset;
-          const rightEyeY = screenY - perpY * eyeOffset + dir.y * forwardOffset;
-          
-          // Draw white part of eyes with glow
-          ctx.fillStyle = '#ffffff';
-          ctx.shadowBlur = 6;
-          ctx.shadowColor = '#ffffff';
-          
-          ctx.beginPath();
-          ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.beginPath();
-          ctx.arc(rightEyeX, rightEyeY, eyeRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Draw pupils (looking in movement direction)
-          ctx.fillStyle = '#000000';
-          ctx.shadowBlur = 0;
-          
-          const pupilOffsetX = dir.x * 1.5;
-          const pupilOffsetY = dir.y * 1.5;
-          
-          ctx.beginPath();
-          ctx.arc(leftEyeX + pupilOffsetX, leftEyeY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.beginPath();
-          ctx.arc(rightEyeX + pupilOffsetX, rightEyeY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-      ctx.shadowBlur = 0;
-
-      // Draw bullets
+      // Draw bullets with special skin effects
+      const currentSkinData = SKINS[selectedSkin];
       game.bullets.forEach(bullet => {
         const screenX = bullet.x - camX;
         const screenY = bullet.y - camY;
         
-        // Different colors for player vs enemy bullets
-        if (bullet.owner === 'player') {
-        ctx.fillStyle = '#ffff00';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#ffff00';
+        if (bullet.owner === 'player' && currentSkinData?.special) {
+          ctx.save();
+          ctx.translate(screenX, screenY);
+          const angle = Math.atan2(bullet.vy, bullet.vx);
+          ctx.rotate(angle);
+          
+          if (currentSkinData.special === 'web') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            for (let i = 0; i < 8; i++) { const a = (Math.PI * 2 * i) / 8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 12, Math.sin(a) * 12); ctx.stroke(); }
+            for (let r = 4; r <= 12; r += 4) { ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke(); }
+          } else if (currentSkinData.special === 'shield') {
+            const spin = (bullet.x + bullet.y) * 0.1; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#cc0000'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#cc0000'; ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#0050a0'; ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'hammer') {
+            const spin = (bullet.x + bullet.y) * 0.15; ctx.rotate(spin - angle);
+            ctx.strokeStyle = '#00ccff'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-15, -5); ctx.lineTo(-8, 0); ctx.lineTo(-12, 5); ctx.lineTo(-5, 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(15, -5); ctx.lineTo(8, 0); ctx.lineTo(12, 5); ctx.lineTo(5, 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(-3, -14); ctx.lineTo(3, -17); ctx.lineTo(0, -10); ctx.stroke();
+            ctx.strokeStyle = '#66ffff'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-10, -2); ctx.lineTo(-14, 3); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(10, -2); ctx.lineTo(14, 3); ctx.stroke();
+            ctx.fillStyle = '#8B4513'; ctx.fillRect(-3, -12, 6, 14);
+            ctx.fillStyle = '#654321'; ctx.fillRect(-3, -8, 6, 3); ctx.fillRect(-3, -3, 6, 3);
+            ctx.fillStyle = '#708090'; ctx.fillRect(-8, -18, 16, 8);
+            ctx.fillStyle = '#505860'; ctx.fillRect(-7, -17, 14, 2);
+          } else if (currentSkinData.special === 'fist') {
+            ctx.fillStyle = '#4CAF50'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 8, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'spell') {
+            ctx.fillStyle = '#6699ff'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'donut') {
+            const spin = (bullet.x + bullet.y) * 0.08; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#d4a056'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.ellipse(0, -1, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#8b6914'; ctx.beginPath(); ctx.ellipse(0, 0, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'sith_laser') {
+            ctx.fillStyle = '#cc0000'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'repulsor') {
+            ctx.fillStyle = '#66ffff'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 6, 2, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'red_blaster') {
+            ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff6666'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'blaster') {
+            ctx.fillStyle = '#0066ff'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#66aaff'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'slingshot') {
+            const spin = (bullet.x + bullet.y) * 0.1; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#8B4513'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#654321'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#4a4a4a'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+          } else if (currentSkinData.special === 'book') {
+            const spin = (bullet.x + bullet.y) * 0.05; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#8B4513'; ctx.fillRect(-10, -8, 20, 16);
+            ctx.fillStyle = '#654321'; ctx.fillRect(-10, -8, 20, 2);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(-8, -6, 16, 12);
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
+            for (let i = 0; i < 4; i++) {
+              ctx.beginPath(); ctx.moveTo(-6, -4 + i * 3); ctx.lineTo(6, -4 + i * 3); ctx.stroke();
+            }
+          } else if (currentSkinData.special === 'pacifier') {
+            const spin = (bullet.x + bullet.y) * 0.08; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.arc(0, -2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ff69b4'; ctx.fillRect(-2, 6, 4, 4);
+          } else if (currentSkinData.special === 'pork_chop') {
+            const spin = (bullet.x + bullet.y) * 0.06; ctx.rotate(spin - angle);
+            ctx.fillStyle = '#d4a574'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#c49464'; ctx.beginPath(); ctx.ellipse(0, -2, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#8b6914'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-6, 3); ctx.lineTo(-4, 1); ctx.lineTo(-2, 4); ctx.lineTo(0, 2); ctx.lineTo(2, 5); ctx.lineTo(4, 3); ctx.lineTo(6, 6); ctx.lineTo(8, 4); ctx.stroke();
+          } else if (currentSkinData.special === 'white_spell') {
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffcc'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+            ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff';
+            for (let i = 0; i < 6; i++) {
+              const a = (Math.PI * 2 * i) / 6;
+              ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 10, Math.sin(a) * 10); ctx.stroke();
+            }
+            ctx.shadowBlur = 0;
+          } else {
+            ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.restore();
+        } else if (bullet.owner === 'player') {
+          ctx.fillStyle = '#ffff00'; ctx.shadowBlur = 10; ctx.shadowColor = '#ffff00';
+          ctx.beginPath(); ctx.arc(screenX, screenY, 4, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
         } else {
-          ctx.fillStyle = '#ff0000';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#ff0000';
+          ctx.fillStyle = '#ff0000'; ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
+          ctx.beginPath(); ctx.arc(screenX, screenY, 4, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
         }
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
       });
 
       // Draw particles
@@ -3057,2879 +3389,279 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
       ctx.shadowBlur = 0;
 
-      // Draw Killer Saws
-      if (game.killerSaws && game.killerSaws.length > 0) {
-        game.killerSaws.forEach(saw => {
-          const screenX = saw.x - camX;
-          const screenY = saw.y - camY;
-          
-          if (screenX > -100 && screenX < CANVAS_WIDTH + 100 && 
-              screenY > -100 && screenY < CANVAS_HEIGHT + 100) {
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(saw.rotation);
-            
-            // Outer glow
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = saw.color;
-            
-            // Draw saw body
-            ctx.fillStyle = saw.color;
-            ctx.beginPath();
-            ctx.arc(0, 0, saw.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Draw saw teeth
-            const teethCount = 12;
-            ctx.fillStyle = '#333';
-            for (let i = 0; i < teethCount; i++) {
-              const angle = (Math.PI * 2 * i) / teethCount;
-              ctx.beginPath();
-              ctx.moveTo(Math.cos(angle) * saw.radius * 0.5, Math.sin(angle) * saw.radius * 0.5);
-              ctx.lineTo(Math.cos(angle + 0.15) * saw.radius * 1.1, Math.sin(angle + 0.15) * saw.radius * 1.1);
-              ctx.lineTo(Math.cos(angle - 0.15) * saw.radius * 1.1, Math.sin(angle - 0.15) * saw.radius * 1.1);
-              ctx.closePath();
-              ctx.fill();
-            }
-            
-            // Center circle
-            ctx.fillStyle = '#222';
-            ctx.beginPath();
-            ctx.arc(0, 0, saw.radius * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.restore();
-            ctx.shadowBlur = 0;
-          }
-        });
-      }
-
-      // Draw Floating Cannons
-      if (game.floatingCannons && game.floatingCannons.length > 0) {
-        game.floatingCannons.forEach(cannon => {
-          const screenX = cannon.x - camX;
-          const screenY = cannon.y - camY;
+      // Draw player snake with selected skin colors
+      const currentSkin = SKINS[selectedSkin] || SKINS.rainbow;
+      const snakeColors = currentSkin.colors;
+      
+      if (game.snake && game.snake.length > 0) {
+        game.snake.forEach((segment, index) => {
+          const screenX = segment.x - camX;
+          const screenY = segment.y - camY;
           
           if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
               screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-            ctx.save();
-            ctx.translate(screenX, screenY);
-            ctx.rotate(cannon.angle);
+            const colorIndex = Math.min(index, snakeColors.length - 1);
+            const color = snakeColors[colorIndex];
+            const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
             
-            // Cannon body
-            ctx.fillStyle = '#555';
-      ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff6600';
-      ctx.beginPath();
-            ctx.arc(0, 0, 20, 0, Math.PI * 2);
-      ctx.fill();
-            
-            // Cannon barrel
-            ctx.fillStyle = '#333';
-            ctx.fillRect(10, -5, 25, 10);
-            
-            // Cannon glow indicator
-            ctx.fillStyle = '#ff6600';
+            ctx.fillStyle = colorStr;
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = colorStr;
             ctx.beginPath();
-            ctx.arc(0, 0, 8, 0, Math.PI * 2);
+            ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
             ctx.fill();
+            ctx.shadowBlur = 0;
             
-            ctx.restore();
-      ctx.shadowBlur = 0;
+            // Draw mask on head
+            if (index === 0) {
+              const skinData = SKINS[selectedSkin];
+              if (skinData?.mask) {
+                ctx.save();
+                ctx.translate(screenX, screenY);
+                const dir = game.direction;
+                const angle = Math.atan2(dir.y, dir.x);
+                ctx.rotate(angle);
+                const maskSize = game.snakeSize + 2;
+                
+                if (skinData.mask === 'spiderman') {
+                  ctx.fillStyle = '#b30000'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.strokeStyle = '#800000'; ctx.lineWidth = 0.5;
+                  for (let w = 0; w < 8; w++) { const wa = (Math.PI * 2 * w) / 8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(wa) * maskSize, Math.sin(wa) * maskSize); ctx.stroke(); }
+                  ctx.beginPath(); ctx.arc(0, 0, maskSize * 0.5, 0, Math.PI * 2); ctx.stroke();
+                  ctx.fillStyle = '#ffffff';
+                  ctx.beginPath(); ctx.moveTo(2, -5); ctx.lineTo(7, -6); ctx.lineTo(8, -2); ctx.lineTo(5, 0); ctx.lineTo(2, -1); ctx.closePath(); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(2, 5); ctx.lineTo(7, 6); ctx.lineTo(8, 2); ctx.lineTo(5, 0); ctx.lineTo(2, 1); ctx.closePath(); ctx.fill();
+                } else if (skinData.mask === 'captain') {
+                  ctx.fillStyle = '#1a4a8a'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.fillRect(-maskSize, -1.5, maskSize * 2, 3);
+                  ctx.font = 'bold 7px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('A', 4, 0);
+                  ctx.fillStyle = '#0a1a30'; ctx.beginPath(); ctx.ellipse(5, -3, 3, 2, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(5, 3, 3, 2, -0.2, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'thor') {
+                  ctx.fillStyle = '#8090a0'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#d0d0d0';
+                  ctx.beginPath(); ctx.moveTo(-2, -5); ctx.quadraticCurveTo(-5, -9, -1, -12); ctx.quadraticCurveTo(-3, -8, -2, -5); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(-2, 5); ctx.quadraticCurveTo(-5, 9, -1, 12); ctx.quadraticCurveTo(-3, 8, -2, 5); ctx.fill();
+                  ctx.fillStyle = '#00ccff'; ctx.beginPath(); ctx.arc(4.5, -3, 1, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(4.5, 3, 1, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'hulk') {
+                  ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(-2, 0, maskSize + 2, Math.PI * 0.4, Math.PI * 1.6); ctx.fill();
+                  ctx.fillStyle = '#4CAF50'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#0a0a0a';
+                  ctx.beginPath(); ctx.moveTo(2, -6); ctx.lineTo(7, -4); ctx.lineTo(7, -3); ctx.lineTo(2, -4.5); ctx.closePath(); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(2, 6); ctx.lineTo(7, 4); ctx.lineTo(7, 3); ctx.lineTo(2, 4.5); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.ellipse(5, -3, 2.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(5, 3, 2.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'harry') {
+                  ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.moveTo(-3, -10); ctx.quadraticCurveTo(-16, 0, -3, 10); ctx.lineTo(-1, 7); ctx.quadraticCurveTo(-12, 0, -1, -7); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#f5d0b5'; ctx.beginPath(); ctx.arc(0, 0, maskSize - 1, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(-1, 0, maskSize, Math.PI * 0.55, Math.PI * 1.45); ctx.fill();
+                  ctx.strokeStyle = '#4a3728'; ctx.lineWidth = 1.2;
+                  ctx.beginPath(); ctx.arc(5, -3, 3.5, 0, Math.PI * 2); ctx.stroke();
+                  ctx.beginPath(); ctx.arc(5, 3, 3.5, 0, Math.PI * 2); ctx.stroke();
+                  ctx.fillStyle = '#228b22'; ctx.beginPath(); ctx.arc(5.5, -3, 1.6, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5.5, 3, 1.6, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'homer') {
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
+                  ctx.beginPath(); ctx.moveTo(-5, -2); ctx.quadraticCurveTo(-10, -4, -8, -8); ctx.stroke();
+                  ctx.beginPath(); ctx.moveTo(-5, 2); ctx.quadraticCurveTo(-10, 4, -8, 8); ctx.stroke();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -4, 5, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 4, 5, 6, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(6, -4, 2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(6, 4, 2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.ellipse(9, 0, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'bart') {
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.5;
+                  // Pelo puntiagudo
+                  ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-4, -10); ctx.lineTo(-2, -8); ctx.lineTo(0, -10); ctx.lineTo(2, -8); ctx.lineTo(4, -10); ctx.lineTo(6, -8); ctx.stroke();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -4, 4, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 4, 4, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(5.5, -4, 1.5, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5.5, 4, 1.5, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'lisa') {
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  // Pelo puntiagudo alto
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(-3, -14); ctx.lineTo(-1, -12); ctx.lineTo(1, -14); ctx.lineTo(3, -12); ctx.lineTo(5, -14); ctx.lineTo(7, -10); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -4, 4, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 4, 4, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(5.5, -4, 1.5, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5.5, 4, 1.5, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'maggie') {
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.arc(0, 0, maskSize - 1, 0, Math.PI * 2); ctx.fill();
+                  // Chupete
+                  ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(0, 3, 3, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 3, 2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -3, 3, 4, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 3, 3, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(5, -3, 1.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5, 3, 1.2, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'marge') {
+                  ctx.fillStyle = '#ffd90f'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  // Pelo azul alto
+                  ctx.fillStyle = '#0064c8'; ctx.beginPath(); ctx.moveTo(-6, -10); ctx.lineTo(-4, -16); ctx.lineTo(-2, -14); ctx.lineTo(0, -16); ctx.lineTo(2, -14); ctx.lineTo(4, -16); ctx.lineTo(6, -14); ctx.lineTo(8, -16); ctx.lineTo(10, -10); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -4, 4, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 4, 4, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(5.5, -4, 1.5, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5.5, 4, 1.5, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'gandalf') {
+                  ctx.fillStyle = '#c8c8c8'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  // Barba blanca larga
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(-4, 0); ctx.quadraticCurveTo(-6, 8, -3, 12); ctx.lineTo(3, 12); ctx.quadraticCurveTo(6, 8, 4, 0); ctx.closePath(); ctx.fill();
+                  // Sombrero puntiagudo
+                  ctx.fillStyle = '#808080'; ctx.beginPath(); ctx.moveTo(-3, -8); ctx.lineTo(0, -14); ctx.lineTo(3, -8); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#606060'; ctx.beginPath(); ctx.moveTo(-2, -8); ctx.lineTo(0, -12); ctx.lineTo(2, -8); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(4, -2, 3, 4, 0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.ellipse(4, 2, 3, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(5, -2, 1.2, 0, Math.PI * 2); ctx.fill();
+                  ctx.beginPath(); ctx.arc(5, 2, 1.2, 0, Math.PI * 2); ctx.fill();
+                } else if (skinData.mask === 'vader') {
+                  ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.ellipse(3, 0, maskSize * 0.6, maskSize * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#2a2a2a';
+                  ctx.beginPath(); ctx.moveTo(2, -5); ctx.lineTo(7, -4); ctx.lineTo(7, -1.5); ctx.lineTo(3, -2); ctx.closePath(); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(2, 5); ctx.lineTo(7, 4); ctx.lineTo(7, 1.5); ctx.lineTo(3, 2); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                  ctx.beginPath(); ctx.moveTo(3, -4.5); ctx.lineTo(6, -3.5); ctx.lineTo(6, -2); ctx.lineTo(3.5, -2.5); ctx.closePath(); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(3, 4.5); ctx.lineTo(6, 3.5); ctx.lineTo(6, 2); ctx.lineTo(3.5, 2.5); ctx.closePath(); ctx.fill();
+                } else if (skinData.mask === 'ironman') {
+                  ctx.fillStyle = '#b30000'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#ffc033'; ctx.beginPath(); ctx.ellipse(3, 0, maskSize * 0.7, maskSize * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#66ffff';
+                  ctx.beginPath(); ctx.moveTo(4, -4.5); ctx.lineTo(7, -3.5); ctx.lineTo(7.5, -2.5); ctx.lineTo(4.5, -2.5); ctx.closePath(); ctx.fill();
+                  ctx.beginPath(); ctx.moveTo(4, 4.5); ctx.lineTo(7, 3.5); ctx.lineTo(7.5, 2.5); ctx.lineTo(4.5, 2.5); ctx.closePath(); ctx.fill();
+                  ctx.fillStyle = '#1a1a1a';
+                  ctx.beginPath(); ctx.moveTo(7, -1); ctx.lineTo(10, -0.5); ctx.lineTo(10, 0.5); ctx.lineTo(7, 1); ctx.closePath(); ctx.fill();
+                } else if (skinData.mask === 'stormtrooper') {
+                  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, maskSize, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.ellipse(4, 0, maskSize * 0.6, maskSize * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+                  ctx.fillStyle = '#000000'; ctx.fillRect(2, -3, 5, 6);
+                }
+                
+                ctx.restore();
+              } else {
+                // Normal eyes
+                const eyeOffset = 5, eyeRadius = 4, pupilRadius = 2;
+                const perpX = -dir.y, perpY = dir.x, forwardOffset = 3;
+                const leftEyeX = screenX + perpX * eyeOffset + dir.x * forwardOffset;
+                const leftEyeY = screenY + perpY * eyeOffset + dir.y * forwardOffset;
+                const rightEyeX = screenX - perpX * eyeOffset + dir.x * forwardOffset;
+                const rightEyeY = screenY - perpY * eyeOffset + dir.y * forwardOffset;
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(leftEyeX, leftEyeY, eyeRadius, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(rightEyeX, rightEyeY, eyeRadius, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#000000';
+                ctx.beginPath(); ctx.arc(leftEyeX, leftEyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(rightEyeX, rightEyeY, pupilRadius, 0, Math.PI * 2); ctx.fill();
+              }
+            }
           }
         });
       }
 
-      // Draw Resentful Snakes (special red enemies that chase player)
-      if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
-        game.resentfulSnakes.forEach(snake => {
-          if (!snake.segments || snake.segments.length === 0) return;
-          
-          snake.segments.forEach((seg, i) => {
-            const screenX = seg.x - camX;
-            const screenY = seg.y - camY;
+      // Draw enemies
+      game.enemies.forEach(enemy => {
+        if (enemy.segments && enemy.segments.length > 0) {
+          enemy.segments.forEach((segment, segIndex) => {
+            const screenX = segment.x - camX;
+            const screenY = segment.y - camY;
             
             if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
                 screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-              const alpha = 1 - (i / snake.segments.length) * 0.5;
-              
-              // Red color for resentful snakes
-              ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
-              ctx.shadowBlur = 15;
+              ctx.fillStyle = '#ff0000';
+              ctx.shadowBlur = 5;
               ctx.shadowColor = '#ff0000';
               ctx.beginPath();
-              ctx.arc(screenX, screenY, SNAKE_SIZE, 0, Math.PI * 2);
+              ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
               ctx.fill();
-              
-              // Angry eyes on head
-              if (i === 0) {
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(screenX - 3, screenY - 2, 3, 0, Math.PI * 2);
-                ctx.arc(screenX + 3, screenY - 2, 3, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#000000';
-                ctx.beginPath();
-                ctx.arc(screenX - 3, screenY - 2, 1.5, 0, Math.PI * 2);
-                ctx.arc(screenX + 3, screenY - 2, 1.5, 0, Math.PI * 2);
-                ctx.fill();
-              }
+              ctx.shadowBlur = 0;
             }
           });
-          ctx.shadowBlur = 0;
-        });
-      }
-
-      // Draw Health Boxes
-      if (game.healthBoxes && game.healthBoxes.length > 0) {
-        game.healthBoxes.forEach(box => {
-          const screenX = box.x - camX;
-          const screenY = box.y - camY;
-          
-          if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-              screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-            const pulseSize = box.size + Math.sin(box.pulse) * 3;
-            
-            // Glow effect
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00ff00';
-            
-            // Box body
-            ctx.fillStyle = '#00aa00';
-            ctx.fillRect(screenX - pulseSize/2, screenY - pulseSize/2, pulseSize, pulseSize);
-            
-            // White cross
-            ctx.fillStyle = '#ffffff';
-            const crossWidth = pulseSize * 0.25;
-            const crossLength = pulseSize * 0.7;
-            ctx.fillRect(screenX - crossWidth/2, screenY - crossLength/2, crossWidth, crossLength);
-            ctx.fillRect(screenX - crossLength/2, screenY - crossWidth/2, crossLength, crossWidth);
-            
-            // Health points indicator
-            ctx.font = 'bold 12px monospace';
-            ctx.fillStyle = '#ffffff';
-            ctx.textAlign = 'center';
-            ctx.fillText(`+${box.healthPoints}`, screenX, screenY + pulseSize/2 + 15);
-            ctx.textAlign = 'left';
-            
-            ctx.shadowBlur = 0;
-          }
-        });
-      }
-
-      // Draw HUD - Horizontal level bar at the top (compact)
-      const barHeight = 30;
-      const barPadding = 5;
-      
-      // === NEON HUD DESIGN ===
-      const minimapWidth = 120;
-      const minimapX = CANVAS_WIDTH - minimapWidth - 10;
-      
-      // HUD Container with neon border
-      const hudX = 8;
-      const hudY = 8;
-      const hudWidth = 520; // Expandido para incluir XP
-      const hudHeight = 36;
-      const hudRadius = 8;
-      
-      // Draw rounded rectangle background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
-      ctx.fill();
-      
-      // Neon border glow
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#33ffff';
-      ctx.beginPath();
-      ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      
-      // === LEVEL BADGE ===
-      const levelX = hudX + 12;
-      const levelY = hudY + 10;
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(`LV ${game.level}`, levelX, levelY + 14);
-      ctx.shadowBlur = 0;
-      
-      // === STARS BAR ===
-      const starsBarX = levelX + 65;
-      const starsBarY = hudY + 10;
-      const starsBarWidth = 130;
-      const starsBarHeight = 16;
-      
-      // Stars bar background with rounded corners
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
-      ctx.beginPath();
-      ctx.roundRect(starsBarX, starsBarY, starsBarWidth, starsBarHeight, 4);
-      ctx.fill();
-      
-      // Stars bar border
-      ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(starsBarX, starsBarY, starsBarWidth, starsBarHeight, 4);
-      ctx.stroke();
-      
-      // Stars bar fill with glow
-      const starsPercent = Math.min(game.currentStars / game.starsNeeded, 1);
-      if (starsPercent > 0) {
-      ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 6;
-      ctx.shadowColor = '#FFD700';
-        ctx.beginPath();
-        ctx.roundRect(starsBarX + 2, starsBarY + 2, (starsBarWidth - 4) * starsPercent, starsBarHeight - 4, 3);
-        ctx.fill();
-      ctx.shadowBlur = 0;
-      }
-      
-      // Stars icon and text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
-      const starsText = `⭐ ${game.currentStars}/${game.starsNeeded}`;
-      const starsTextWidth = ctx.measureText(starsText).width;
-      ctx.fillText(starsText, starsBarX + starsBarWidth / 2 - starsTextWidth / 2, starsBarY + 12);
-      
-      // === HEALTH BAR ===
-      const healthBarX = starsBarX + starsBarWidth + 15;
-      const healthBarY = hudY + 10;
-      const healthBarWidth = 130;
-      const healthBarHeight2 = 16;
-      
-      // Health bar background with rounded corners
-      ctx.fillStyle = 'rgba(255, 80, 80, 0.2)';
-      ctx.beginPath();
-      ctx.roundRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight2, 4);
-      ctx.fill();
-      
-      // Health bar border
-      ctx.strokeStyle = 'rgba(255, 80, 80, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight2, 4);
-      ctx.stroke();
-      
-      // Health bar fill with glow
-      const healthPercent = Math.max(0, game.currentHealth / game.maxHealth);
-      if (healthPercent > 0) {
-        // Color changes based on health level
-        const healthColor = healthPercent > 0.5 ? '#00ff88' : healthPercent > 0.25 ? '#ffaa00' : '#ff3333';
-        ctx.fillStyle = healthColor;
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = healthColor;
-        ctx.beginPath();
-        ctx.roundRect(healthBarX + 2, healthBarY + 2, (healthBarWidth - 4) * healthPercent, healthBarHeight2 - 4, 3);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      
-      // Health icon and text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
-      const healthText = isImmune ? `🛡️ INMUNE` : `❤️ ${game.currentHealth}/${game.maxHealth}`;
-      const healthTextWidth = ctx.measureText(healthText).width;
-      ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 12);
-      
-      // Special status indicators
-      if (isImmune || freeShots) {
-        ctx.font = 'bold 10px monospace';
-        let statusY = hudY + 30;
-        if (isImmune) {
-          ctx.fillStyle = '#00ffff';
-          ctx.fillText('🛡️ INMUNIDAD', healthBarX, statusY);
-          statusY += 12;
-        }
-        if (freeShots) {
-          ctx.fillStyle = '#00ff88';
-          ctx.fillText('🔫 BALAS GRATIS', healthBarX, statusY);
-        }
-      }
-      
-      // === SESSION XP COUNTER (with dynamic color) ===
-      const xpCounterX = healthBarX + healthBarWidth + 15;
-      const xpCounterY = hudY + 10;
-      const xpCounterWidth = 80;
-      const xpCounterHeight = 16;
-      
-      // Calcular color dinámico basado en el XP de sesión
-      // 0-25: Rojo -> Naranja, 25-50: Naranja -> Amarillo, 50-75: Amarillo -> Verde, 75-100+: Verde -> Azul
-      const sessionXP = game.sessionXP || 0;
-      let xpColor;
-      if (sessionXP < 25) {
-        // Rojo a Naranja (0-25)
-        const t = sessionXP / 25;
-        const r = 255;
-        const g = Math.floor(100 * t);
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 50) {
-        // Naranja a Amarillo (25-50)
-        const t = (sessionXP - 25) / 25;
-        const r = 255;
-        const g = Math.floor(100 + 155 * t);
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 75) {
-        // Amarillo a Verde (50-75)
-        const t = (sessionXP - 50) / 25;
-        const r = Math.floor(255 * (1 - t));
-        const g = 255;
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 100) {
-        // Verde a Azul (75-100)
-        const t = (sessionXP - 75) / 25;
-        const r = 0;
-        const g = Math.floor(255 * (1 - t));
-        const b = Math.floor(255 * t);
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else {
-        // Azul (100+)
-        xpColor = '#00aaff';
-      }
-      
-      // XP counter background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
-      ctx.fill();
-      
-      // XP counter border with dynamic color
-      ctx.strokeStyle = xpColor;
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = xpColor;
-      ctx.beginPath();
-      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      
-      // XP text with dynamic color
-      ctx.fillStyle = xpColor;
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = xpColor;
-      ctx.font = 'bold 11px monospace';
-      const xpText = `⚡ ${sessionXP}`;
-      const xpTextWidth = ctx.measureText(xpText).width;
-      ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 12);
-      ctx.shadowBlur = 0;
-      
-      // === TOTAL XP/STARS (compact, next to minimap) ===
-      const statsX = minimapX - 90;
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#33ffff';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText(`XP: ${totalXP}`, statsX, 22);
-      ctx.fillStyle = '#FFD700';
-      ctx.shadowColor = '#FFD700';
-      ctx.fillText(`⭐: ${totalStars}`, statsX, 36);
-      ctx.shadowBlur = 0;
-      
-      // Draw minimap in top-right corner (after HUD so it's visible)
-      // minimapWidth and minimapX already declared above for HUD spacing
-      const minimapHeight = 90;
-      const minimapY = 10; // Fixed at top-right corner, close to edge
-      
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
-      
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
-      
-      // Draw player position on minimap (distinctive marker)
-      const playerMinimapX = minimapX + (game.snake[0].x / game.worldWidth) * minimapWidth;
-      const playerMinimapY = minimapY + (game.snake[0].y / game.worldHeight) * minimapHeight;
-      
-      // Outer ring for player
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
-      ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Inner filled circle for player
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // Draw enemy positions on minimap as colored dots
-      game.enemies.forEach(enemy => {
-        if (enemy.segments && enemy.segments.length > 0) {
-          const enemyHead = enemy.segments[0];
-          const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
-          const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
-          
-          // Use the enemy's hue color
-          ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
-          ctx.shadowBlur = 5;
-          ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
-          ctx.beginPath();
-          ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
-          ctx.fill();
-      ctx.shadowBlur = 0;
         }
       });
-      
-      // Shop hint (only on desktop, not mobile)
-      if (!isMobile) {
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
-      
-      // Cannon hint (if cannon is equipped)
-      if (cannonLevel > 0) {
-        // Calcular cuántas balas consume
-        let bulletCost = 1;
-        if (cannonLevel >= 2) bulletCost = 2;
-        if (cannonLevel >= 3) bulletCost = 3;
-        if (cannonLevel >= 4) bulletCost = 4;
+
+      // Draw stars
+      game.stars.forEach(star => {
+        const screenX = star.x - camX;
+        const screenY = star.y - camY;
         
-        if (freeShots) {
-          ctx.fillStyle = '#00ff88';
-          ctx.fillText('[ESPACIO] Disparar (GRATIS)', 120, CANVAS_HEIGHT - 15);
-        } else {
-          const canShootNow = game.sessionXP >= bulletCost;
-          ctx.fillStyle = canShootNow ? '#ffff00' : '#ff4444';
-          ctx.fillText(`[ESPACIO] Disparar (-${bulletCost} XP)`, 120, CANVAS_HEIGHT - 15);
+        if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
+            screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
+          ctx.save();
+          ctx.translate(screenX, screenY);
+          ctx.rotate(star.rotation || 0);
+          ctx.fillStyle = '#ffff00';
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = '#ffff00';
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+            const x = Math.cos(angle) * star.size;
+            const y = Math.sin(angle) * star.size;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+          ctx.shadowBlur = 0;
         }
-        }
+      });
+
+      // Draw UI overlay
+      if (gameState === 'playing') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(10, 10, 200, 100);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px monospace';
+        ctx.fillText(`Nivel: ${level}`, 20, 30);
+        ctx.fillText(`XP: ${game.currentXP}/${game.starsNeeded * 10}`, 20, 50);
+        ctx.fillText(`Estrellas: ${game.currentStars}/${game.starsNeeded}`, 20, 70);
+        ctx.fillText(`Vida: ${game.currentHealth}/${game.maxHealth}`, 20, 90);
       }
     };
 
+    // Game loop
     const gameLoop = (currentTime) => {
-      // IMPORTANTE: No continuar si el juego no está en estado 'playing'
-      if (gameState !== 'playing') {
-        return; // Detener el loop
-      }
+      const deltaTime = currentTime - lastTime;
+      lastTime = currentTime;
       
-      // Usamos un timestep fijo para velocidad consistente
-      update(FRAME_TIME);
+      update(deltaTime);
       draw();
+      
       animationId = requestAnimationFrame(gameLoop);
     };
 
-    if (gameState === 'playing') {
-      const canvas = canvasRef.current;
-      canvas.addEventListener('mousemove', handleMouseMove);
-      canvas.addEventListener('mousedown', handleMouseDown);
-      canvas.addEventListener('mouseup', handleMouseUp);
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-      canvas.addEventListener('touchend', handleJoystickEnd, { passive: false });
-      canvas.addEventListener('touchcancel', handleJoystickEnd, { passive: false });
-      window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('keyup', handleKeyUp);
-      lastTime = performance.now(); // Initialize time tracking
-      gameLoop(performance.now());
+    // Start game loop
+    if (gameState === 'playing' && !shopOpen) {
+      animationId = requestAnimationFrame(gameLoop);
     }
 
-    // Un solo cleanup que maneja todo
+    // Cleanup
     return () => {
-      // CRÍTICO: Cancelar el animationFrame para evitar múltiples loops
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
-      
-      // Limpiar event listeners
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('mousedown', handleMouseDown);
-        canvas.removeEventListener('mouseup', handleMouseUp);
-        canvas.removeEventListener('touchmove', handleTouchMove);
-        canvas.removeEventListener('touchstart', handleTouchStart);
-        canvas.removeEventListener('touchend', handleJoystickEnd);
-        canvas.removeEventListener('touchcancel', handleJoystickEnd);
-      }
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      
-      // Limpiar auto-fire
-      isShootingRef.current = false;
-      if (shootingIntervalRef.current) {
-        clearTimeout(shootingIntervalRef.current);
-        shootingIntervalRef.current = null;
-      }
     };
-  }, [gameState, shieldLevel, headLevel, cannonLevel, bulletSpeedLevel, shopOpen, showAdminPanel, isAdmin, freeShots]); // Quitado totalXP de las dependencias
+  }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, selectedSkin, isImmune]);
 
-  const startGame = () => {
-    gameRef.current.level = level;
-    const levelConfig = getLevelConfig(level, levelConfigs);
-    gameRef.current.starsNeeded = levelConfig.starsNeeded;
-    gameRef.current.gameStartTime = Date.now();
-    gameRef.current.sessionXP = 0;
-    gameRef.current.headHits = 0; // Reset head hits counter
-    gameRef.current.bodyHits = 0; // Reset body hits counter
-    setScore(0);
-    initGame();
-    setShopOpen(false);
-    setGameState('playing');
-  };
-
-  const initGame = () => {
-    const game = gameRef.current;
-    const levelConfig = getLevelConfig(game.level, levelConfigs);
-    
-    // Central rectangle (1 screen size = 800x600) - solo si el nivel lo requiere
-    if (levelConfig.hasCentralCell) {
-      const centralRect = {
-        x: game.worldWidth / 2 - CANVAS_WIDTH / 2,
-        y: game.worldHeight / 2 - CANVAS_HEIGHT / 2,
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
-        openings: [
-          { 
-            side: 'top', 
-            position: 0, // Position along the side (0 to 1)
-            direction: 1, // Always moving forward (will wrap)
-            speed: levelConfig.centralCellOpeningSpeed, // Velocidad basada en nivel
-            width: 60, 
-            height: 20,
-            paused: false // Pause when player is passing through
-          },
-          { 
-            side: 'bottom', 
-            position: 0.5,
-            direction: 1,
-            speed: levelConfig.centralCellOpeningSpeed,
-            width: 60, 
-            height: 20,
-            paused: false
-          },
-          { 
-            side: 'left', 
-            position: 0.3,
-            direction: 1,
-            speed: levelConfig.centralCellOpeningSpeed,
-            width: 20, 
-            height: 60,
-            paused: false
-          },
-          { 
-            side: 'right', 
-            position: 0.7,
-            direction: 1,
-            speed: levelConfig.centralCellOpeningSpeed,
-            width: 20, 
-            height: 60,
-            paused: false
-          }
-        ]
-      };
-      game.centralRect = centralRect;
-    } else {
-      game.centralRect = null; // Sin celda del medio en niveles bajos
-    }
-    
-    // Create regular food across the map - usar xpPoints del nivel
-    game.food = Array.from({ length: levelConfig.xpPoints }, () => createFood());
-    
-    // Add yellow/orange orbs inside central rectangle (solo si existe)
-    if (game.centralRect) {
-      const centralFoodCount = Math.floor(levelConfig.xpPoints * 0.3); // 30% de la comida en el centro
-      for (let i = 0; i < centralFoodCount; i++) {
-        const color = Math.random() < 0.5 ? 'yellow' : 'orange';
-        const food = createFood(color);
-        food.x = game.centralRect.x + 50 + Math.random() * (game.centralRect.width - 100);
-        food.y = game.centralRect.y + 50 + Math.random() * (game.centralRect.height - 100);
-        game.food.push(food);
-      }
-    }
-    
-    // Guardar la cantidad inicial de comida para mantenerla constante
-    game.initialFoodCount = game.food.length;
-    
-    // Crear enemigos PRIMERO para luego buscar spawn seguro para el jugador
-    game.enemies = Array.from({ length: levelConfig.enemyCount }, () => {
-      return createEnemy(levelConfig, game.level);
-    });
-    
-    // Create new entities based on level config
-    game.killerSaws = Array.from({ length: levelConfig.killerSawCount }, () => createKillerSaw(levelConfig));
-    game.floatingCannons = Array.from({ length: levelConfig.floatingCannonCount }, () => createFloatingCannon(levelConfig));
-    game.resentfulSnakes = Array.from({ length: levelConfig.resentfulSnakeCount }, () => createResentfulSnake(levelConfig));
-    game.healthBoxes = Array.from({ length: levelConfig.healthBoxCount }, () => createHealthBox(levelConfig));
-    
-    console.log(`🎮 Iniciando juego nivel ${level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} canones, ${game.resentfulSnakes.length} viboras resentidas`);
-    
-    // Spawn player: lejos del borde, lejos de enemigos, fuera del centralRect
-    const EDGE_MARGIN = 300; // Distancia mínima del borde
-    const ENEMY_SAFE_DISTANCE = 200; // Distancia mínima de cualquier enemigo
-    
-    let spawnX, spawnY;
-    let attempts = 0;
-    let validSpawn = false;
-    
-    do {
-      // Random position con margen del borde
-      spawnX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
-      spawnY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
-      
-      validSpawn = true;
-      
-      // Check if it's outside the central rectangle (with margin for safety) - solo si existe
-      if (game.centralRect) {
-        const margin = 50;
-        const isOutside = spawnX < game.centralRect.x - margin || 
-                         spawnX > game.centralRect.x + game.centralRect.width + margin ||
-                         spawnY < game.centralRect.y - margin || 
-                         spawnY > game.centralRect.y + game.centralRect.height + margin;
-        
-        if (!isOutside) {
-          validSpawn = false;
-        }
-      }
-      
-      // Verificar distancia de todos los enemigos
-      if (validSpawn) {
-        for (const enemy of game.enemies) {
-          if (enemy.segments && enemy.segments.length > 0) {
-            const head = enemy.segments[0];
-            const dx = spawnX - head.x;
-            const dy = spawnY - head.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < ENEMY_SAFE_DISTANCE) {
-              validSpawn = false;
-        break;
-      }
-          }
-        }
-      }
-      
-      attempts++;
-    } while (!validSpawn && attempts < 100); // Safety limit
-    
-    // Fallback: si no encontró posición segura, buscar la más alejada de enemigos
-    if (!validSpawn) {
-      let bestX = game.worldWidth / 2;
-      let bestY = game.worldHeight / 2;
-      let bestMinDistance = 0;
-      
-      // Probar varias posiciones y elegir la mejor
-      for (let i = 0; i < 20; i++) {
-        const testX = EDGE_MARGIN + Math.random() * (game.worldWidth - EDGE_MARGIN * 2);
-        const testY = EDGE_MARGIN + Math.random() * (game.worldHeight - EDGE_MARGIN * 2);
-        
-        let minDistance = Infinity;
-        for (const enemy of game.enemies) {
-          if (enemy.segments && enemy.segments.length > 0) {
-            const head = enemy.segments[0];
-            const dx = testX - head.x;
-            const dy = testY - head.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            minDistance = Math.min(minDistance, distance);
-          }
-        }
-        
-        if (minDistance > bestMinDistance) {
-          bestMinDistance = minDistance;
-          bestX = testX;
-          bestY = testY;
-        }
-      }
-      
-      spawnX = bestX;
-      spawnY = bestY;
-    }
-    
-    game.snake = [{ x: spawnX, y: spawnY }];
-    game.direction = { x: 1, y: 0 };
-    game.nextDirection = { x: 1, y: 0 };
-    // Aplicar velocidad del nivel
-    game.speed = levelConfig.playerSpeed;
-    game.baseSpeed = levelConfig.playerSpeed;
-    game.snakeSize = SNAKE_SIZE;
-    game.bullets = [];
-    game.particles = [];
-    game.stars = []; // Reset stars
-    game.currentXP = 0;
-    game.currentStars = 0;
-    game.starsNeeded = levelConfig.starsNeeded;
-    // Inicializar vida del jugador basada en healthLevel: 0=2, 1=4, 2=6... 10=22
-    game.maxHealth = 2 + (healthLevel * 2);
-    game.currentHealth = game.maxHealth;
-    // Reset efectos visuales
-    game.damageFlash = 0;
-    game.healFlash = 0;
-    game.invulnerable = 0;
-    game.camera = { 
-      x: game.worldWidth / 2 - CANVAS_WIDTH / 2, 
-      y: game.worldHeight / 2 - CANVAS_HEIGHT / 2 
-    };
-    setCurrentLevelXP(0);
-    setCurrentLevelStars(0);
-  };
-
-  const nextLevel = () => {
-    const newLevel = level + 1;
-    setLevel(newLevel);
-    gameRef.current.level = newLevel;
-    const levelConfig = getLevelConfig(newLevel, levelConfigs);
-    gameRef.current.starsNeeded = levelConfig.starsNeeded;
-    gameRef.current.gameStartTime = Date.now();
-    gameRef.current.sessionXP = 0;
-    gameRef.current.currentStars = 0; // Reset stars for new level
-    gameRef.current.headHits = 0; // Reset head hits counter
-    gameRef.current.bodyHits = 0; // Reset body hits counter
-    setScore(0);
-    setCurrentLevelStars(0);
-    initGame();
-    setShopOpen(false);
-    setGameState('playing');
-  };
-
-  const handleRebirth = async () => {
-    if (!user?.id) return;
-    
-    try {
-      const response = await fetch(`/api/users/${user.id}/rebirth`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({}) // Body vacío requerido por Fastify con Content-Type JSON
-      });
-      
-      if (!response.ok) {
-        throw new Error('Error al hacer rebirth');
-      }
-      
-      const data = await response.json();
-      
-      // Actualizar estados locales
-      setRebirthCount(data.rebirthCount);
-      setCurrentSeries(data.currentSeries);
-      setLevel(1);
-      setTotalXP(0);
-      setTotalStars(0);
-      setCurrentLevelXP(0);
-      setCurrentLevelStars(0);
-      
-      // Actualizar niveles de tienda según rebirth
-      const baseLevel = data.rebirthCount;
-      setShieldLevel(baseLevel);
-      setCannonLevel(baseLevel);
-      setMagnetLevel(baseLevel);
-      setSpeedLevel(baseLevel);
-      setBulletSpeedLevel(baseLevel);
-      setHealthLevel(baseLevel);
-      setHeadLevel(1 + baseLevel);
-      
-      // Volver al menú
-      setGameState('menu');
-      setVictoryData(null);
-      
-      console.log(`🔄 Rebirth completado! Serie ${data.currentSeries}, Base Level: ${baseLevel}`);
-    } catch (error) {
-      console.error('Error en rebirth:', error);
-      alert('Error al hacer rebirth. Intenta de nuevo.');
-    }
-  };
-
-  const buyItem = (item) => {
-    if (!shopConfigs) return;
-    
-    // Parse item type and level from item string (e.g., "shield1" -> type: "shield", level: 1)
-    const match = item.match(/^(\w+)(\d+)$/);
-    if (!match) return;
-    
-    const [, type, levelStr] = match;
-    const level = parseInt(levelStr);
-    
-    // Find the upgrade configuration
-    const upgrades = shopConfigs[type];
-    if (!upgrades) return;
-    
-    const upgrade = upgrades.find(u => Number(u.level) === level);
-    if (!upgrade) return;
-    
-    const cost = { xp: upgrade.xpCost, stars: upgrade.starsCost };
-    
-    // Check if user has enough resources
-    if (totalXP >= cost.xp && totalStars >= cost.stars) {
-      setTotalXP(prev => prev - cost.xp);
-      setTotalStars(prev => prev - cost.stars);
-      
-      // Update the appropriate level state
-      if (type === 'shield') {
-        setShieldLevel(level);
-      } else if (type === 'magnet') {
-        setMagnetLevel(level);
-      } else if (type === 'cannon') {
-        setCannonLevel(level);
-      } else if (type === 'speed') {
-        setSpeedLevel(level);
-      } else if (type === 'bullet_speed') {
-        setBulletSpeedLevel(level);
-      } else if (type === 'head') {
-        setHeadLevel(level);
-      } else if (type === 'health') {
-        setHealthLevel(level);
-      }
-      
-      setShopOpen(false);
-      
-      // Save progress after purchase
-      setTimeout(() => saveUserProgress(), 100);
-    }
-  };
-  
-  // Helper to get next upgrade level and cost for each type
-  const getNextUpgrade = (type) => {
-    if (!shopConfigs || !shopConfigs[type]) {
-      return null;
-    }
-
-    const upgrades = shopConfigs[type];
-    let currentLevel = 0;
-
-    if (type === 'shield') {
-      currentLevel = shieldLevel;
-    } else if (type === 'magnet') {
-      currentLevel = magnetLevel;
-    } else if (type === 'cannon') {
-      currentLevel = cannonLevel;
-    } else if (type === 'speed') {
-      currentLevel = speedLevel;
-    } else if (type === 'bullet_speed') {
-      currentLevel = bulletSpeedLevel;
-    } else if (type === 'head') {
-      currentLevel = headLevel;
-    } else if (type === 'health') {
-      currentLevel = healthLevel;
-    }
-
-    // Find the next upgrade level
-    // Ensure we're comparing numbers, not strings
-    const nextLevel = currentLevel + 1;
-    const nextUpgrade = upgrades.find(upgrade => Number(upgrade.level) === nextLevel);
-    
-    if (!nextUpgrade) {
-      return null; // Max level reached
-    }
-
-    return {
-      level: nextUpgrade.level,
-      item: `${type}${nextUpgrade.level}`,
-      cost: { xp: nextUpgrade.xpCost, stars: nextUpgrade.starsCost },
-      desc: nextUpgrade.description
-    };
-  };
-
-  if (loading) {
+  // Rest of component JSX...
   return (
-    <div style={{ 
-      display: 'flex', 
-        justifyContent: 'center',
-      alignItems: 'center', 
-        height: '100vh',
-        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
-        color: '#33ffff',
-        fontSize: '24px',
-        fontFamily: 'monospace'
-      }}>
-        Cargando progreso...
-      </div>
-    );
-  }
-
-  // Header component with user info
-  const UserHeader = () => {
-    const game = gameRef.current;
-    const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
-    
-    // Compact styles for playing state
-    if (gameState === 'playing') {
-      const compactPadding = isMobile ? '4px 8px' : '6px 12px';
-      const compactFontSize = isMobile ? '11px' : '13px';
-      return (
-        <div style={{
-          width: '100%',
-          background: 'rgba(0, 0, 0, 0.95)',
-          borderBottom: '1px solid #33ffff',
-          padding: compactPadding,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 1px 10px rgba(51, 255, 255, 0.2)',
-          zIndex: 1000
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            gap: isMobile ? '12px' : '20px', 
-            alignItems: 'center'
-          }}>
-            <span style={{ fontSize: compactFontSize, color: '#33ffff', fontWeight: 'bold' }}>
-              Nivel {game.level}
-            </span>
-            <span style={{ fontSize: compactFontSize, color: '#33ffff' }}>
-              XP: {currentLevelXP}
-            </span>
-            <span style={{ fontSize: compactFontSize, color: '#FFD700' }}>
-              ⭐ {currentLevelStars} / {game.starsNeeded}
-            </span>
-          </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {isAdmin && (
-            <button
-              onClick={() => setShowAdminPanel(true)}
-              style={{
-                background: 'transparent',
-                border: '1px solid #33ffff',
-                color: '#33ffff',
-                padding: isMobile ? '4px 8px' : '5px 10px',
-                fontSize: isMobile ? '9px' : '11px',
-                cursor: 'pointer',
-                borderRadius: '3px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              Admin
-            </button>
-          )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-                  padding: isMobile ? '4px 8px' : '5px 10px',
-                  fontSize: isMobile ? '9px' : '11px',
-              cursor: 'pointer',
-                  borderRadius: '3px',
-                  transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            Salir
-          </button>
-        </div>
-        </div>
-      );
-    }
-    
-    // Mobile styles
-    const headerPadding = isMobile ? '8px 10px' : '15px 20px';
-    const labelFontSize = isMobile ? '8px' : '11px';
-    const valueFontSize = isMobile ? '12px' : '16px';
-    const gap = isMobile ? '8px' : '30px';
-    const iconSize = isMobile ? 14 : 18;
-    const iconTextSize = isMobile ? '10px' : '12px';
-    
-    if (isMobile) {
-      // Mobile layout: column
-      return (
-        <div style={{
-          width: '100%',
-          background: 'rgba(0, 0, 0, 0.95)',
-          borderBottom: '2px solid #33ffff',
-          padding: headerPadding,
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
-          zIndex: 1000,
-          gap: '8px'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            gap: gap, 
-            alignItems: 'center', 
-            flexWrap: 'wrap',
-            width: '100%'
-          }}>
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-                {user?.username || 'Usuario'}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-                {totalXP}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
-                {totalStars}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-                {level}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
-                {currentSeries}
-              </div>
-            </div>
-            {rebirthCount > 0 && (
-              <div>
-                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
-                  ♻️ {rebirthCount}
-                </div>
-              </div>
-            )}
-          </div>
-          {gameState === 'playing' && (
-            <div style={{ width: '100%' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
-                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 80, 80, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
-                  height: '100%',
-                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
-                  boxShadow: '0 0 10px #ff5050',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            alignItems: 'center', 
-            width: '100%'
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              alignItems: 'center', 
-              flexWrap: 'wrap'
-          }}>
-            {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
-              </div>
-            )}
-            {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                  {headLevel === 2 ? 'Doble' : 'Triple'}
-                </span>
-              </div>
-            )}
-            {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                  Cañón {cannonLevel === 2 ? 'x2' : ''}
-                </span>
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {isAdmin && (
-              <button
-                onClick={() => setShowAdminPanel(true)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid #33ffff',
-                  color: '#33ffff',
-                  padding: '4px 8px',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                  borderRadius: '3px',
-                  transition: 'all 0.3s'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                }}
-              >
-                Admin
-              </button>
-            )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-                  padding: '4px 8px',
-                  fontSize: '10px',
-              cursor: 'pointer',
-                  borderRadius: '3px',
-                  transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-                Salir
-          </button>
-          </div>
-          </div>
-        </div>
-      );
-    }
-    
-    // Desktop layout: original horizontal design
-    return (
-      <div style={{
-        width: '100%',
-        background: 'rgba(0, 0, 0, 0.95)',
-        borderBottom: '2px solid #33ffff',
-        padding: headerPadding,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
-        zIndex: 1000
-      }}>
-        <div style={{ 
-          display: 'flex', 
-          gap: gap, 
-          alignItems: 'center', 
-          flex: 1
-        }}>
-          <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-              {user?.username || 'Usuario'}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-              {totalXP}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
-              {totalStars}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-              {level}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
-            <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
-              {currentSeries}
-            </div>
-          </div>
-          {rebirthCount > 0 && (
-            <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366' }}>
-                ♻️ {rebirthCount}
-              </div>
-            </div>
-          )}
-          {gameState === 'playing' && (
-            <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '8px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
-                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '8px',
-                background: 'rgba(255, 80, 80, 0.2)',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
-                  height: '100%',
-                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
-                  boxShadow: '0 0 10px #ff5050',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
-        </div>
-          <div style={{ 
-            display: 'flex', 
-          gap: '12px', 
-          alignItems: 'center'
-          }}>
-            {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
-              </div>
-            )}
-            {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                  {headLevel === 2 ? 'Doble' : 'Triple'}
-                </span>
-              </div>
-            )}
-            {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                  Cañón {cannonLevel === 2 ? 'x2' : ''}
-                </span>
-              </div>
-            )}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {isAdmin && (
-            <button
-              onClick={() => setShowAdminPanel(true)}
-              style={{
-                background: 'transparent',
-                border: '1px solid #33ffff',
-                color: '#33ffff',
-                padding: '5px 10px',
-                fontSize: '11px',
-                cursor: 'pointer',
-                borderRadius: '3px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              Admin
-            </button>
-          )}
-        <button
-          onClick={onLogout}
-          style={{
-            background: 'transparent',
-            border: '1px solid #ff3366',
-            color: '#ff3366',
-                  padding: '5px 10px',
-                  fontSize: '11px',
-            cursor: 'pointer',
-                  borderRadius: '3px',
-            transition: 'all 0.3s',
-                  marginLeft: '10px'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'transparent';
-          }}
-        >
-                Salir
-        </button>
-        </div>
-          </div>
-      </div>
-    );
-  };
-
-  // Show banned message if user is banned
-  if (isBanned) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
-        color: '#ff3366',
-        fontSize: '24px',
-        fontFamily: 'monospace',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <h1 style={{ color: '#ff3366', margin: 0 }}>Cuenta Suspendida</h1>
-        <p style={{ color: '#888', fontSize: '16px' }}>
-          Tu cuenta ha sido suspendida. Por favor contacta al administrador.
-        </p>
-        <button
-          onClick={onLogout}
-          style={{
-            padding: '10px 20px',
-            background: 'transparent',
-            border: '2px solid #ff3366',
-            color: '#ff3366',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Cerrar Sesión
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      height: '100vh',
-      background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
-      color: '#33ffff',
-      fontFamily: 'monospace',
-      overflow: 'hidden'
-    }}>
-      {/* Admin Panel */}
-      {showAdminPanel && (
-        <AdminPanel onClose={() => {
-          setShowAdminPanel(false);
-          // Reload level configs after admin changes
-          if (isAdmin) {
-            loadLevelConfigs();
-          }
-        }} />
-      )}
-      
-      {/* Header siempre visible */}
-      <UserHeader />
-      
-      {/* Content area */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: gameState === 'playing' ? '0' : '20px',
-        overflow: gameState === 'playing' ? 'hidden' : 'auto',
-        position: 'relative',
-        width: '100%',
-        height: '100%'
-      }}>
-
-      {gameState === 'menu' && (
-        <div style={{ 
-          display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: '20px',
-          width: '100%',
-          maxWidth: '1200px',
-          padding: '20px',
-          alignItems: isMobile ? 'center' : 'flex-start',
-          justifyContent: 'center'
-        }}>
-          {/* Left side: Main action buttons */}
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
-          borderRadius: '10px',
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)' }}>
+      <canvas
+        ref={canvasRef}
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        style={{
           border: '2px solid #33ffff',
-            boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-            width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
-            flex: isMobile ? 'none' : '0 0 400px'
-          }}>
-            <img 
-              src="/logo.png" 
-              alt="Neon Snake" 
-              style={{ 
-                width: '100%', 
-                maxWidth: '400px', 
-                height: 'auto',
-                marginBottom: '20px',
-                filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
-              }} 
-            />
-            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
-            Mueve el mouse/trackpad para controlar tu serpiente<br/>
-            Come puntos brillantes para ganar XP<br/>
-            ⭐ Recoge estrellas para avanzar de nivel
-          </p>
-            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row' }}>
-          <button 
-            onClick={startGame}
-            style={{
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '15px 40px',
-                  fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #33ffff',
-              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-                  flex: 1,
-                  transition: 'all 0.3s'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-            }}
-          >
-            JUGAR
-          </button>
-          <button 
-            onClick={() => setGameState('shop')}
-            style={{
-              background: 'transparent',
-              border: '2px solid #ff00ff',
-              color: '#ff00ff',
-              padding: '15px 40px',
-                  fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #ff00ff',
-                  boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  flex: 1,
-                  transition: 'all 0.3s'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 0, 255, 0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-            }}
-          >
-            TIENDA
-          </button>
-            </div>
-          </div>
-
-          {/* Right side: Leaderboard */}
-          <div style={{ 
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: '25px',
-            borderRadius: '10px',
-            border: '2px solid #FFD700',
-            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
-            flex: isMobile ? 'none' : '1'
-          }}>
-            <h2 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 20px #FFD700', 
-              textAlign: 'center',
-              marginBottom: '20px',
-              fontSize: '22px'
-            }}>
-              🏆 RANKING
-            </h2>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {leaderboard.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Puntos</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboard.map((entry, index) => (
-                      <tr 
-                        key={index}
-                        style={{ 
-                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
-                        }}
-                      >
-                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
-                        </td>
-                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
-                          {entry.username}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
-                          {entry.bestScore?.toLocaleString() || 0}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
-                          {entry.highestLevel || 1}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {gameState === 'shop' && (
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.95)',
-          padding: '30px',
-          borderRadius: '10px',
-          border: '3px solid #ff00ff',
-          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
-          maxWidth: '1400px',
-          width: '100%',
-          margin: '20px auto',
-          maxHeight: 'calc(100vh - 200px)',
-          overflowY: 'auto',
-          position: 'relative'
-        }}>
-          <button
-            onClick={() => setGameState('menu')}
-            style={{
-              position: 'absolute',
-              top: '20px',
-              right: '20px',
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '8px 16px',
-              fontSize: '14px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            VOLVER
-          </button>
-          <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
-            TIENDA
-          </h2>
-          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
-            XP Total: {totalXP} | ⭐ Total: {totalStars}
-          </p>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
-            {/* Escudo */}
-            {(() => {
-              const next = getNextUpgrade('shield');
-              const currentLevel = shieldLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #6495ed', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Shield size={36} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  {next ? (
-                    <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                      </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #6495ed',
-                          color: '#6495ed',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                            marginTop: 'auto'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Imán XP */}
-            {(() => {
-              const next = getNextUpgrade('magnet');
-              const currentLevel = magnetLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #00ff88', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Magnet size={36} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  {next ? (
-                    <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                      </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #00ff88',
-                          color: '#00ff88',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                            marginTop: 'auto'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Cañón */}
-            {(() => {
-              const next = getNextUpgrade('cannon');
-              const currentLevel = cannonLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #ffff00', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Sparkles size={36} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  {next ? (
-                    <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                      </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #ffff00',
-                          color: '#ffff00',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                            marginTop: 'auto'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Velocidad */}
-            {(() => {
-              const next = getNextUpgrade('speed');
-              const currentLevel = speedLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #ff3366', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Gauge size={36} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  {next ? (
-                    <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                        {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                      </p>
-                      <button 
-                        onClick={() => buyItem(next.item)}
-                        disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                        style={{
-                          background: 'transparent',
-                          border: '2px solid #ff3366',
-                          color: '#ff3366',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                          cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                          borderRadius: '5px',
-                          opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                          width: '100%',
-                            marginTop: 'auto'
-                        }}
-                      >
-                        COMPRAR NIVEL {next.level}
-                      </button>
-                    </>
-                  ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                      Nivel Máximo
-                    </p>
-                  )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Velocidad de Bala */}
-            {(() => {
-              const next = getNextUpgrade('bullet_speed');
-              const currentLevel = bulletSpeedLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #00ff00', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Sparkles size={36} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-          <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-            style={{
-              background: 'transparent',
-                            border: '2px solid #00ff00',
-                            color: '#00ff00',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
-                            marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-          </button>
-                      </>
-                    ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
-          </div>
-                </div>
-              );
-            })()}
-
-            {/* Puntos de Vida */}
-            {(() => {
-              const next = getNextUpgrade('health');
-              const currentLevel = healthLevel;
-              return (
-                <div style={{ 
-                  border: '2px solid #ff5050', 
-                  padding: '15px', 
-                  borderRadius: '10px',
-                  background: currentLevel > 0 ? 'rgba(255, 80, 80, 0.2)' : 'transparent',
-                  minWidth: '200px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%'
-                }}>
-                  <Heart size={36} style={{ color: '#ff5050', display: 'block', margin: '0 auto' }} />
-                  <h3 style={{ color: '#ff5050', textAlign: 'center', fontSize: '16px', marginTop: '8px' }}>
-                    VIDA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''} ({2 + currentLevel * 2} ❤️)
-                  </h3>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    {next ? (
-                      <>
-                        <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
-                        <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
-                          {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                        </p>
-          <button 
-                          onClick={() => buyItem(next.item)}
-                          disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-            style={{
-              background: 'transparent',
-                            border: '2px solid #ff5050',
-                            color: '#ff5050',
-                            padding: '8px 16px',
-                            fontSize: '14px',
-                            cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                            borderRadius: '5px',
-                            opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                            width: '100%',
-                            marginTop: 'auto'
-                          }}
-                        >
-                          COMPRAR NIVEL {next.level}
-          </button>
-                      </>
-                    ) : (
-                      <p style={{ textAlign: 'center', fontSize: '14px', marginTop: 'auto', color: '#888' }}>
-                        Nivel Máximo
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
-
-      {gameState === 'levelComplete' && (
-        <div style={{ 
-          display: 'flex',
-          gap: '30px',
-          width: '100%',
-          maxWidth: '1200px',
-          padding: '20px',
-          alignItems: 'flex-start'
-        }}>
-          {/* Left side: Level complete info */}
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.9)',
-          padding: '40px',
-          borderRadius: '10px',
-          border: '2px solid #00ff88',
-          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
-            zIndex: 100,
-            flex: '0 0 400px'
-        }}>
-          <Sparkles size={64} style={{ color: '#00ff88' }} />
-          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
-            ¡NIVEL COMPLETADO!
-          </h2>
-          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
-          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <button 
-            onClick={nextLevel}
-            style={{
-              background: 'transparent',
-              border: '2px solid #00ff88',
-              color: '#00ff88',
-              padding: '15px 40px',
-                fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #00ff88',
-                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-            }}
-          >
-            SIGUIENTE NIVEL
-          </button>
-            <button 
-              onClick={() => {
-                setGameState('playing');
-                setShopOpen(true);
-              }}
-              style={{
-                background: 'transparent',
-                border: '2px solid #ff00ff',
-                color: '#ff00ff',
-                padding: '15px 40px',
-                fontSize: '20px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #ff00ff',
-                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              IR A LA TIENDA
-          </button>
-            </div>
-          </div>
-
-          {/* Right side: Leaderboard */}
-          <div style={{ 
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
-            borderRadius: '10px',
-            border: '2px solid #FFD700',
-            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-            flex: '1',
-            minWidth: '300px'
-          }}>
-            <h2 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 20px #FFD700', 
-              textAlign: 'center',
-              marginBottom: '20px',
-              fontSize: '24px'
-            }}>
-              🏆 RANKING
-            </h2>
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {leaderboard.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Puntos</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboard.map((entry, index) => (
-                      <tr 
-                        key={index}
-                        style={{ 
-                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
-                        }}
-                      >
-                        <td style={{ padding: '10px', color: index < 3 ? '#FFD700' : '#33ffff' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
-                        </td>
-                        <td style={{ padding: '10px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal' }}>
-                          {entry.username}
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
-                          {entry.bestScore?.toLocaleString() || 0}
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
-                          {entry.highestLevel || 1}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {gameState === 'gameComplete' && victoryData && (
-        <div style={{ 
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          maxWidth: '800px',
-          padding: '40px',
-          gap: '30px'
-        }}>
-          {/* Pantalla de Victoria */}
-          <div style={{ 
-            textAlign: 'center',
-            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
-            padding: '60px',
-            borderRadius: '20px',
-            border: '3px solid #FFD700',
-            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
-            width: '100%'
-          }}>
-            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
-            <h1 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 30px #FFD700, 0 0 50px #ff00ff',
-              fontSize: '48px',
-              marginBottom: '20px',
-              fontWeight: 'bold',
-              letterSpacing: '2px'
-            }}>
-              ¡FELICITACIONES!
-            </h1>
-            <h2 style={{ 
-              color: '#00ff88', 
-              textShadow: '0 0 20px #00ff88',
-              fontSize: '32px',
-              marginBottom: '20px'
-            }}>
-              ¡Completaste los 25 niveles!
-            </h2>
-            
-            {/* Serie Actual */}
-            <div style={{ 
-              fontSize: '20px', 
-              color: '#ff00ff', 
-              marginBottom: '30px',
-              textShadow: '0 0 10px #ff00ff'
-            }}>
-              ⚡ Serie {victoryData.series} Completada ⚡
-            </div>
-            
-            {/* Puntuación */}
-            <div style={{
-              background: 'rgba(0, 0, 0, 0.6)',
-              padding: '30px',
-              borderRadius: '15px',
-              marginBottom: '30px',
-              border: '2px solid #33ffff'
-            }}>
-              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
-                Tu Puntuación Final
-              </div>
-              <div style={{ 
-                fontSize: '56px', 
-                color: '#33ffff', 
-                fontWeight: 'bold',
-                textShadow: '0 0 20px #33ffff',
-                marginBottom: '20px'
-              }}>
-                {victoryData.score.toLocaleString()} XP
-              </div>
-              
-              {victoryData.isNewRecord ? (
-                <div style={{
-                  fontSize: '28px',
-                  color: '#FFD700',
-                  textShadow: '0 0 20px #FFD700',
-                  fontWeight: 'bold',
-                  marginTop: '15px'
-                }}>
-                  ✨ ¡NUEVO RÉCORD PERSONAL! ✨
-                </div>
-              ) : (
-                <div style={{ fontSize: '18px', color: '#888', marginTop: '10px' }}>
-                  Tu récord anterior: {victoryData.previousBestScore.toLocaleString()} XP
-                </div>
-              )}
-            </div>
-            
-            {/* Posición en Ranking */}
-            <div style={{
-              background: 'rgba(0, 0, 0, 0.6)',
-              padding: '25px',
-              borderRadius: '15px',
-              border: '2px solid #FFD700'
-            }}>
-              <div style={{ fontSize: '24px', color: '#888', marginBottom: '10px' }}>
-                Ranking Mundial
-              </div>
-              <div style={{ 
-                fontSize: '48px', 
-                color: '#FFD700', 
-                fontWeight: 'bold',
-                textShadow: '0 0 20px #FFD700'
-              }}>
-                {victoryData.position === 1 && '🥇 '}
-                {victoryData.position === 2 && '🥈 '}
-                {victoryData.position === 3 && '🥉 '}
-                Posición #{victoryData.position}
-              </div>
-            </div>
-            
-            {/* Caja de Rebirth */}
-            <div style={{
-              background: 'rgba(255, 0, 0, 0.2)',
-              padding: '25px',
-              borderRadius: '15px',
-              marginTop: '30px',
-              border: '2px solid #ff3366',
-              boxShadow: '0 0 20px rgba(255, 51, 102, 0.4)'
-            }}>
-              <div style={{ 
-                fontSize: '32px', 
-                marginBottom: '15px',
-                filter: 'drop-shadow(0 0 10px rgba(255, 51, 102, 0.8))'
-              }}>
-                ♻️
-              </div>
-              <h3 style={{ 
-                color: '#ff3366', 
-                fontSize: '24px',
-                marginBottom: '15px',
-                textShadow: '0 0 15px #ff3366'
-              }}>
-                ¿Querés mejorar tu marca?
-              </h3>
-              <p style={{ 
-                color: '#fff', 
-                fontSize: '16px',
-                marginBottom: '10px',
-                lineHeight: '1.6'
-              }}>
-                Hacé <strong>Rebirth</strong> para volver a nivel 1
-              </p>
-              <p style={{ 
-                color: '#00ff88', 
-                fontSize: '18px',
-                marginBottom: '20px',
-                fontWeight: 'bold',
-                textShadow: '0 0 10px #00ff88'
-              }}>
-                ✨ Ventaja: Todos los upgrades empiezan en nivel {rebirthCount + 1} ✨
-              </p>
-            </div>
-            
-            {/* Botones */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '20px', 
-              justifyContent: 'center',
-              marginTop: '40px',
-              flexWrap: 'wrap'
-            }}>
-              <button 
-                onClick={handleRebirth}
-                style={{
-                  background: 'transparent',
-                  border: '3px solid #ff3366',
-                  color: '#ff3366',
-                  padding: '20px 40px',
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  borderRadius: '10px',
-                  textShadow: '0 0 10px #ff3366',
-                  boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)',
-                  transition: 'all 0.3s',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 51, 102, 0.3)';
-                  e.target.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                  e.target.style.transform = 'scale(1)';
-                }}
-              >
-                <span style={{ fontSize: '28px' }}>♻️</span> REBIRTH
-              </button>
-              
-              <button 
-                onClick={() => {
-                  setGameState('menu');
-                  setVictoryData(null);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: '3px solid #FFD700',
-                  color: '#FFD700',
-                  padding: '20px 50px',
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  borderRadius: '10px',
-                  textShadow: '0 0 10px #FFD700',
-                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
-                  transition: 'all 0.3s',
-                  fontWeight: 'bold'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(255, 215, 0, 0.3)';
-                  e.target.style.transform = 'scale(1.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-                  e.target.style.transform = 'scale(1)';
-                }}
-              >
-                VOLVER AL MENÚ
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {gameState === 'gameOver' && (
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.7)',
-          padding: '40px',
-          borderRadius: '10px',
-          border: '2px solid #ff3366',
-          boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)'
-        }}>
-          <h2 style={{ color: '#ff3366', textShadow: '0 0 20px #ff3366' }}>
-            GAME OVER
-          </h2>
-          <p style={{ fontSize: '20px' }}>Nivel alcanzado: {level}</p>
-          <p style={{ fontSize: '20px' }}>XP Total: {totalXP}</p>
-          <button 
-            onClick={() => {
-              // Save progress before returning to menu
-              // NO resetear el nivel - mantener el nivel alcanzado
-              saveUserProgress();
-              setGameState('menu');
-            }}
-            style={{
-              background: 'transparent',
-              border: '2px solid #ff3366',
-              color: '#ff3366',
-              padding: '15px 40px',
-              fontSize: '24px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #ff3366',
-              marginTop: '20px'
-            }}
-          >
-            VOLVER AL MENÚ
-          </button>
-        </div>
-      )}
-
-      {gameState === 'playing' && (
-        <div style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'stretch',
-          justifyContent: 'stretch',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <canvas 
-            ref={canvasRef} 
-            width={CANVAS_WIDTH} 
-            height={CANVAS_HEIGHT}
-            style={{
-              width: '100%',
-              height: '100%',
-              border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
-              boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
-              borderRadius: '0',
-              display: 'block',
-              imageRendering: 'pixelated',
-              touchAction: 'none', // Prevent default touch behaviors
-              WebkitTouchCallout: 'none', // Prevent iOS callout
-              WebkitUserSelect: 'none', // Prevent text selection
-              userSelect: 'none'
-            }}
-          />
-          
-          {/* Mobile Controls */}
-          {isMobile && gameState === 'playing' && (
-            <>
-              {/* Joystick - Bottom Right */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: '20px',
-                  right: '20px',
-                  width: '120px',
-                  height: '120px',
-                  pointerEvents: 'none',
-                  zIndex: 100
-                }}
-              >
-                {/* Joystick Base */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '120px',
-                    height: '120px',
-                    borderRadius: '50%',
-                    background: 'rgba(51, 255, 255, 0.2)',
-                    border: '2px solid rgba(51, 255, 255, 0.5)',
-                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.3)',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)'
-                  }}
-                />
-                {/* Joystick Handle */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: '50px',
-                    height: '50px',
-                    borderRadius: '50%',
-                    background: joystickActive 
-                      ? 'rgba(51, 255, 255, 0.9)' 
-                      : 'rgba(51, 255, 255, 0.4)',
-                    border: '2px solid #33ffff',
-                    boxShadow: joystickActive 
-                      ? '0 0 20px rgba(51, 255, 255, 0.8)' 
-                      : '0 0 10px rgba(51, 255, 255, 0.4)',
-                    left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.x * 35}px`
-                      : '50%',
-                    top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.y * 35}px`
-                      : '50%',
-                    transform: 'translate(-50%, -50%)',
-                    transition: joystickActive ? 'none' : 'all 0.2s ease-out',
-                    pointerEvents: 'none'
-                  }}
-                />
-              </div>
-
-              {/* Shoot Button - Bottom Left */}
-              {cannonLevel > 0 && (
-                <button
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    if (!isShootingRef.current && shootBulletRef.current) {
-                      isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
-                    }
-                  }}
-                  onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    if (stopAutoFireRef.current) stopAutoFireRef.current();
-                  }}
-                  onTouchCancel={(e) => {
-                    e.stopPropagation();
-                    if (stopAutoFireRef.current) stopAutoFireRef.current();
-                  }}
-                  style={{
-                    position: 'absolute',
-                    bottom: '25px',
-                    left: '25px',
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '50%',
-                    background: 'rgba(255, 51, 102, 0.6)',
-                    border: '2px solid rgba(255, 51, 102, 0.8)',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
-                    zIndex: 100,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    touchAction: 'none',
-                    WebkitTapHighlightColor: 'transparent',
-                    userSelect: 'none',
-                    transition: 'all 0.1s ease',
-                    fontSize: '0',
-                    padding: '0'
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    if (!isShootingRef.current && shootBulletRef.current) {
-                      isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
-                    }
-                  }}
-                  onMouseUp={(e) => {
-                    e.preventDefault();
-                    if (stopAutoFireRef.current) stopAutoFireRef.current();
-                  }}
-                  onMouseLeave={(e) => {
-                    if (stopAutoFireRef.current) stopAutoFireRef.current();
-                  }}
-                  title="Disparar (mantener para auto-fire)"
-                />
-              )}
-            </>
-          )}
-          
-          {shopOpen && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(0, 0, 0, 0.95)',
-              padding: '40px',
-              borderRadius: '10px',
-              border: '3px solid #ff00ff',
-              boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
-              zIndex: 1000,
-              maxWidth: '90vw',
-              maxHeight: '90vh',
-              overflowY: 'auto'
-            }}>
-              <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center' }}>
-                TIENDA
-              </h2>
-              <p style={{ fontSize: '20px', marginBottom: '30px', textAlign: 'center' }}>
-                XP Total: {totalXP} | ⭐ Total: {totalStars}
-              </p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-                {/* Escudo */}
-                {(() => {
-                  const next = getNextUpgrade('shield');
-                  const currentLevel = shieldLevel;
-                  return (
-                <div style={{ 
-                  border: '2px solid #6495ed', 
-                      padding: '20px', 
-                  borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Shield size={48} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#6495ed', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        ESCUDO {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                  <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                    style={{
-                      background: 'transparent',
-                      border: '2px solid #6495ed',
-                      color: '#6495ed',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                      borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                      width: '100%',
-                              marginTop: '10px'
-                    }}
-                  >
-                            COMPRAR NIVEL {next.level}
-                  </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Imán XP */}
-                {(() => {
-                  const next = getNextUpgrade('magnet');
-                  const currentLevel = magnetLevel;
-                  return (
-                    <div style={{ 
-                      border: '2px solid #00ff88', 
-                      padding: '20px', 
-                      borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Magnet size={48} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#00ff88', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        IMÁN XP {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                  <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                    style={{
-                      background: 'transparent',
-                              border: '2px solid #00ff88',
-                              color: '#00ff88',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                      borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                      width: '100%',
-                              marginTop: '10px'
-                    }}
-                  >
-                            COMPRAR NIVEL {next.level}
-                  </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                </div>
-                  );
-                })()}
-
-                {/* Cañón */}
-                {(() => {
-                  const next = getNextUpgrade('cannon');
-                  const currentLevel = cannonLevel;
-                  return (
-                <div style={{ 
-                      border: '2px solid #ffff00', 
-                      padding: '20px', 
-                  borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Sparkles size={48} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#ffff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        CAÑÓN {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                  <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                    style={{
-                      background: 'transparent',
-                              border: '2px solid #ffff00',
-                              color: '#ffff00',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                      borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                      width: '100%',
-                              marginTop: '10px'
-                    }}
-                  >
-                            COMPRAR NIVEL {next.level}
-                  </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                </div>
-                  );
-                })()}
-
-                {/* Velocidad */}
-                {(() => {
-                  const next = getNextUpgrade('speed');
-                  const currentLevel = speedLevel;
-                  return (
-                <div style={{ 
-                      border: '2px solid #ff3366', 
-                      padding: '20px', 
-                  borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(255, 51, 102, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Gauge size={48} style={{ color: '#ff3366', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#ff3366', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        VELOCIDAD {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                  <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                    style={{
-                      background: 'transparent',
-                              border: '2px solid #ff3366',
-                              color: '#ff3366',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                      borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                      width: '100%',
-                              marginTop: '10px'
-                    }}
-                  >
-                            COMPRAR NIVEL {next.level}
-                  </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                </div>
-                  );
-                })()}
-
-                {/* Velocidad de Bala */}
-                {(() => {
-                  const next = getNextUpgrade('bullet_speed');
-                  const currentLevel = bulletSpeedLevel;
-                  return (
-                <div style={{ 
-                      border: '2px solid #00ff00', 
-                      padding: '20px', 
-                  borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(0, 255, 0, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Sparkles size={48} style={{ color: '#00ff00', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#00ff00', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        VELOCIDAD BALA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''}
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                  <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                    style={{
-                      background: 'transparent',
-                              border: '2px solid #00ff00',
-                              color: '#00ff00',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                      borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                      width: '100%',
-                              marginTop: '10px'
-                    }}
-                  >
-                            COMPRAR NIVEL {next.level}
-                  </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                </div>
-                  );
-                })()}
-
-                {/* Puntos de Vida */}
-                {(() => {
-                  const next = getNextUpgrade('health');
-                  const currentLevel = healthLevel;
-                  return (
-                    <div style={{ 
-                      border: '2px solid #ff5050', 
-                      padding: '20px', 
-                      borderRadius: '10px',
-                      background: currentLevel > 0 ? 'rgba(255, 80, 80, 0.2)' : 'transparent',
-                      minWidth: '220px'
-                    }}>
-                      <Heart size={48} style={{ color: '#ff5050', display: 'block', margin: '0 auto' }} />
-                      <h3 style={{ color: '#ff5050', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
-                        VIDA {currentLevel > 0 ? `Nivel ${currentLevel}` : ''} ({2 + currentLevel * 2} ❤️)
-                      </h3>
-                      {next ? (
-                        <>
-                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
-                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
-                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
-                          </p>
-                          <button 
-                            onClick={() => buyItem(next.item)}
-                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
-                            style={{
-                              background: 'transparent',
-                              border: '2px solid #ff5050',
-                              color: '#ff5050',
-                              padding: '10px 20px',
-                              fontSize: '16px',
-                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
-                              borderRadius: '5px',
-                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
-                              width: '100%',
-                              marginTop: '10px'
-                            }}
-                          >
-                            COMPRAR NIVEL {next.level}
-                          </button>
-                        </>
-                      ) : (
-                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
-                          Nivel Máximo
-                        </p>
-                      )}
-                </div>
-                  );
-                })()}
-              </div>
-
-              <button 
-                onClick={() => setShopOpen(false)}
-                style={{
-                  background: 'transparent',
-                  border: '2px solid #33ffff',
-                  color: '#33ffff',
-                  padding: '15px 40px',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  borderRadius: '5px',
-                  display: 'block',
-                  margin: '0 auto'
-                }}
-              >
-                CERRAR [J]
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      </div>
+          borderRadius: '8px',
+          boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)'
+        }}
+      />
+      {/* Add other UI elements here */}
     </div>
   );
 };
