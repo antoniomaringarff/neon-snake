@@ -8,6 +8,7 @@ import leaderboardRoutes from './src/routes/leaderboard.js';
 import sessionsRoutes from './src/routes/sessions.js';
 import shopRoutes from './src/routes/shop.js';
 import adminRoutes from './src/routes/admin.js';
+import chatRoutes from './src/routes/chat.js';
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ fastify.register(leaderboardRoutes, { prefix: '/api/leaderboard' });
 fastify.register(sessionsRoutes, { prefix: '/api/sessions' });
 fastify.register(shopRoutes, { prefix: '/api/shop' });
 fastify.register(adminRoutes, { prefix: '/api/admin' });
+fastify.register(chatRoutes, { prefix: '/api/chat' });
 
 // Error handler
 fastify.setErrorHandler((error, request, reply) => {

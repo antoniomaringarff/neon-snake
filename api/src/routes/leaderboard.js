@@ -6,6 +6,9 @@ export default async function leaderboardRoutes(fastify, options) {
     const { type = 'score', limit = 10 } = request.query;
 
     let orderBy;
+    let selectExtra = '';
+    let orderByTable = 'l';
+    
     switch (type) {
       case 'level':
         orderBy = 'highest_level';
@@ -18,6 +21,21 @@ export default async function leaderboardRoutes(fastify, options) {
         break;
       case 'level25':
         orderBy = 'level_25_score';
+        break;
+      case 'rebirth':
+        orderBy = 'rebirth_count';
+        orderByTable = 'u';
+        selectExtra = ', COALESCE(u.rebirth_count, 0) as rebirth_count';
+        break;
+      case 'stars':
+        orderBy = 'total_stars';
+        orderByTable = 'u';
+        selectExtra = ', COALESCE(u.total_stars, 0) as total_stars';
+        break;
+      case 'series':
+        orderBy = 'current_series';
+        orderByTable = 'u';
+        selectExtra = ', COALESCE(u.current_series, 1) as current_series';
         break;
       default:
         // Por defecto usamos level_25_score (ranking principal)
@@ -36,10 +54,10 @@ export default async function leaderboardRoutes(fastify, options) {
           COALESCE(l.level_25_score, 0) as level_25_score,
           COALESCE(l.level_25_kills, 0) as level_25_kills,
           COALESCE(l.level_25_series, 0) as level_25_series,
-          l.last_updated
+          l.last_updated${selectExtra}
          FROM leaderboard l
          JOIN users u ON l.user_id = u.id
-         ORDER BY l.${orderBy} DESC
+         ORDER BY ${orderByTable}.${orderBy} DESC
          LIMIT $1`,
         [Math.min(parseInt(limit), 100)] // Max 100
       );
@@ -54,6 +72,9 @@ export default async function leaderboardRoutes(fastify, options) {
         level25Score: row.level_25_score,
         level25Kills: row.level_25_kills,
         level25Series: row.level_25_series,
+        rebirthCount: row.rebirth_count || 0,
+        totalStars: row.total_stars || 0,
+        currentSeries: row.current_series || 1,
         lastUpdated: row.last_updated
       }));
     } catch (error) {

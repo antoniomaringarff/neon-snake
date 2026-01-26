@@ -198,7 +198,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [shopOpen, setShopOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [shopConfigs, setShopConfigs] = useState(null); // Configuraciones de la tienda desde la DB
-  const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data
+  const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data por XP
+  const [leaderboardByLevel, setLeaderboardByLevel] = useState([]); // Leaderboard data por nivel
+  const [leaderboardByRebirth, setLeaderboardByRebirth] = useState([]); // Leaderboard data por rebirths
+  const [leaderboardByTotalXP, setLeaderboardByTotalXP] = useState([]); // Leaderboard data por XP total
+  const [leaderboardByTotalStars, setLeaderboardByTotalStars] = useState([]); // Leaderboard data por estrellas totales
+  const [leaderboardBySeries, setLeaderboardBySeries] = useState([]); // Leaderboard data por serie
+  const [chatMessages, setChatMessages] = useState([]); // Chat messages
+  const [chatInput, setChatInput] = useState(''); // Chat input text
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [levelConfigs, setLevelConfigs] = useState({}); // Configuraciones de niveles desde la DB
   const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
@@ -1144,7 +1151,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     loadShopConfigs();
   }, []);
 
-  // Load leaderboard
+  // Load leaderboard by XP
   const loadLeaderboard = async () => {
     try {
       const response = await fetch('/api/leaderboard?type=xp&limit=10');
@@ -1157,6 +1164,128 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     }
   };
 
+  // Load leaderboard by level
+  const loadLeaderboardByLevel = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?type=level&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboardByLevel(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard by level:', error);
+    }
+  };
+
+  // Load leaderboard by rebirths
+  const loadLeaderboardByRebirth = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?type=rebirth&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboardByRebirth(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard by rebirth:', error);
+    }
+  };
+
+  // Load leaderboard by total XP
+  const loadLeaderboardByTotalXP = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?type=xp&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboardByTotalXP(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard by total XP:', error);
+    }
+  };
+
+  // Load leaderboard by total stars
+  const loadLeaderboardByTotalStars = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?type=stars&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboardByTotalStars(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard by total stars:', error);
+    }
+  };
+
+  // Load leaderboard by series
+  const loadLeaderboardBySeries = async () => {
+    try {
+      const response = await fetch('/api/leaderboard?type=series&limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setLeaderboardBySeries(data);
+      }
+    } catch (error) {
+      console.error('Error loading leaderboard by series:', error);
+    }
+  };
+
+  // Load chat messages
+  const loadChatMessages = async () => {
+    try {
+      const response = await fetch('/api/chat?limit=50');
+      if (response.ok) {
+        const data = await response.json();
+        setChatMessages(data);
+      }
+    } catch (error) {
+      console.error('Error loading chat messages:', error);
+    }
+  };
+
+  // Send chat message
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !user?.id) return;
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ message: chatInput.trim() })
+      });
+
+      if (response.ok) {
+        const newMessage = await response.json();
+        setChatMessages(prev => [...prev, newMessage]);
+        setChatInput('');
+        // Scroll to bottom in both chat containers
+        setTimeout(() => {
+          const chatContainer = document.getElementById('chat-messages');
+          const chatContainerLevel = document.getElementById('chat-messages-level');
+          if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          }
+          if (chatContainerLevel) {
+            chatContainerLevel.scrollTop = chatContainerLevel.scrollHeight;
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error sending chat message:', error);
+    }
+  };
+
+  // Auto-scroll chat when new messages arrive
+  useEffect(() => {
+    const chatContainer = document.getElementById('chat-messages');
+    const chatContainerLevel = document.getElementById('chat-messages-level');
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+    if (chatContainerLevel) {
+      chatContainerLevel.scrollTop = chatContainerLevel.scrollHeight;
+    }
+  }, [chatMessages]);
+
   // Load progress on mount
   useEffect(() => {
     loadUserProgress();
@@ -1166,7 +1295,25 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   useEffect(() => {
     if (gameState === 'menu' || gameState === 'levelComplete' || gameState === 'gameComplete') {
       loadLeaderboard();
+      loadLeaderboardByLevel();
+      loadLeaderboardByRebirth();
+      loadLeaderboardByTotalXP();
+      loadLeaderboardByTotalStars();
+      loadLeaderboardBySeries();
+      loadChatMessages();
     }
+  }, [gameState]);
+
+  // Poll chat messages every 3 seconds when in menu
+  useEffect(() => {
+    if (gameState !== 'menu' && gameState !== 'levelComplete' && gameState !== 'gameComplete') return;
+
+    loadChatMessages(); // Load immediately
+    const interval = setInterval(() => {
+      loadChatMessages();
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
   }, [gameState]);
 
   // Auto-save progress ONLY when in safe states (menu, shop, levelComplete, levelIntro)
@@ -1304,8 +1451,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const baseSpeed = levelConfig.enemySpeed + (Math.random() * 0.5);
     const speedBonus = 1 + (upgrades.speedLevel * 0.1);
     
+      // Crear segmentos iniciales para que el enemigo sea visible desde el inicio
+      const initialSegments = [];
+      for (let i = 0; i < Math.min(baseLength, 15); i++) {
+        initialSegments.push({
+          x: x - Math.cos(angle) * i * 8,
+          y: y - Math.sin(angle) * i * 8
+        });
+      }
+      
       return {
-        segments: [{ x, y }],
+        segments: initialSegments,
         direction: { x: Math.cos(angle), y: Math.sin(angle) },
         speed: baseSpeed * speedBonus,
         baseSpeed: baseSpeed, // Guardar velocidad base para referencia
@@ -1540,7 +1696,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       game.healthBoxes = Array.from({ length: levelConfig.healthBoxCount }, () => createHealthBox(levelConfig));
       game.structures = [];
       
-      console.log(`🎮 Inicializando nivel ${game.level} con ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, mapa ${levelConfig.mapSize}x${levelConfig.mapSize}`);
+      console.log(`🎮 Nivel ${game.level} iniciado: ${game.enemies.length} enemigos, ${game.resentfulSnakes?.length || 0} resentidas, mapa ${game.worldWidth}x${game.worldHeight}`);
       game.totalStarsGenerated = 0; // Reset star counter for level
       game.particles = [];
       game.currentXP = 0;
@@ -3820,11 +3976,35 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
       ctx.shadowBlur = 0;
 
-      // Draw player snake with selected skin colors
+      // Draw player snake with selected skin colors - versión suave/lisa
       const currentSkin = SKINS[selectedSkin] || SKINS.rainbow;
       const snakeColors = currentSkin.colors;
       
       if (game.snake && game.snake.length > 0) {
+        // Primero dibujar conexiones entre segmentos para serpiente lisa
+        for (let i = 0; i < game.snake.length - 1; i++) {
+          const seg1 = game.snake[i];
+          const seg2 = game.snake[i + 1];
+          const screenX1 = seg1.x - camX;
+          const screenY1 = seg1.y - camY;
+          const screenX2 = seg2.x - camX;
+          const screenY2 = seg2.y - camY;
+          
+          const colorIndex = Math.min(i, snakeColors.length - 1);
+          const color = snakeColors[colorIndex];
+          const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
+          
+          // Línea gruesa entre segmentos
+          ctx.strokeStyle = colorStr;
+          ctx.lineWidth = game.snakeSize * 2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(screenX1, screenY1);
+          ctx.lineTo(screenX2, screenY2);
+          ctx.stroke();
+        }
+        
+        // Luego dibujar los segmentos encima
         game.snake.forEach((segment, index) => {
           const screenX = segment.x - camX;
           const screenY = segment.y - camY;
@@ -3836,7 +4016,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
             
             ctx.fillStyle = colorStr;
-            ctx.shadowBlur = 5;
+            ctx.shadowBlur = 8;
             ctx.shadowColor = colorStr;
             ctx.beginPath();
             ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
@@ -3993,25 +4173,82 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
       }
 
-      // Draw enemies
+      // Draw enemies - versión suave/lisa como el jugador
       game.enemies.forEach(enemy => {
-        if (enemy.segments && enemy.segments.length > 0) {
-          enemy.segments.forEach((segment, segIndex) => {
-            const screenX = segment.x - camX;
-            const screenY = segment.y - camY;
-            
-            if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
-                screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-              ctx.fillStyle = '#ff0000';
-              ctx.shadowBlur = 5;
-              ctx.shadowColor = '#ff0000';
+        if (!enemy.segments || enemy.segments.length === 0) return;
+        
+        const enemyColor = `hsl(${enemy.hue || 0}, 100%, 50%)`;
+        const enemyColorDark = `hsl(${enemy.hue || 0}, 80%, 35%)`;
+        
+        // Primero dibujar conexiones entre segmentos para serpiente lisa
+        for (let i = 0; i < enemy.segments.length - 1; i++) {
+          const seg1 = enemy.segments[i];
+          const seg2 = enemy.segments[i + 1];
+          const screenX1 = seg1.x - camX;
+          const screenY1 = seg1.y - camY;
+          const screenX2 = seg2.x - camX;
+          const screenY2 = seg2.y - camY;
+          
+          ctx.strokeStyle = enemyColor;
+          ctx.lineWidth = game.snakeSize * 2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(screenX1, screenY1);
+          ctx.lineTo(screenX2, screenY2);
+          ctx.stroke();
+        }
+        
+        // Luego dibujar los segmentos encima
+        enemy.segments.forEach((segment, segIndex) => {
+          const screenX = segment.x - camX;
+          const screenY = segment.y - camY;
+          
+          // Solo dibujar si está en pantalla
+          if (screenX < -50 || screenX > CANVAS_WIDTH + 50 || 
+              screenY < -50 || screenY > CANVAS_HEIGHT + 50) return;
+          
+          // Glow
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = enemyColor;
+          
+          // Cuerpo del segmento
+          ctx.fillStyle = enemyColor;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.shadowBlur = 0;
+          
+          // Cabeza con ojos
+          if (segIndex === 0) {
+            // Escudo si tiene
+            if (enemy.hasShield) {
+              ctx.strokeStyle = '#00ffff';
+              ctx.lineWidth = 2;
+              ctx.shadowBlur = 8;
+              ctx.shadowColor = '#00ffff';
               ctx.beginPath();
-              ctx.arc(screenX, screenY, game.snakeSize, 0, Math.PI * 2);
-              ctx.fill();
+              ctx.arc(screenX, screenY, game.snakeSize + 5, 0, Math.PI * 2);
+              ctx.stroke();
               ctx.shadowBlur = 0;
             }
-          });
-        }
+            
+            // Ojos blancos
+            ctx.fillStyle = '#ffffff';
+            const eyeOffset = game.snakeSize * 0.35;
+            ctx.beginPath();
+            ctx.arc(screenX - eyeOffset, screenY - eyeOffset, 3, 0, Math.PI * 2);
+            ctx.arc(screenX + eyeOffset, screenY - eyeOffset, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Pupilas negras
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(screenX - eyeOffset, screenY - eyeOffset, 1.5, 0, Math.PI * 2);
+            ctx.arc(screenX + eyeOffset, screenY - eyeOffset, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
       });
 
       // Draw Resentful Snakes (BOSS-like enemies - 7 colores al inicio, negro en el medio, 7 colores al final)
@@ -4107,10 +4344,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               }
             }
           });
-        }
-      });
+        });
+      }
 
-      // Draw stars
+      // Draw stars - estrella de 5 puntas realista
       game.stars.forEach(star => {
         const screenX = star.x - camX;
         const screenY = star.y - camY;
@@ -4119,486 +4356,172 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
           ctx.save();
           ctx.translate(screenX, screenY);
-          ctx.rotate(star.rotation || 0);
-          ctx.fillStyle = '#ffff00';
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = '#ffff00';
+          ctx.rotate((star.rotation || 0) + Date.now() * 0.002); // Rotación animada
+          
+          const outerRadius = star.size * 1.2;
+          const innerRadius = star.size * 0.5;
+          const spikes = 5;
+          
+          // Glow dorado
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = '#FFD700';
+          
+          // Dibujar estrella de 5 puntas
           ctx.beginPath();
-          for (let i = 0; i < 5; i++) {
-            const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-            const x = Math.cos(angle) * star.size;
-            const y = Math.sin(angle) * star.size;
+          for (let i = 0; i < spikes * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (Math.PI * i) / spikes - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
           ctx.closePath();
+          
+          // Gradiente dorado
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, outerRadius);
+          gradient.addColorStop(0, '#FFFFFF');
+          gradient.addColorStop(0.3, '#FFFF00');
+          gradient.addColorStop(1, '#FFD700');
+          ctx.fillStyle = gradient;
           ctx.fill();
+          
+          // Borde brillante
+          ctx.strokeStyle = '#FFA500';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
           ctx.restore();
           ctx.shadowBlur = 0;
         }
       });
 
-      // Draw UI overlay
-      if (gameState === 'playing') {
-        // HUD bar at top
-        const barHeight = 35;
-        const barPadding = 5;
-        
-        // Background bar (but leave space for minimap on the right)
-        const minimapWidth = 120;
-        const minimapX = CANVAS_WIDTH - minimapWidth - 10;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.fillRect(0, 0, minimapX - 5, barHeight); // Stop before minimap
-        ctx.fillRect(minimapX + minimapWidth + 5, 0, CANVAS_WIDTH - (minimapX + minimapWidth + 5), barHeight); // After minimap
-        
-        // Level info text
-        ctx.fillStyle = '#33ffff';
-        ctx.font = 'bold 14px monospace';
-        ctx.fillText(`Nivel ${level}`, 10, 20);
-        
-        // Stars progress (compact and narrow)
-        const barStartX = 100;
-        const barWidth = 200; // Much narrower bar
-        
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
-        ctx.fillRect(barStartX, barPadding + 5, barWidth, barHeight - barPadding * 2 - 5);
-        
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-        ctx.shadowBlur = 3;
-        ctx.shadowColor = 'rgba(255, 215, 0, 0.3)';
-        const progressWidth = (barWidth * game.currentStars) / game.starsNeeded;
-        ctx.fillRect(barStartX, barPadding + 5, progressWidth, barHeight - barPadding * 2 - 5);
-        ctx.shadowBlur = 0;
-        
-        // Stars text on the bar
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px monospace';
-        const starsText = `⭐ ${game.currentStars} / ${game.starsNeeded}`;
-        const textWidth = ctx.measureText(starsText).width;
-        ctx.fillText(starsText, barStartX + barWidth / 2 - textWidth / 2, 22);
-        
-        // Total XP and Stars on the right (but not overlapping minimap)
-        const statsX = CANVAS_WIDTH - 250; // Well before minimap
-        ctx.fillStyle = '#33ffff';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(`XP: ${totalXP}`, statsX, 15);
-        ctx.fillStyle = '#FFD700';
-        ctx.fillText(`⭐: ${totalStars}`, statsX, 28);
-        
-        // Health display
-        ctx.fillStyle = '#ff3366';
-        ctx.font = 'bold 12px monospace';
-        ctx.fillText(`Vida: ${game.currentHealth}/${game.maxHealth}`, statsX + 120, 15);
-        
-        // Draw minimap in top-right corner
-        const minimapHeight = 90;
-        const minimapY = 10; // Fixed at top-right corner, close to edge
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
-        
-        ctx.strokeStyle = '#33ffff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
-        
-        // Draw player position on minimap (distinctive marker)
-        if (game.snake && game.snake.length > 0) {
-          const playerHead = game.snake[0];
-          const playerMinimapX = minimapX + (playerHead.x / game.worldWidth) * minimapWidth;
-          const playerMinimapY = minimapY + (playerHead.y / game.worldHeight) * minimapHeight;
-          
-          // Outer ring for player
-          ctx.strokeStyle = '#33ffff';
-          ctx.lineWidth = 2;
-          ctx.shadowBlur = 8;
-          ctx.shadowColor = '#33ffff';
-          ctx.beginPath();
-          ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
-          ctx.stroke();
-          
-          // Inner filled circle for player
-          ctx.fillStyle = '#33ffff';
-          ctx.shadowBlur = 6;
-          ctx.beginPath();
-          ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-        
-        // Draw enemy positions on minimap as colored dots
-        game.enemies.forEach(enemy => {
-          if (enemy.segments && enemy.segments.length > 0) {
-            const enemyHead = enemy.segments[0];
-            const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
-            const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
-            
-            // Only draw if within minimap bounds
-            if (enemyMinimapX >= minimapX && enemyMinimapX <= minimapX + minimapWidth &&
-                enemyMinimapY >= minimapY && enemyMinimapY <= minimapY + minimapHeight) {
-              // Use the enemy's hue color
-              ctx.fillStyle = `hsl(${enemy.hue || 0}, 100%, 50%)`;
-              ctx.shadowBlur = 5;
-              ctx.shadowColor = `hsl(${enemy.hue || 0}, 100%, 50%)`;
-              ctx.beginPath();
-              ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.shadowBlur = 0;
-            }
-          }
-        });
-        
-        // Draw stars on minimap
-        game.stars.forEach(star => {
-          const starMinimapX = minimapX + (star.x / game.worldWidth) * minimapWidth;
-          const starMinimapY = minimapY + (star.y / game.worldHeight) * minimapHeight;
-          
-          if (starMinimapX >= minimapX && starMinimapX <= minimapX + minimapWidth &&
-              starMinimapY >= minimapY && starMinimapY <= minimapY + minimapHeight) {
-            ctx.fillStyle = '#ffff00';
-            ctx.shadowBlur = 3;
-            ctx.shadowColor = '#ffff00';
-            ctx.beginPath();
-            ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-          }
-        });
-      }
-      const barHeight = 30;
-      const barPadding = 5;
+      // === SIMPLE FLOATING HUD ===
+      // Minimapa arriba a la derecha
+      const minimapWidth = 100;
+      const minimapHeight = 75;
+      const minimapX = CANVAS_WIDTH - minimapWidth - 15;
+      const minimapY = 15;
       
-      // === NEON HUD DESIGN ===
-      const minimapWidth = 120;
-      const minimapX = CANVAS_WIDTH - minimapWidth - 10;
-      
-      // HUD Container with neon border
-      const hudX = 8;
-      const hudY = 8;
-      const hudWidth = 520; // Expandido para incluir XP
-      const hudHeight = 36;
-      const hudRadius = 8;
-      
-      // Draw rounded rectangle background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      // Fondo del minimapa
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.beginPath();
-      ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
+      ctx.roundRect(minimapX, minimapY, minimapWidth, minimapHeight, 6);
       ctx.fill();
       
-      // Neon border glow
+      // Borde neón del minimapa
       ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#33ffff';
-      ctx.beginPath();
-      ctx.roundRect(hudX, hudY, hudWidth, hudHeight, hudRadius);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      
-      // === LEVEL BADGE ===
-      const levelX = hudX + 12;
-      const levelY = hudY + 10;
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(`LV ${game.level}`, levelX, levelY + 14);
-      ctx.shadowBlur = 0;
-      
-      // === STARS BAR ===
-      const starsBarX = levelX + 65;
-      const starsBarY = hudY + 10;
-      const starsBarWidth = 130;
-      const starsBarHeight = 16;
-      
-      // Stars bar background with rounded corners
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
-      ctx.beginPath();
-      ctx.roundRect(starsBarX, starsBarY, starsBarWidth, starsBarHeight, 4);
-      ctx.fill();
-      
-      // Stars bar border
-      ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(starsBarX, starsBarY, starsBarWidth, starsBarHeight, 4);
-      ctx.stroke();
-      
-      // Stars bar fill with glow
-      const starsPercent = Math.min(game.currentStars / game.starsNeeded, 1);
-      if (starsPercent > 0) {
-      ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 6;
-      ctx.shadowColor = '#FFD700';
-        ctx.beginPath();
-        ctx.roundRect(starsBarX + 2, starsBarY + 2, (starsBarWidth - 4) * starsPercent, starsBarHeight - 4, 3);
-        ctx.fill();
-      ctx.shadowBlur = 0;
-      }
-      
-      // Stars icon and text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
-      const starsText = `⭐ ${game.currentStars}/${game.starsNeeded}`;
-      const starsTextWidth = ctx.measureText(starsText).width;
-      ctx.fillText(starsText, starsBarX + starsBarWidth / 2 - starsTextWidth / 2, starsBarY + 12);
-      
-      // === HEALTH BAR ===
-      const healthBarX = starsBarX + starsBarWidth + 15;
-      const healthBarY = hudY + 10;
-      const healthBarWidth = 130;
-      const healthBarHeight2 = 16;
-      
-      // Health bar background with rounded corners
-      ctx.fillStyle = 'rgba(255, 80, 80, 0.2)';
-      ctx.beginPath();
-      ctx.roundRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight2, 4);
-      ctx.fill();
-      
-      // Health bar border
-      ctx.strokeStyle = 'rgba(255, 80, 80, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight2, 4);
-      ctx.stroke();
-      
-      // Health bar fill with glow
-      const healthPercent = Math.max(0, game.currentHealth / game.maxHealth);
-      if (healthPercent > 0) {
-        // Color changes based on health level
-        const healthColor = healthPercent > 0.5 ? '#00ff88' : healthPercent > 0.25 ? '#ffaa00' : '#ff3333';
-        ctx.fillStyle = healthColor;
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = healthColor;
-        ctx.beginPath();
-        ctx.roundRect(healthBarX + 2, healthBarY + 2, (healthBarWidth - 4) * healthPercent, healthBarHeight2 - 4, 3);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      
-      // Health icon and text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px monospace';
-      const healthText = isImmune ? `🛡️ INMUNE` : `❤️ ${game.currentHealth}/${game.maxHealth}`;
-      const healthTextWidth = ctx.measureText(healthText).width;
-      ctx.fillText(healthText, healthBarX + healthBarWidth / 2 - healthTextWidth / 2, healthBarY + 12);
-      
-      // Special status indicators
-      if (isImmune || freeShots) {
-        ctx.font = 'bold 10px monospace';
-        let statusY = hudY + 30;
-        if (isImmune) {
-          ctx.fillStyle = '#00ffff';
-          ctx.fillText('🛡️ INMUNIDAD', healthBarX, statusY);
-          statusY += 12;
-        }
-        if (freeShots) {
-          ctx.fillStyle = '#00ff88';
-          ctx.fillText('🔫 BALAS GRATIS', healthBarX, statusY);
-        }
-      }
-      
-      // === SESSION XP COUNTER (with dynamic color) ===
-      const xpCounterX = healthBarX + healthBarWidth + 15;
-      const xpCounterY = hudY + 10;
-      const xpCounterWidth = 80;
-      const xpCounterHeight = 16;
-      
-      // Calcular color dinámico basado en el XP de sesión
-      // 0-25: Rojo -> Naranja, 25-50: Naranja -> Amarillo, 50-75: Amarillo -> Verde, 75-100+: Verde -> Azul
-      const sessionXP = game.sessionXP || 0;
-      let xpColor;
-      if (sessionXP < 25) {
-        // Rojo a Naranja (0-25)
-        const t = sessionXP / 25;
-        const r = 255;
-        const g = Math.floor(100 * t);
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 50) {
-        // Naranja a Amarillo (25-50)
-        const t = (sessionXP - 25) / 25;
-        const r = 255;
-        const g = Math.floor(100 + 155 * t);
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 75) {
-        // Amarillo a Verde (50-75)
-        const t = (sessionXP - 50) / 25;
-        const r = Math.floor(255 * (1 - t));
-        const g = 255;
-        const b = 0;
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else if (sessionXP < 100) {
-        // Verde a Azul (75-100)
-        const t = (sessionXP - 75) / 25;
-        const r = 0;
-        const g = Math.floor(255 * (1 - t));
-        const b = Math.floor(255 * t);
-        xpColor = `rgb(${r}, ${g}, ${b})`;
-      } else {
-        // Azul (100+)
-        xpColor = '#00aaff';
-      }
-      
-      // XP counter background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
-      ctx.fill();
-      
-      // XP counter border with dynamic color
-      ctx.strokeStyle = xpColor;
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = xpColor;
-      ctx.beginPath();
-      ctx.roundRect(xpCounterX, xpCounterY, xpCounterWidth, xpCounterHeight, 4);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      
-      // XP text with dynamic color
-      ctx.fillStyle = xpColor;
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = xpColor;
-      ctx.font = 'bold 11px monospace';
-      const xpText = `⚡ ${sessionXP}`;
-      const xpTextWidth = ctx.measureText(xpText).width;
-      ctx.fillText(xpText, xpCounterX + xpCounterWidth / 2 - xpTextWidth / 2, xpCounterY + 12);
-      ctx.shadowBlur = 0;
-      
-      // === TOTAL XP/STARS (compact, next to minimap) ===
-      const statsX = minimapX - 90;
-      ctx.fillStyle = '#33ffff';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#33ffff';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText(`XP: ${totalXP}`, statsX, 22);
-      ctx.fillStyle = '#FFD700';
-      ctx.shadowColor = '#FFD700';
-      ctx.fillText(`⭐: ${totalStars}`, statsX, 36);
-      ctx.shadowBlur = 0;
-      
-      // Draw minimap in top-right corner (after HUD so it's visible)
-      // minimapWidth and minimapX already declared above for HUD spacing
-      const minimapHeight = 90;
-      const minimapY = 10; // Fixed at top-right corner, close to edge
-      
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(minimapX, minimapY, minimapWidth, minimapHeight);
-      
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(minimapX, minimapY, minimapWidth, minimapHeight);
-      
-      // Draw player position on minimap (distinctive marker)
-      const playerMinimapX = minimapX + (game.snake[0].x / game.worldWidth) * minimapWidth;
-      const playerMinimapY = minimapY + (game.snake[0].y / game.worldHeight) * minimapHeight;
-      
-      // Outer ring for player
-      ctx.strokeStyle = '#33ffff';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#33ffff';
-      ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 4, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Inner filled circle for player
-      ctx.fillStyle = '#33ffff';
+      ctx.lineWidth = 1.5;
       ctx.shadowBlur = 6;
+      ctx.shadowColor = '#33ffff';
       ctx.beginPath();
-      ctx.arc(playerMinimapX, playerMinimapY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.roundRect(minimapX, minimapY, minimapWidth, minimapHeight, 6);
+      ctx.stroke();
       ctx.shadowBlur = 0;
-
-      // Draw enemy positions on minimap as colored dots
+      
+      // Jugador en minimapa
+      if (game.snake && game.snake.length > 0) {
+        const playerHead = game.snake[0];
+        const px = minimapX + (playerHead.x / game.worldWidth) * minimapWidth;
+        const py = minimapY + (playerHead.y / game.worldHeight) * minimapHeight;
+        
+        ctx.fillStyle = '#33ffff';
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = '#33ffff';
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      
+      // Enemigos en minimapa
       game.enemies.forEach(enemy => {
         if (enemy.segments && enemy.segments.length > 0) {
-          const enemyHead = enemy.segments[0];
-          const enemyMinimapX = minimapX + (enemyHead.x / game.worldWidth) * minimapWidth;
-          const enemyMinimapY = minimapY + (enemyHead.y / game.worldHeight) * minimapHeight;
-          
-          // Use the enemy's hue color
-          ctx.fillStyle = `hsl(${enemy.hue}, 100%, 50%)`;
-          ctx.shadowBlur = 5;
-          ctx.shadowColor = `hsl(${enemy.hue}, 100%, 50%)`;
+          const head = enemy.segments[0];
+          const ex = minimapX + (head.x / game.worldWidth) * minimapWidth;
+          const ey = minimapY + (head.y / game.worldHeight) * minimapHeight;
+          ctx.fillStyle = `hsl(${enemy.hue || 0}, 100%, 50%)`;
           ctx.beginPath();
-          ctx.arc(enemyMinimapX, enemyMinimapY, 2, 0, Math.PI * 2);
+          ctx.arc(ex, ey, 2, 0, Math.PI * 2);
           ctx.fill();
-      ctx.shadowBlur = 0;
         }
       });
       
-      // Draw stars on minimap as small golden dots
-      if (game.stars && game.stars.length > 0) {
+      // Estrellas en minimapa
+      if (game.stars) {
         ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 3;
-        ctx.shadowColor = '#FFD700';
         game.stars.forEach(star => {
-          const starMinimapX = minimapX + (star.x / game.worldWidth) * minimapWidth;
-          const starMinimapY = minimapY + (star.y / game.worldHeight) * minimapHeight;
+          const sx = minimapX + (star.x / game.worldWidth) * minimapWidth;
+          const sy = minimapY + (star.y / game.worldHeight) * minimapHeight;
           ctx.beginPath();
-          ctx.arc(starMinimapX, starMinimapY, 1.5, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
           ctx.fill();
         });
-        ctx.shadowBlur = 0;
       }
       
-      // Draw resentful snakes on minimap as multicolor/rainbow dots
+      // Resentful snakes en minimapa
       if (game.resentfulSnakes && game.resentfulSnakes.length > 0) {
         game.resentfulSnakes.forEach(snake => {
           if (snake.segments && snake.segments.length > 0) {
-            const snakeHead = snake.segments[0];
-            const snakeMinimapX = minimapX + (snakeHead.x / game.worldWidth) * minimapWidth;
-            const snakeMinimapY = minimapY + (snakeHead.y / game.worldHeight) * minimapHeight;
-            
-            // Color arcoíris animado
-            const rainbowHue = (snake.rainbowOffset || 0) % 360;
-            const rainbowColor = `hsl(${rainbowHue}, 100%, 60%)`;
-            
-            // Punto con glow multicolor
-            ctx.shadowBlur = 6;
-            ctx.shadowColor = rainbowColor;
-            ctx.fillStyle = rainbowColor;
+            const head = snake.segments[0];
+            const rx = minimapX + (head.x / game.worldWidth) * minimapWidth;
+            const ry = minimapY + (head.y / game.worldHeight) * minimapHeight;
+            const hue = (snake.rainbowOffset || 0) % 360;
+            ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
             ctx.beginPath();
-            ctx.arc(snakeMinimapX, snakeMinimapY, 3, 0, Math.PI * 2);
+            ctx.arc(rx, ry, 2.5, 0, Math.PI * 2);
             ctx.fill();
-            
-            // Borde negro para que destaque
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 1;
-            ctx.stroke();
           }
         });
-        ctx.shadowBlur = 0;
       }
       
-      // Shop hint (only on desktop, not mobile)
-      if (!isMobile) {
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText('[J] Tienda', 10, CANVAS_HEIGHT - 15);
+      // === HUD FLOTANTE SIMPLE - Esquina superior izquierda ===
+      // Solo: Nivel, Estrellas, Vida, XP sesión
+      const hudX = 15;
+      const hudY = 15;
       
-      // Cannon hint (if cannon is equipped)
+      // Fondo semi-transparente
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.beginPath();
+      ctx.roundRect(hudX, hudY, 180, 70, 8);
+      ctx.fill();
+      
+      // Borde sutil
+      ctx.strokeStyle = 'rgba(51, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(hudX, hudY, 180, 70, 8);
+      ctx.stroke();
+      
+      // Nivel
+      ctx.fillStyle = '#33ffff';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText(`Nivel ${game.level}`, hudX + 10, hudY + 22);
+      
+      // Estrellas (formato simple)
+      ctx.fillStyle = '#FFD700';
+      ctx.font = '13px monospace';
+      ctx.fillText(`⭐ ${game.currentStars}/${game.starsNeeded}`, hudX + 10, hudY + 42);
+      
+      // Vida
+      const healthColor = (game.currentHealth / game.maxHealth) > 0.5 ? '#00ff88' : 
+                          (game.currentHealth / game.maxHealth) > 0.25 ? '#ffaa00' : '#ff3333';
+      ctx.fillStyle = healthColor;
+      ctx.fillText(`❤️ ${game.currentHealth}/${game.maxHealth}`, hudX + 95, hudY + 42);
+      
+      // XP de sesión
+      const sessionXP = game.sessionXP || 0;
+      ctx.fillStyle = '#00aaff';
+      ctx.fillText(`⚡ +${sessionXP} XP`, hudX + 10, hudY + 62);
+      
+      // === CONTROLES - Abajo izquierda, muy simple ===
+      ctx.fillStyle = '#ff00ff';
+      ctx.font = '12px monospace';
+      ctx.fillText('[J] Tienda', 15, CANVAS_HEIGHT - 25);
+      
       if (cannonLevel > 0) {
-        // Calcular cuántas balas consume
-        let bulletCost = 1;
-        if (cannonLevel >= 2) bulletCost = 2;
-        if (cannonLevel >= 3) bulletCost = 3;
-        if (cannonLevel >= 4) bulletCost = 4;
-        
-        // Draw controls hint at bottom
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(10, CANVAS_HEIGHT - 60, CANVAS_WIDTH - 20, 50);
-        
-        ctx.fillStyle = '#ff00ff';
-        ctx.font = '14px monospace';
-        ctx.fillText(`[J] Tienda`, 20, CANVAS_HEIGHT - 40);
-        
-        if (cannonLevel > 0) {
-          ctx.fillStyle = '#00ff00';
-          ctx.fillText(`[ESPACIO] Disparar (-${cannonLevel >= 2 ? 2 : 1} XP)`, 20, CANVAS_HEIGHT - 20);
-        }
+        ctx.fillStyle = '#00ff00';
+        ctx.fillText(`[ESPACIO] Disparar`, 120, CANVAS_HEIGHT - 25);
       }
     };
 
@@ -4614,7 +4537,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     };
 
     // Initialize game when starting to play
-    if (gameState === 'playing' && gameRef.current.gameStartTime === null) {
+    if (gameState === 'playing' && (gameRef.current.gameStartTime === null || gameRef.current.enemies.length === 0)) {
       initGame();
     }
 
@@ -4688,169 +4611,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     const nextLevelNum = level < 25 ? level + 1 : level;
     setLevel(nextLevelNum);
     setGameState('levelIntro');
-  };
-
-  // Helper function to convert numbers to Spanish words
-  const numberToSpanish = (num) => {
-    if (num <= 0) return 'cero';
-    if (num === 1) return 'Una';
-    if (num === 2) return 'Dos';
-    if (num === 3) return 'Tres';
-    if (num === 4) return 'Cuatro';
-    if (num === 5) return 'Cinco';
-    if (num === 6) return 'Seis';
-    if (num === 7) return 'Siete';
-    if (num === 8) return 'Ocho';
-    if (num === 9) return 'Nueve';
-    if (num === 10) return 'Diez';
-    if (num === 11) return 'Once';
-    if (num === 12) return 'Doce';
-    if (num === 13) return 'Trece';
-    if (num === 14) return 'Catorce';
-    if (num === 15) return 'Quince';
-    if (num === 16) return 'Dieciséis';
-    if (num === 17) return 'Diecisiete';
-    if (num === 18) return 'Dieciocho';
-    if (num === 19) return 'Diecinueve';
-    if (num === 20) return 'Veinte';
-    if (num <= 30) return `Unos ${num}`;
-    // Para números redondos mayores
-    if (num % 10 === 0 && num <= 100) {
-      const tens = num / 10;
-      const tensWords = ['', '', 'Veinte', 'Treinta', 'Cuarenta', 'Cincuenta', 'Sesenta', 'Setenta', 'Ochenta', 'Noventa', 'Cien'];
-      return tensWords[tens];
-    }
-    // Para otros números, usar "Unos X"
-    return `Unos ${num}`;
-  };
-
-  const getLevelIntroMessage = (levelNum, levelConfigsFromDB) => {
-    const levelConfig = getLevelConfig(levelNum, levelConfigsFromDB);
-    
-    // Si no hay configuración, retornar null (no mostrar intro)
-    if (!levelConfig || !levelConfig.enemyCount) {
-      return null;
-    }
-    
-    // Títulos y tips hardcodeados (texto descriptivo)
-    const titles = {
-      1: "Primeros Pasos", 2: "Calentando", 3: "Nuevos Obstáculos", 4: "Territorio Hostil",
-      5: "Zona de Guerra", 6: "Sin Tregua", 7: "Supervivencia", 8: "Último Respiro",
-      9: "Sierras Asesinas", 10: "La Resentida", 11: "Infierno", 12: "Sin Escape",
-      13: "Velocidad Mortal", 14: "Emboscada", 15: "Campo Abierto", 16: "Fuego Cruzado",
-      17: "Tormenta", 18: "Jugador Rápido", 19: "Resistencia", 20: "Elite",
-      21: "Veterano", 22: "Enemigos Veloces", 23: "Penúltimo", 24: "La Antesala",
-      25: "EL FINAL"
-    };
-    
-    const tips = {
-      1: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada.",
-      2: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas",
-      3: "Cuidado! Algunos enemigos ahora disparan",
-      4: "Los enemigos con escudo brillan azul",
-      5: "Busca las cajas verdes con vida extra",
-      6: "Tu escudo te da chance de esquivar balas",
-      7: "Mejora tu velocidad de bala en la tienda",
-      8: "El imán atrae XP y estrellas hacia ti",
-      9: "Las sierras rebotan por el mapa. Evítalas!",
-      10: "La víbora arcoíris te persigue. Es un duelo!",
-      11: "Los cañones flotantes disparan doble",
-      12: "Las sierras grandes hacen más daño",
-      13: "Los enemigos ahora son más rápidos",
-      14: "Tocar a la resentida la mata y reaparece",
-      15: "Sin estructuras donde esconderte",
-      16: "Las resentidas dejan caja de vida al morir",
-      17: "Dispara con click izquierdo o ESPACIO",
-      18: "Aprovecha tu mayor velocidad",
-      19: "Cada estrella del mismo enemigo cura 1 vez",
-      20: "Las resentidas disparan doble y rápido",
-      21: "Mira el minimapa para ubicar enemigos",
-      22: "Los enemigos ahora corren a tu velocidad",
-      23: "Ya casi! Un nivel más!",
-      24: "Prepara todo para el nivel final",
-      25: "100 estrellas. Esto es todo. Buena suerte!"
-    };
-    
-    // Generar peligros dinámicamente desde la DB
-    const dangers = [];
-    
-    // Víboras enemigas (siempre presente)
-    dangers.push(`${levelConfig.enemyCount} víboras enemigas`);
-    
-    // Sierras asesinas
-    if (levelConfig.killerSawCount > 0) {
-      dangers.push(`${levelConfig.killerSawCount} sierras asesinas`);
-    }
-    
-    // Cañones flotantes
-    if (levelConfig.floatingCannonCount > 0) {
-      dangers.push(`${levelConfig.floatingCannonCount} cañones flotantes`);
-    }
-    
-    // Víboras resentidas
-    if (levelConfig.resentfulSnakeCount > 0) {
-      if (levelConfig.resentfulSnakeCount === 1) {
-        dangers.push("1 víbora resentida");
-      } else {
-        dangers.push(`${levelConfig.resentfulSnakeCount} víboras resentidas`);
-      }
-    }
-    
-    // Enemigos que disparan (calcular desde porcentaje)
-    const shootPercentage = levelConfig.enemyShootPercentage || 0;
-    if (shootPercentage > 0) {
-      const enemiesThatShoot = Math.round((levelConfig.enemyCount * shootPercentage) / 100);
-      const spanishNum = numberToSpanish(enemiesThatShoot);
-      if (enemiesThatShoot === 1) {
-        dangers.push(`${spanishNum} dispara`);
-      } else {
-        dangers.push(`${spanishNum} disparan`);
-      }
-    }
-    
-    // Enemigos con escudo (calcular desde porcentaje)
-    const shieldPercentage = levelConfig.enemyShieldPercentage || 0;
-    if (shieldPercentage > 0) {
-      const enemiesWithShield = Math.round((levelConfig.enemyCount * shieldPercentage) / 100);
-      if (enemiesWithShield === 2 || enemiesWithShield === 3) {
-        dangers.push("Dos o tres tienen escudo");
-      } else {
-        const spanishNum = numberToSpanish(enemiesWithShield);
-        if (enemiesWithShield === 1) {
-          dangers.push(`${spanishNum} tiene escudo`);
-        } else {
-          dangers.push(`${spanishNum} tienen escudo`);
-        }
-      }
-    }
-    
-    // Velocidad de enemigos (solo para algunos niveles)
-    if (levelNum === 13 || levelNum === 22) {
-      dangers.push("Enemigos MÁS RÁPIDOS");
-    }
-    
-    // Velocidad del jugador
-    if (levelNum === 18) {
-      dangers.push("TU velocidad aumenta");
-    }
-    
-    // Mapa gigante y todo
-    if (levelNum === 25) {
-      dangers.push("Mapa GIGANTE");
-      dangers.push("TODO");
-    }
-    
-    // Bordes del mapa (solo niveles iniciales)
-    if (levelNum <= 2) {
-      dangers.push("Bordes del mapa");
-    }
-    
-    return {
-      title: titles[levelNum] || `Nivel ${levelNum}`,
-      objective: levelConfig.starsNeeded,
-      dangers: dangers,
-      tip: tips[levelNum] || "Buena suerte!"
-    };
   };
 
   const handleRebirth = async () => {
@@ -5702,65 +5462,492 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             </div>
           </div>
 
-          {/* Right side: Leaderboard */}
+          {/* Right side: Leaderboards */}
           <div style={{ 
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: '25px',
-            borderRadius: '10px',
-            border: '2px solid #FFD700',
-            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '15px',
             width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
             flex: isMobile ? 'none' : '1'
           }}>
-            <h2 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 20px #FFD700', 
-              textAlign: 'center',
-              marginBottom: '20px',
-              fontSize: '22px'
+            {/* Primera fila: 3 rankings arriba */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: '20px',
+              width: '100%'
             }}>
-              🏆 RANKING
-            </h2>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {leaderboard.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
-                      <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
-                      <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Nivel</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboard.map((entry, index) => (
-                      <tr 
-                        key={index}
-                        style={{ 
-                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
-                        }}
-                      >
-                        <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '14px' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
-                        </td>
-                        <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '14px' }}>
-                          {entry.username}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
-                          {entry.totalXp?.toLocaleString() || 0}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '14px' }}>
-                          {entry.highestLevel || 1}
-                        </td>
+            {/* Ranking por XP */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid #FFD700',
+              boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+              flex: '1',
+              minWidth: isMobile ? 'auto' : '300px'
+            }}>
+              <h2 style={{ 
+                color: '#FFD700', 
+                textShadow: '0 0 20px #FFD700', 
+                textAlign: 'center',
+                marginBottom: '10px',
+                fontSize: '14px'
+              }}>
+                🏆 RANKING XP
+              </h2>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {leaderboard.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                        <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>XP</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '12px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
+                            {entry.totalXp?.toLocaleString() || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Ranking por Nivel */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid #33ffff',
+              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+              flex: '1',
+              minWidth: isMobile ? 'auto' : '300px'
+            }}>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff', 
+                textAlign: 'center',
+                marginBottom: '10px',
+                fontSize: '14px'
+              }}>
+                ⭐ RANKING NIVEL
+              </h2>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {leaderboardByLevel.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #33ffff' }}>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>#</th>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>Usuario</th>
+                        <th style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '11px' }}>Nivel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardByLevel.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '6px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '12px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>
+                            {entry.highestLevel || 1}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Ranking por Rebirths */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid #ff3366',
+              boxShadow: '0 0 30px rgba(255, 51, 102, 0.3)',
+              flex: '1',
+              minWidth: isMobile ? 'auto' : '300px'
+            }}>
+              <h2 style={{ 
+                color: '#ff3366', 
+                textShadow: '0 0 20px #ff3366', 
+                textAlign: 'center',
+                marginBottom: '10px',
+                fontSize: '14px'
+              }}>
+                🔄 RANKING REBIRTHS
+              </h2>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {leaderboardByRebirth.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #ff3366' }}>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#ff3366', fontSize: '11px' }}>#</th>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#ff3366', fontSize: '11px' }}>Usuario</th>
+                        <th style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '11px' }}>Rebirths</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardByRebirth.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 51, 102, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 51, 102, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '6px', color: index < 3 ? '#ff3366' : '#ff00ff', fontSize: '12px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#ff3366' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '6px', textAlign: 'right', color: '#ff00ff', fontSize: '12px' }}>
+                            {entry.rebirthCount || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+            </div>
+
+            {/* Segunda fila: 3 rankings abajo */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: '20px',
+              width: '100%'
+            }}>
+              {/* Ranking por XP Total */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '20px',
+                borderRadius: '8px',
+                border: '2px solid #00ff88',
+                boxShadow: '0 0 30px rgba(0, 255, 136, 0.3)',
+                flex: '1',
+                minWidth: isMobile ? 'auto' : '300px'
+              }}>
+                <h2 style={{ 
+                  color: '#00ff88', 
+                  textShadow: '0 0 20px #00ff88', 
+                  textAlign: 'center',
+                  marginBottom: '10px',
+                  fontSize: '14px'
+                }}>
+                  💎 XP TOTAL
+                </h2>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {leaderboardByTotalXP.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #00ff88' }}>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#00ff88', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#00ff88', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#00ff88', fontSize: '11px' }}>XP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByTotalXP.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(0, 255, 136, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(0, 255, 136, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '6px', color: index < 3 ? '#00ff88' : '#33ffff', fontSize: '12px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#00ff88' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
+                              {entry.totalXp?.toLocaleString() || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Ranking por Estrellas Totales */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '2px solid #FFD700',
+                boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+                flex: '1',
+                minWidth: isMobile ? 'auto' : '300px'
+              }}>
+                <h2 style={{ 
+                  color: '#FFD700', 
+                  textShadow: '0 0 20px #FFD700', 
+                  textAlign: 'center',
+                  marginBottom: '10px',
+                  fontSize: '14px'
+                }}>
+                  ⭐ ESTRELLAS TOTALES
+                </h2>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {leaderboardByTotalStars.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Estrellas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByTotalStars.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#ffff00', fontSize: '12px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#ffff00', fontSize: '12px' }}>
+                              {entry.totalStars?.toLocaleString() || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Ranking por Serie */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '20px',
+                borderRadius: '8px',
+                border: '2px solid #ff00ff',
+                boxShadow: '0 0 30px rgba(255, 0, 255, 0.3)',
+                flex: '1',
+                minWidth: isMobile ? 'auto' : '300px'
+              }}>
+                <h2 style={{ 
+                  color: '#ff00ff', 
+                  textShadow: '0 0 20px #ff00ff', 
+                  textAlign: 'center',
+                  marginBottom: '10px',
+                  fontSize: '14px'
+                }}>
+                  🔢 SERIE
+                </h2>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {leaderboardBySeries.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #ff00ff' }}>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#ff00ff', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#ff00ff', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#ff00ff', fontSize: '11px' }}>Serie</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardBySeries.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(255, 0, 255, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(255, 0, 255, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '6px', color: index < 3 ? '#ff00ff' : '#ff88ff', fontSize: '12px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#ff00ff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#ff88ff', fontSize: '12px' }}>
+                              {entry.currentSeries || 1}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Chat */}
+            <div style={{ 
+              marginTop: '15px',
+              background: 'rgba(0, 0, 0, 0.8)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid #33ffff',
+              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+              width: '100%'
+            }}>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff', 
+                textAlign: 'center',
+                marginBottom: '10px',
+                fontSize: '14px'
+              }}>
+                💬 CHAT
+              </h2>
+              
+              {/* Messages container */}
+              <div 
+                id="chat-messages"
+                style={{ 
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  marginBottom: '10px',
+                  padding: '8px',
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  borderRadius: '5px',
+                  border: '1px solid rgba(51, 255, 255, 0.2)'
+                }}
+              >
+                {chatMessages.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>No hay mensajes aún. ¡Sé el primero en escribir!</p>
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div 
+                      key={msg.id}
+                      style={{ 
+                        marginBottom: '10px',
+                        padding: '8px',
+                        background: msg.userId === user?.id ? 'rgba(51, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '5px',
+                        borderLeft: `3px solid ${msg.userId === user?.id ? '#33ffff' : '#888'}`
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ 
+                          color: msg.userId === user?.id ? '#33ffff' : '#fff', 
+                          fontWeight: 'bold',
+                      fontSize: '11px'
+                    }}>
+                      {msg.username}
+                    </span>
+                    <span style={{ color: '#888', fontSize: '9px' }}>
+                      {new Date(msg.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ color: '#fff', fontSize: '11px', wordBreak: 'break-word' }}>
+                    {msg.message}
+                  </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Input */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendChatMessage();
+                    }
+                  }}
+                  placeholder={user ? "Escribe un mensaje..." : "Inicia sesión para chatear"}
+                  disabled={!user}
+                  maxLength={500}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    background: 'rgba(0, 0, 0, 0.7)',
+                    border: '2px solid #33ffff',
+                    borderRadius: '5px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={!user || !chatInput.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: user && chatInput.trim() ? 'transparent' : 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid #33ffff',
+                    borderRadius: '5px',
+                    color: user && chatInput.trim() ? '#33ffff' : '#888',
+                    fontSize: '12px',
+                    cursor: user && chatInput.trim() ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.3s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (user && chatInput.trim()) {
+                      e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (user && chatInput.trim()) {
+                      e.target.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  Enviar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -6648,64 +6835,494 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             </div>
           </div>
 
-          {/* Right side: Leaderboard */}
+          {/* Right side: Leaderboards */}
           <div style={{ 
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
-            borderRadius: '10px',
-            border: '2px solid #FFD700',
-            boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '30px',
             flex: '1',
             minWidth: '300px'
           }}>
-            <h2 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 20px #FFD700', 
-              textAlign: 'center',
-              marginBottom: '20px',
-              fontSize: '24px'
+            {/* Primera fila: 3 rankings arriba */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '20px',
+              width: '100%',
+              flexWrap: 'wrap'
             }}>
-              🏆 RANKING
-            </h2>
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {leaderboard.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#888' }}>Cargando ranking...</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>#</th>
-                      <th style={{ padding: '10px', textAlign: 'left', color: '#FFD700' }}>Usuario</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>XP</th>
-                      <th style={{ padding: '10px', textAlign: 'right', color: '#FFD700' }}>Nivel</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboard.map((entry, index) => (
-                      <tr 
-                        key={index}
-                        style={{ 
-                          borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-                          backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
-                        }}
-                      >
-                        <td style={{ padding: '10px', color: index < 3 ? '#FFD700' : '#33ffff' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : entry.rank}
-                        </td>
-                        <td style={{ padding: '10px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal' }}>
-                          {entry.username}
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
-                          {entry.totalXp?.toLocaleString() || 0}
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#33ffff' }}>
-                          {entry.highestLevel || 1}
-                        </td>
+            {/* Ranking por XP */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '20px',
+              borderRadius: '10px',
+              border: '2px solid #FFD700',
+              boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+              flex: '1',
+              minWidth: '250px'
+            }}>
+              <h2 style={{ 
+                color: '#FFD700', 
+                textShadow: '0 0 20px #FFD700', 
+                textAlign: 'center',
+                marginBottom: '15px',
+                fontSize: '20px'
+              }}>
+                🏆 RANKING XP
+              </h2>
+              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                {leaderboard.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '13px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
+                            {entry.totalXp?.toLocaleString() || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Ranking por Nivel */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '20px',
+              borderRadius: '10px',
+              border: '2px solid #33ffff',
+              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+              flex: '1',
+              minWidth: '250px'
+            }}>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff', 
+                textAlign: 'center',
+                marginBottom: '15px',
+                fontSize: '20px'
+              }}>
+                ⭐ RANKING NIVEL
+              </h2>
+              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                {leaderboardByLevel.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #33ffff' }}>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>#</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>Usuario</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>Nivel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardByLevel.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '13px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '13px' }}>
+                            {entry.highestLevel || 1}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Ranking por Rebirths */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '20px',
+              borderRadius: '10px',
+              border: '2px solid #ff3366',
+              boxShadow: '0 0 30px rgba(255, 51, 102, 0.3)',
+              flex: '1',
+              minWidth: '250px'
+            }}>
+              <h2 style={{ 
+                color: '#ff3366', 
+                textShadow: '0 0 20px #ff3366', 
+                textAlign: 'center',
+                marginBottom: '15px',
+                fontSize: '20px'
+              }}>
+                🔄 RANKING REBIRTHS
+              </h2>
+              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                {leaderboardByRebirth.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #ff3366' }}>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#ff3366', fontSize: '12px' }}>#</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#ff3366', fontSize: '12px' }}>Usuario</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '12px' }}>Rebirths</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboardByRebirth.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 51, 102, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 51, 102, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px', color: index < 3 ? '#ff3366' : '#ff00ff', fontSize: '13px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#ff3366' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#ff00ff', fontSize: '13px' }}>
+                            {entry.rebirthCount || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+            </div>
+
+            {/* Segunda fila: 3 rankings abajo */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '20px',
+              width: '100%',
+              flexWrap: 'wrap'
+            }}>
+              {/* Ranking por XP Total */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '20px',
+                borderRadius: '10px',
+                border: '2px solid #00ff88',
+                boxShadow: '0 0 30px rgba(0, 255, 136, 0.3)',
+                flex: '1',
+                minWidth: '250px'
+              }}>
+                <h2 style={{ 
+                  color: '#00ff88', 
+                  textShadow: '0 0 20px #00ff88', 
+                  textAlign: 'center',
+                  marginBottom: '15px',
+                  fontSize: '20px'
+                }}>
+                  💎 XP TOTAL
+                </h2>
+                <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  {leaderboardByTotalXP.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #00ff88' }}>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#00ff88', fontSize: '12px' }}>#</th>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#00ff88', fontSize: '12px' }}>Usuario</th>
+                          <th style={{ padding: '8px', textAlign: 'right', color: '#00ff88', fontSize: '12px' }}>XP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByTotalXP.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(0, 255, 136, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(0, 255, 136, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '8px', color: index < 3 ? '#00ff88' : '#33ffff', fontSize: '13px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '8px', color: entry.username === user?.username ? '#00ff88' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
+                              {entry.totalXp?.toLocaleString() || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Ranking por Estrellas Totales */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '20px',
+                borderRadius: '10px',
+                border: '2px solid #FFD700',
+                boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+                flex: '1',
+                minWidth: '250px'
+              }}>
+                <h2 style={{ 
+                  color: '#FFD700', 
+                  textShadow: '0 0 20px #FFD700', 
+                  textAlign: 'center',
+                  marginBottom: '15px',
+                  fontSize: '20px'
+                }}>
+                  ⭐ ESTRELLAS TOTALES
+                </h2>
+                <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  {leaderboardByTotalStars.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                          <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Estrellas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByTotalStars.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#ffff00', fontSize: '13px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#ffff00', fontSize: '13px' }}>
+                              {entry.totalStars?.toLocaleString() || 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Ranking por Serie */}
+              <div style={{ 
+                background: 'rgba(0, 0, 0, 0.7)',
+                padding: '20px',
+                borderRadius: '10px',
+                border: '2px solid #ff00ff',
+                boxShadow: '0 0 30px rgba(255, 0, 255, 0.3)',
+                flex: '1',
+                minWidth: '250px'
+              }}>
+                <h2 style={{ 
+                  color: '#ff00ff', 
+                  textShadow: '0 0 20px #ff00ff', 
+                  textAlign: 'center',
+                  marginBottom: '15px',
+                  fontSize: '20px'
+                }}>
+                  🔢 SERIE
+                </h2>
+                <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  {leaderboardBySeries.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #ff00ff' }}>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#ff00ff', fontSize: '12px' }}>#</th>
+                          <th style={{ padding: '8px', textAlign: 'left', color: '#ff00ff', fontSize: '12px' }}>Usuario</th>
+                          <th style={{ padding: '8px', textAlign: 'right', color: '#ff00ff', fontSize: '12px' }}>Serie</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardBySeries.map((entry, index) => (
+                          <tr 
+                            key={index}
+                            style={{ 
+                              borderBottom: '1px solid rgba(255, 0, 255, 0.2)',
+                              backgroundColor: entry.username === user?.username ? 'rgba(255, 0, 255, 0.1)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '8px', color: index < 3 ? '#ff00ff' : '#ff88ff', fontSize: '13px' }}>
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                            </td>
+                            <td style={{ padding: '8px', color: entry.username === user?.username ? '#ff00ff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                              {entry.username}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right', color: '#ff88ff', fontSize: '13px' }}>
+                              {entry.currentSeries || 1}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Chat */}
+            <div style={{ 
+              marginTop: '15px',
+              background: 'rgba(0, 0, 0, 0.8)',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid #33ffff',
+              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+              width: '100%'
+            }}>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff', 
+                textAlign: 'center',
+                marginBottom: '10px',
+                fontSize: '14px'
+              }}>
+                💬 CHAT
+              </h2>
+              
+              {/* Messages container */}
+              <div 
+                id="chat-messages-level"
+                style={{ 
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  marginBottom: '10px',
+                  padding: '8px',
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  borderRadius: '5px',
+                  border: '1px solid rgba(51, 255, 255, 0.2)'
+                }}
+              >
+                {chatMessages.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>No hay mensajes aún. ¡Sé el primero en escribir!</p>
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div 
+                      key={msg.id}
+                      style={{ 
+                        marginBottom: '10px',
+                        padding: '8px',
+                        background: msg.userId === user?.id ? 'rgba(51, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '5px',
+                        borderLeft: `3px solid ${msg.userId === user?.id ? '#33ffff' : '#888'}`
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ 
+                          color: msg.userId === user?.id ? '#33ffff' : '#fff', 
+                          fontWeight: 'bold',
+                      fontSize: '11px'
+                    }}>
+                      {msg.username}
+                    </span>
+                    <span style={{ color: '#888', fontSize: '9px' }}>
+                      {new Date(msg.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ color: '#fff', fontSize: '11px', wordBreak: 'break-word' }}>
+                    {msg.message}
+                  </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Input */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendChatMessage();
+                    }
+                  }}
+                  placeholder={user ? "Escribe un mensaje..." : "Inicia sesión para chatear"}
+                  disabled={!user}
+                  maxLength={500}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    background: 'rgba(0, 0, 0, 0.7)',
+                    border: '2px solid #33ffff',
+                    borderRadius: '5px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={!user || !chatInput.trim()}
+                  style={{
+                    padding: '10px 20px',
+                    background: user && chatInput.trim() ? 'transparent' : 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid #33ffff',
+                    borderRadius: '5px',
+                    color: user && chatInput.trim() ? '#33ffff' : '#888',
+                    fontSize: '12px',
+                    cursor: user && chatInput.trim() ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.3s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (user && chatInput.trim()) {
+                      e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (user && chatInput.trim()) {
+                      e.target.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  Enviar
+                </button>
+              </div>
             </div>
           </div>
         </div>
