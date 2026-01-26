@@ -125,7 +125,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
   return levelSpecificConfigs[level] || baseConfig;
 };
 
-const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShots = false, isImmune = false }) => {
+const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUntil = null, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
@@ -211,6 +211,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   const [victoryData, setVictoryData] = useState(null); // Datos de victoria nivel 25
   const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
   const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
+  const [timeLeft, setTimeLeft] = useState(null); // Tiempo restante del baneo
   
   // Definición de skins disponibles (debe estar antes de las funciones que lo usan)
   const SKINS = {
@@ -1315,6 +1316,35 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
 
     return () => clearInterval(interval);
   }, [gameState]);
+
+  // Calcular tiempo restante del baneo
+  useEffect(() => {
+    if (!isBanned || !bannedUntil) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const updateTimeLeft = () => {
+      const now = new Date();
+      const bannedDate = new Date(bannedUntil);
+      const diff = bannedDate - now;
+
+      if (diff <= 0) {
+        // El baneo expiró, recargar la página para verificar con el servidor
+        window.location.reload();
+        return;
+      }
+
+      const minutes = Math.floor(diff / 1000 / 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+      setTimeLeft({ minutes, seconds });
+    };
+
+    updateTimeLeft();
+    const interval = setInterval(updateTimeLeft, 1000);
+
+    return () => clearInterval(interval);
+  }, [isBanned, bannedUntil]);
 
   // Auto-save progress ONLY when in safe states (menu, shop, levelComplete, levelIntro)
   // NOT during gameplay - if you refresh mid-game, you lose that session's progress
@@ -5270,24 +5300,43 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
   };
 
   // Show banned message if user is banned
-  if (isBanned) {
+  // Verificar explícitamente si está baneado (no solo truthy)
+  const userIsBanned = isBanned === true || isBanned === 'true' || isBanned === 1;
+  
+  if (userIsBanned) {
+    console.log('User is banned, showing banned screen');
     return (
       <div style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
+        width: '100vw',
         background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
         color: '#ff3366',
         fontSize: '24px',
         fontFamily: 'monospace',
         flexDirection: 'column',
-        gap: '20px'
+        gap: '20px',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        zIndex: 9999
       }}>
         <h1 style={{ color: '#ff3366', margin: 0 }}>Cuenta Suspendida</h1>
-        <p style={{ color: '#888', fontSize: '16px' }}>
-          Tu cuenta ha sido suspendida. Por favor contacta al administrador.
-        </p>
+        {bannedUntil && timeLeft ? (
+          <p style={{ color: '#888', fontSize: '18px' }}>
+            Tu cuenta está suspendida por {timeLeft.minutes} minutos y {timeLeft.seconds} segundos más
+          </p>
+        ) : bannedUntil ? (
+          <p style={{ color: '#888', fontSize: '18px' }}>
+            Tu cuenta está suspendida temporalmente
+          </p>
+        ) : (
+          <p style={{ color: '#888', fontSize: '16px' }}>
+            Tu cuenta ha sido suspendida permanentemente. Por favor contacta al administrador.
+          </p>
+        )}
         <button
           onClick={onLogout}
           style={{
@@ -5302,6 +5351,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         >
           Cerrar Sesión
         </button>
+      </div>
+    );
+  }
+
+  // Debug: verificar que el componente está renderizando
+  console.log('SnakeGame render - isBanned:', isBanned, 'bannedUntil:', bannedUntil, 'loading:', loading, 'user:', user?.id);
+
+  // Si está cargando, mostrar pantalla de carga
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
+        color: '#33ffff',
+        fontSize: '24px',
+        fontFamily: 'monospace'
+      }}>
+        Cargando...
       </div>
     );
   }

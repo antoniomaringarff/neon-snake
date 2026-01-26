@@ -44,12 +44,14 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
 
       if (!response.ok) {
         if (data.isBanned) {
-          throw new Error('Tu cuenta ha sido suspendida. Por favor contacta al administrador.');
+          const bannedUntil = data.bannedUntil ? new Date(data.bannedUntil) : null;
+          const minutesLeft = bannedUntil ? Math.ceil((bannedUntil - new Date()) / 1000 / 60) : null;
+          throw new Error(bannedUntil ? `Tu cuenta está suspendida por ${minutesLeft} minutos más` : 'Tu cuenta ha sido suspendida. Por favor contacta al administrador.');
         }
         throw new Error(data.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.freeShots || false, data.isImmune || false);
+      onLogin(data.user, data.token, data.isAdmin || false, data.isBanned || false, data.bannedUntil || null, data.freeShots || false, data.isImmune || false);
     } catch (err) {
       setError(err.message || 'Error en la autenticación');
       console.error('Auth error:', err);
