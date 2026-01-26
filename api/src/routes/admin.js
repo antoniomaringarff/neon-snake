@@ -186,7 +186,67 @@ export default async function adminRoutes(fastify, options) {
     }
   });
 
-  // Get all levels
+  // Get all levels (public - for game configuration)
+  // This endpoint is accessible by any authenticated user
+  fastify.get('/levels/public', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const result = await query(
+        `SELECT 
+          gl.level_number,
+          gl.stars_needed,
+          gl.player_speed,
+          gl.enemy_speed,
+          gl.enemy_count,
+          gl.enemy_density,
+          gl.enemy_shoot_percentage,
+          gl.enemy_shield_percentage,
+          gl.enemy_shoot_cooldown,
+          gl.xp_density,
+          gl.xp_points,
+          gl.map_size,
+          gl.structures_count,
+          gl.killer_saw_count,
+          gl.floating_cannon_count,
+          gl.resentful_snake_count,
+          gl.health_box_count,
+          COALESCE(gl.enemy_upgrade_level, 0) as enemy_upgrade_level,
+          gl.has_central_cell,
+          gl.central_cell_opening_speed
+        FROM game_levels gl
+        ORDER BY gl.level_number`
+      );
+
+      return result.rows.map(row => ({
+        levelNumber: row.level_number,
+        starsNeeded: row.stars_needed,
+        playerSpeed: parseFloat(row.player_speed),
+        enemySpeed: parseFloat(row.enemy_speed),
+        enemyCount: row.enemy_count,
+        enemyDensity: row.enemy_density,
+        enemyShootPercentage: row.enemy_shoot_percentage,
+        enemyShieldPercentage: row.enemy_shield_percentage,
+        enemyShootCooldown: row.enemy_shoot_cooldown,
+        xpDensity: row.xp_density,
+        xpPoints: row.xp_points,
+        mapSize: row.map_size,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
+        enemyUpgradeLevel: row.enemy_upgrade_level,
+        hasCentralCell: row.has_central_cell,
+        centralCellOpeningSpeed: parseFloat(row.central_cell_opening_speed)
+      }));
+    } catch (error) {
+      fastify.log.error(error);
+      throw error;
+    }
+  });
+
+  // Get all levels (admin only - includes sensitive data like IDs)
   fastify.get('/levels', {
     onRequest: [verifyAdmin]
   }, async (request, reply) => {
@@ -504,6 +564,149 @@ export default async function adminRoutes(fastify, options) {
       if (error.code === '23505') { // Unique violation
         return reply.code(409).send({ error: 'Structure name already exists' });
       }
+      throw error;
+    }
+  });
+
+  // ============= ARENA CONFIG ENDPOINTS =============
+
+  // Get all arena configs
+  fastify.get('/arena-configs', {
+    onRequest: [verifyAdmin]
+  }, async (request, reply) => {
+    try {
+      const result = await query(
+        `SELECT * FROM arena_configs ORDER BY is_active DESC, created_at DESC`
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        arenaType: row.arena_type,
+        arenaName: row.arena_name,
+        mapSize: row.map_size,
+        enemyCount: row.enemy_count,
+        enemySpeed: parseFloat(row.enemy_speed) || 2.5,
+        enemyShootPercentage: row.enemy_shoot_percentage,
+        enemyShieldPercentage: row.enemy_shield_percentage,
+        enemyShootCooldown: row.enemy_shoot_cooldown,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
+        xpDensity: parseFloat(row.xp_density) || 15,
+        starsDensity: parseFloat(row.stars_density) || 2,
+        starLifetime: row.star_lifetime || 60,
+        sawsDensity: parseFloat(row.saws_density) || 0.08,
+        cannonsDensity: parseFloat(row.cannons_density) || 0.08,
+        resentfulDensity: parseFloat(row.resentful_density) || 0.01,
+        healthBoxesDensity: parseFloat(row.health_boxes_density) || 0.15,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+    } catch (error) {
+      fastify.log.error(error);
+      throw error;
+    }
+  });
+
+  // Update arena config
+  fastify.put('/arena-configs/:id', {
+    onRequest: [verifyAdmin]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const {
+      arenaName, mapSize, enemyCount, enemySpeed, enemyShootPercentage,
+      enemyShieldPercentage, enemyShootCooldown, killerSawCount,
+      floatingCannonCount, resentfulSnakeCount, healthBoxCount,
+      xpDensity, starsDensity, starLifetime, sawsDensity, cannonsDensity,
+      resentfulDensity, healthBoxesDensity, isActive
+    } = request.body;
+
+    try {
+      // Si se activa esta config, desactivar las demás
+      if (isActive) {
+        await query(`UPDATE arena_configs SET is_active = false WHERE id != $1`, [id]);
+      }
+
+      const result = await query(
+        `UPDATE arena_configs SET
+          arena_name = COALESCE($1, arena_name),
+          map_size = COALESCE($2, map_size),
+          enemy_count = COALESCE($3, enemy_count),
+          enemy_speed = COALESCE($4, enemy_speed),
+          enemy_shoot_percentage = COALESCE($5, enemy_shoot_percentage),
+          enemy_shield_percentage = COALESCE($6, enemy_shield_percentage),
+          enemy_shoot_cooldown = COALESCE($7, enemy_shoot_cooldown),
+          killer_saw_count = COALESCE($8, killer_saw_count),
+          floating_cannon_count = COALESCE($9, floating_cannon_count),
+          resentful_snake_count = COALESCE($10, resentful_snake_count),
+          health_box_count = COALESCE($11, health_box_count),
+          xp_density = COALESCE($12, xp_density),
+          stars_density = COALESCE($13, stars_density),
+          star_lifetime = COALESCE($14, star_lifetime),
+          saws_density = COALESCE($15, saws_density),
+          cannons_density = COALESCE($16, cannons_density),
+          resentful_density = COALESCE($17, resentful_density),
+          health_boxes_density = COALESCE($18, health_boxes_density),
+          is_active = COALESCE($19, is_active),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $20
+        RETURNING *`,
+        [
+          arenaName, mapSize, enemyCount, enemySpeed, enemyShootPercentage,
+          enemyShieldPercentage, enemyShootCooldown, killerSawCount,
+          floatingCannonCount, resentfulSnakeCount, healthBoxCount,
+          xpDensity, starsDensity, starLifetime, sawsDensity, cannonsDensity,
+          resentfulDensity, healthBoxesDensity, isActive, id
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        return reply.code(404).send({ error: 'Arena config not found' });
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        arenaType: row.arena_type,
+        arenaName: row.arena_name,
+        mapSize: row.map_size,
+        enemyCount: row.enemy_count,
+        enemySpeed: parseFloat(row.enemy_speed),
+        enemyShootPercentage: row.enemy_shoot_percentage,
+        enemyShieldPercentage: row.enemy_shield_percentage,
+        enemyShootCooldown: row.enemy_shoot_cooldown,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
+        xpDensity: parseFloat(row.xp_density),
+        starsDensity: parseFloat(row.stars_density),
+        starLifetime: row.star_lifetime,
+        sawsDensity: parseFloat(row.saws_density),
+        cannonsDensity: parseFloat(row.cannons_density),
+        resentfulDensity: parseFloat(row.resentful_density),
+        healthBoxesDensity: parseFloat(row.health_boxes_density),
+        isActive: row.is_active
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      throw error;
+    }
+  });
+
+  // Reset arena map (force reinitialize)
+  fastify.post('/arena-configs/reset-map', {
+    onRequest: [verifyAdmin]
+  }, async (request, reply) => {
+    try {
+      // Esto se manejará en el WebSocket server
+      // Por ahora solo retornamos éxito
+      return { success: true, message: 'Arena map will be reset on next player join' };
+    } catch (error) {
+      fastify.log.error(error);
       throw error;
     }
   });

@@ -494,10 +494,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Load level configurations from API
+  // Load level configurations from API (public endpoint for all authenticated users)
   const loadLevelConfigs = async () => {
     try {
-      const response = await fetch('/api/admin/levels', {
+      const response = await fetch('/api/admin/levels/public', {
         headers: getAuthHeaders()
       });
       if (response.ok) {
@@ -526,6 +526,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           };
         });
         setLevelConfigs(configsMap);
+        console.log('[Levels] Loaded', Object.keys(configsMap).length, 'levels from database');
+      } else {
+        console.warn('[Levels] Could not load from DB, using hardcoded fallback');
       }
     } catch (error) {
       console.error('Error loading level configs:', error);
@@ -710,13 +713,44 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       switch (data.type) {
         case 'arena_state':
           console.log('[Arena] State received, players:', data.players?.length, 'my id:', user.id);
-          const otherPlayersFromState = data.players?.filter(p => p.userId !== user.id) || [];
+          const otherPlayersFromState = (data.players?.filter(p => p.userId !== user.id) || []).map(p => ({
+            ...p,
+            targetX: p.x,
+            targetY: p.y,
+            targetSegments: p.segments ? [...p.segments] : [],
+            lastServerUpdate: Date.now()
+          }));
           console.log('[Arena] Other players:', otherPlayersFromState.length);
           otherPlayersRef.current = otherPlayersFromState;
           setOtherPlayers(otherPlayersFromState);
           setArenaPlayerCount(data.players?.length || 0);
+          
+          // Guardar posición de spawn y dimensiones del servidor
+          if (data.spawnPosition) {
+            gameRef.current.serverSpawnPosition = data.spawnPosition;
+          }
+          if (data.worldWidth && data.worldHeight) {
+            gameRef.current.serverWorldWidth = data.worldWidth;
+            gameRef.current.serverWorldHeight = data.worldHeight;
+          }
+          
           // Inicializar el juego en modo arena
           initArenaGame();
+          break;
+          
+        case 'map_state':
+          // Recibir estado del mapa del servidor (entidades compartidas)
+          if (gameRef.current) {
+            const game = gameRef.current;
+            // Actualizar entidades del servidor
+            if (data.food) game.food = data.food;
+            if (data.stars) game.stars = data.stars;
+            if (data.enemies) game.enemies = data.enemies;
+            if (data.killerSaws) game.killerSaws = data.killerSaws;
+            if (data.floatingCannons) game.floatingCannons = data.floatingCannons;
+            if (data.resentfulSnakes) game.resentfulSnakes = data.resentfulSnakes;
+            if (data.healthBoxes) game.healthBoxes = data.healthBoxes;
+          }
           break;
           
         case 'player_joined':
@@ -726,7 +760,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Verificar si ya existe
             const exists = otherPlayersRef.current.some(p => p.userId === data.player.userId);
             if (!exists) {
-              otherPlayersRef.current = [...otherPlayersRef.current, data.player];
+              const newPlayer = {
+                ...data.player,
+                targetX: data.player.x,
+                targetY: data.player.y,
+                targetSegments: data.player.segments ? [...data.player.segments] : [],
+                lastServerUpdate: Date.now()
+              };
+              otherPlayersRef.current = [...otherPlayersRef.current, newPlayer];
               setOtherPlayers([...otherPlayersRef.current]);
             }
           }
@@ -745,15 +786,26 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               if (updatedPlayer.userId === user.id) return;
               const index = otherPlayersRef.current.findIndex(p => p.userId === updatedPlayer.userId);
               if (index >= 0) {
-                // Actualizar jugador existente en el ref directamente
+                // Guardar la posición objetivo del servidor para interpolación suave
                 otherPlayersRef.current[index] = { 
                   ...otherPlayersRef.current[index], 
-                  ...updatedPlayer 
+                  ...updatedPlayer,
+                  // Posición objetivo del servidor (para interpolar hacia ella)
+                  targetX: updatedPlayer.x,
+                  targetY: updatedPlayer.y,
+                  targetSegments: updatedPlayer.segments,
+                  lastServerUpdate: Date.now()
                 };
               } else {
                 // Si no existía, agregarlo
                 console.log('[Arena] Adding missing player:', updatedPlayer.username);
-                otherPlayersRef.current.push(updatedPlayer);
+                otherPlayersRef.current.push({
+                  ...updatedPlayer,
+                  targetX: updatedPlayer.x,
+                  targetY: updatedPlayer.y,
+                  targetSegments: updatedPlayer.segments,
+                  lastServerUpdate: Date.now()
+                });
               }
             });
             // Solo actualizar state para trigger re-render del minimapa
@@ -803,16 +855,31 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           break;
         
         case 'player_hit':
-          // Otro jugador nos disparó - recibir daño
-          if (data.victimId === user.id && gameRef.current) {
+        case 'bullet_received':
+          // Otro jugador nos golpeó/disparó - recibir daño
+          if (gameRef.current) {
             const game = gameRef.current;
             const damage = data.damage || 1;
-            game.currentHealth -= damage;
-            game.damageFlash = 30;
             
-            if (game.currentHealth <= 0) {
-              // Morimos por disparo de otro jugador
-              handlePlayerDeathRef.current && handlePlayerDeathRef.current('bullet', data.shooterUsername);
+            // Aplicar escudo
+            let dodged = false;
+            if (shieldLevel > 0) {
+              const dodgeChance = (shieldLevel - 1) / shieldLevel;
+              dodged = Math.random() < dodgeChance;
+            }
+            
+            if (!dodged) {
+              game.currentHealth -= damage;
+              game.damageFlash = 30;
+              
+              if (game.currentHealth <= 0) {
+                // Morimos por golpe/disparo de otro jugador
+                const killMethod = data.hitType === 'head' ? 'head_collision' : (data.hitType === 'body' ? 'collision' : 'bullet');
+                handlePlayerDeathRef.current && handlePlayerDeathRef.current(killMethod, data.shooterUsername);
+              }
+            } else {
+              // Esquivamos el golpe gracias al escudo
+              game.healFlash = 10; // Flash visual de que esquivamos
             }
           }
           break;
@@ -894,7 +961,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       
       setGameState('arenaDeath');
     } else {
-      handlePlayerDeath();
+      // Modo campaña: ir a game over
+      setGameState('gameOver');
     }
   };
 
@@ -1817,14 +1885,25 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       const enemiesToRemove = [];
       
       game.enemies.forEach((enemy, enemyIndex) => {
-        const head = enemy.segments[0];
+        const head = enemy.segments?.[0];
         if (!head) return; // Skip if enemy has no head
         
+        // Asegurar que el enemigo tenga dirección
+        if (!enemy.direction) {
+          enemy.direction = { x: 1, y: 0 };
+        }
+        
+        const playerHead = game.snake?.[0];
+        if (!playerHead) return; // Skip if player doesn't exist yet
+        
+        // En modo arena, el servidor actualiza las posiciones - solo detectar colisiones
+        if (arenaMode) {
+          // Solo verificar colisiones (más abajo en esta función)
+          // No modificar posiciones ni direcciones
+        } else {
         // === INTELIGENCIA DEL ENEMIGO ===
         let targetingStar = false;
         let avoidingPlayer = false;
-        const playerHead = game.snake?.[0];
-        if (!playerHead) return; // Skip if player doesn't exist yet
         
         // 1. EVASIÓN DEL JUGADOR - Prioridad alta
         // Detectar si el jugador está cerca y esquivarlo
@@ -2106,6 +2185,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           }
           return true; // Keep star
         });
+        } // Fin del else (modo campaña - movimiento de enemigos)
 
         // Check collision: Player head vs Enemy body (excluding enemy head)
         // Si el jugador choca con el cuerpo de un enemigo, recibe daño (no muerte instantánea)
@@ -2199,41 +2279,75 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // === ARENA MODE: Interpolar movimiento de otros jugadores ===
       if (arenaMode && otherPlayersRef.current.length > 0) {
         otherPlayersRef.current.forEach(player => {
-          if (!player.segments || player.segments.length === 0 || !player.direction) {
+          if (!player.segments || player.segments.length === 0) {
             return;
           }
           
-          // Velocidad del otro jugador (usar velocidad recibida o default)
-          const playerSpeed = player.speed || 2.5;
-          
-          // Mover la cabeza del jugador basándose en su dirección
           const head = player.segments[0];
-          let newX = head.x + player.direction.x * playerSpeed * normalizedDelta;
-          let newY = head.y + player.direction.y * playerSpeed * normalizedDelta;
+          const timeSinceUpdate = Date.now() - (player.lastServerUpdate || 0);
           
-          // IMPORTANTE: Limitar la posición dentro del mapa para evitar que 
-          // la interpolación mueva al jugador fuera de los límites
-          const margin = BORDER_WIDTH + 10;
-          newX = Math.max(margin, Math.min(game.worldWidth - margin, newX));
-          newY = Math.max(margin, Math.min(game.worldHeight - margin, newY));
-          
-          head.x = newX;
-          head.y = newY;
-          
-          // Actualizar segmentos (el resto sigue a la cabeza)
-          for (let i = 1; i < player.segments.length; i++) {
-            const prev = player.segments[i - 1];
-            const current = player.segments[i];
-            const dx = prev.x - current.x;
-            const dy = prev.y - current.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+          // Si tenemos segmentos objetivo del servidor, interpolar hacia ellos
+          if (player.targetSegments && player.targetSegments.length > 0) {
+            const targetHead = player.targetSegments[0];
             
-            if (dist > SNAKE_SIZE * 1.2) {
-              // Mover el segmento hacia el anterior
-              const ratio = (SNAKE_SIZE * 1.2) / dist;
-              current.x = prev.x - dx * ratio;
-              current.y = prev.y - dy * ratio;
+            // Factor de interpolación (más rápido si pasó más tiempo sin update)
+            // Interpolar más agresivamente para sincronizar rápido
+            const lerpFactor = Math.min(0.3 * normalizedDelta, 0.5);
+            
+            // Interpolar cabeza hacia la posición del servidor
+            head.x += (targetHead.x - head.x) * lerpFactor;
+            head.y += (targetHead.y - head.y) * lerpFactor;
+            
+            // Si estamos muy cerca de la posición objetivo, usar posición exacta
+            const dx = targetHead.x - head.x;
+            const dy = targetHead.y - head.y;
+            const distToTarget = Math.sqrt(dx * dx + dy * dy);
+            if (distToTarget < 5) {
+              head.x = targetHead.x;
+              head.y = targetHead.y;
             }
+            
+            // Interpolar el resto de los segmentos
+            for (let i = 1; i < player.segments.length; i++) {
+              if (player.targetSegments[i]) {
+                player.segments[i].x += (player.targetSegments[i].x - player.segments[i].x) * lerpFactor;
+                player.segments[i].y += (player.targetSegments[i].y - player.segments[i].y) * lerpFactor;
+              } else {
+                // Si no hay segmento objetivo, seguir al anterior
+                const prev = player.segments[i - 1];
+                const current = player.segments[i];
+                const segDx = prev.x - current.x;
+                const segDy = prev.y - current.y;
+                const segDist = Math.sqrt(segDx * segDx + segDy * segDy);
+                
+                if (segDist > SNAKE_SIZE * 1.2) {
+                  const ratio = (SNAKE_SIZE * 1.2) / segDist;
+                  current.x = prev.x - segDx * ratio;
+                  current.y = prev.y - segDy * ratio;
+                }
+              }
+            }
+            
+            // Sincronizar cantidad de segmentos si es diferente
+            if (player.targetSegments.length > player.segments.length) {
+              // Agregar segmentos faltantes
+              for (let i = player.segments.length; i < player.targetSegments.length; i++) {
+                player.segments.push({ ...player.targetSegments[i] });
+              }
+            }
+          } else if (player.direction) {
+            // Fallback: si no hay targetSegments, extrapolar basándose en dirección
+            // (esto solo debería pasar temporalmente al conectarse)
+            const playerSpeed = player.speed || 2.5;
+            let newX = head.x + player.direction.x * playerSpeed * normalizedDelta;
+            let newY = head.y + player.direction.y * playerSpeed * normalizedDelta;
+            
+            const margin = BORDER_WIDTH + 10;
+            newX = Math.max(margin, Math.min(game.worldWidth - margin, newX));
+            newY = Math.max(margin, Math.min(game.worldHeight - margin, newY));
+            
+            head.x = newX;
+            head.y = newY;
           }
           
           // Actualizar x, y del player
@@ -2245,12 +2359,42 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // === ARENA MODE: Check collisions with other players ===
       if (arenaMode && otherPlayersRef.current.length > 0 && game.snake?.[0]) {
         const playerHead = game.snake[0];
-        otherPlayersRef.current.forEach(otherPlayer => {
-          if (!otherPlayer.segments || otherPlayer.segments.length === 0) return;
+        
+        for (const otherPlayer of otherPlayersRef.current) {
+          if (!otherPlayer.segments || otherPlayer.segments.length === 0) continue;
           
-          // Player head vs Other player body (local player takes damage)
+          const otherHead = otherPlayer.segments[0];
+          
+          // === MI CABEZA golpea CUERPO del otro → EL OTRO recibe daño ===
           for (let i = 1; i < otherPlayer.segments.length; i++) {
             if (checkCollision(playerHead, otherPlayer.segments[i], game.snakeSize + SNAKE_SIZE)) {
+              // Notificar al servidor que YO golpeé al otro (él recibe daño)
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'bullet_hit', // Reusar el mismo tipo para aplicar daño
+                  targetId: otherPlayer.userId,
+                  hitType: 'body',
+                  damage: 3 // Colisión con cuerpo = 3 de daño
+                }));
+              }
+              createParticle(playerHead.x, playerHead.y, '#ff6600', 15);
+              
+              // Push back MI cabeza
+              const dx = playerHead.x - otherPlayer.segments[i].x;
+              const dy = playerHead.y - otherPlayer.segments[i].y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              if (distance > 0) {
+                const pushForce = 40;
+                playerHead.x += (dx / distance) * pushForce;
+                playerHead.y += (dy / distance) * pushForce;
+              }
+              break;
+            }
+          }
+          
+          // === MI CUERPO es golpeado por CABEZA del otro → YO recibo daño ===
+          for (let i = 1; i < game.snake.length; i++) {
+            if (checkCollision(otherHead, game.snake[i], game.snakeSize + SNAKE_SIZE)) {
               let dodged = false;
               if (shieldLevel > 0) {
                 const dodgeChance = (shieldLevel - 1) / shieldLevel;
@@ -2259,7 +2403,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               
               if (!dodged) {
                 const damage = 3;
-                const died = applyDamage(damage, playerHead.x, playerHead.y);
+                const died = applyDamage(damage, game.snake[i].x, game.snake[i].y);
                 
                 if (died) {
                   createParticle(playerHead.x, playerHead.y, '#ff3366', 20);
@@ -2267,64 +2411,66 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                     killerUsername: otherPlayer.username,
                     killMethod: 'collision'
                   });
-                  
-                  // Notificar al servidor sobre el kill
-                  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({
-                      type: 'player_kill',
-                      killerId: otherPlayer.userId,
-                      victimId: user.id,
-                      killMethod: 'collision'
-                    }));
-                  }
                   return;
                 }
               } else {
-                createParticle(playerHead.x, playerHead.y, '#00ffff', 12);
-              }
-              
-              // Push back
-              const dx = playerHead.x - otherPlayer.segments[i].x;
-              const dy = playerHead.y - otherPlayer.segments[i].y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
-              if (distance > 0) {
-                const pushForce = 30;
-                playerHead.x += (dx / distance) * pushForce;
-                playerHead.y += (dy / distance) * pushForce;
+                createParticle(game.snake[i].x, game.snake[i].y, '#00ffff', 12);
               }
               break;
             }
           }
           
-          // Player head vs Other player head (both take damage)
-          const otherHead = otherPlayer.segments[0];
+          // === CABEZA vs CABEZA → Ambos reciben daño ===
           if (checkCollision(playerHead, otherHead, game.snakeSize + SNAKE_SIZE)) {
-            const damage = 5; // Colisión de cabezas es más dañina
+            // Notificar al servidor que golpeé su cabeza
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: 'bullet_hit',
+                targetId: otherPlayer.userId,
+                hitType: 'head',
+                damage: 5 // Colisión de cabezas = 5 de daño
+              }));
+            }
+            
+            // YO también recibo daño
+            const damage = 5;
             const died = applyDamage(damage, playerHead.x, playerHead.y);
             
+            createParticle(playerHead.x, playerHead.y, '#ff3366', 25);
+            
             if (died) {
-              createParticle(playerHead.x, playerHead.y, '#ff3366', 25);
               handlePlayerDeath({
                 killerUsername: otherPlayer.username,
                 killMethod: 'head_collision'
               });
-              
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({
-                  type: 'player_kill',
-                  killerId: otherPlayer.userId,
-                  victimId: user.id,
-                  killMethod: 'head_collision'
-                }));
-              }
               return;
             }
+            
+            // Push back ambas cabezas
+            const dx = playerHead.x - otherHead.x;
+            const dy = playerHead.y - otherHead.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 0) {
+              const pushForce = 50;
+              playerHead.x += (dx / distance) * pushForce;
+              playerHead.y += (dy / distance) * pushForce;
+            }
           }
-        });
+        }
       }
 
       // Remove dead enemies (in reverse order to maintain indices)
       enemiesToRemove.sort((a, b) => b - a).forEach(index => {
+        const deadEnemy = game.enemies[index];
+        
+        // En modo arena, notificar al servidor
+        if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && deadEnemy?.id) {
+          wsRef.current.send(JSON.stringify({
+            type: 'kill_enemy',
+            enemyId: deadEnemy.id
+          }));
+        }
+        
         game.enemies.splice(index, 1);
       });
       
@@ -2389,19 +2535,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         });
         
           // === ARENA MODE: Check collision with other players (player bullets) ===
-          if (!hit && arenaMode && otherPlayers.length > 0) {
-            otherPlayers.forEach(otherPlayer => {
-              if (hit || !otherPlayer.segments || otherPlayer.segments.length === 0) return;
+          if (!hit && arenaMode && otherPlayersRef.current.length > 0) {
+            for (const otherPlayer of otherPlayersRef.current) {
+              if (hit) break;
+              if (!otherPlayer.segments || otherPlayer.segments.length === 0) continue;
               
               const otherHead = otherPlayer.segments[0];
               let hitHead = false;
               let hitBody = false;
               
-              if (checkCollision(bullet, otherHead, 15)) {
+              // Verificar colisión con cabeza (radio más grande)
+              if (checkCollision(bullet, otherHead, 18)) {
                 hitHead = true;
               } else {
+                // Verificar colisión con cuerpo (verificar todos los segmentos)
                 for (let i = 1; i < otherPlayer.segments.length; i++) {
-                  if (checkCollision(bullet, otherPlayer.segments[i], 12)) {
+                  if (checkCollision(bullet, otherPlayer.segments[i], 15)) {
                     hitBody = true;
                     break;
                   }
@@ -2419,12 +2568,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   }));
                 }
                 
-                createParticle(bullet.x, bullet.y, '#00ff00', 10);
+                createParticle(bullet.x, bullet.y, '#ff3366', 15);
                 hit = true;
-                
-                // Incrementar contador de kills cuando el servidor confirme
               }
-            });
+            }
+            
+            // IMPORTANTE: Eliminar la bala si impactó a otro jugador
+            if (hit) {
+              return false;
+            }
           }
         
           // Check collision with Resentful Snakes (player bullets)
@@ -2467,7 +2619,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   }
                   createParticle(snakeHead.x, snakeHead.y, '#ffffff', 25);
                   
-                  // Crear estrella y XP como recompensa
+                  // En modo arena, notificar al servidor y remover localmente
+                  // El servidor se encarga del respawn
+                  if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && snake.id) {
+                    wsRef.current.send(JSON.stringify({
+                      type: 'kill_resentful',
+                      resentfulId: snake.id
+                    }));
+                    // Marcar para remover
+                    snake.markedForDeath = true;
+                  } else {
+                    // Crear estrella y XP como recompensa (solo modo campaña)
                   createFoodFromEnemy(snakeHead.x, snakeHead.y, 100, 3); // 3 estrellas por matar a la resentful
                   
                   // Dejar caja de vida de 5 puntos
@@ -2480,17 +2642,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                     pulseSpeed: 0.05
                   });
                   
-                  // Respawn en otro lugar (lejos del jugador)
-                  const playerHead = game.snake?.[0];
+                    // Respawn en otro lugar (lejos del jugador) - solo modo campaña
+                    const playerHead = game.snake?.[0];
                   let newSpawnX, newSpawnY, attempts = 0;
                   do {
                     const margin = 200;
                     newSpawnX = margin + Math.random() * (game.worldWidth - margin * 2);
                     newSpawnY = margin + Math.random() * (game.worldHeight - margin * 2);
-                    const distToPlayer = playerHead ? Math.sqrt(
+                      const distToPlayer = playerHead ? Math.sqrt(
                       Math.pow(newSpawnX - playerHead.x, 2) + 
                       Math.pow(newSpawnY - playerHead.y, 2)
-                    ) : 9999;
+                      ) : 9999;
                     attempts++;
                     if (distToPlayer > 600 || attempts > 20) break;
                   } while (true);
@@ -2504,6 +2666,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   snake.lastShotTime = Date.now();
                   
                   createParticle(newSpawnX, newSpawnY, '#ff00ff', 15);
+                  }
                 }
               }
             });
@@ -2696,14 +2859,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       });
     };
 
-    const update = (deltaTime) => {
+    const update = (normalizedDelta) => {
       if (gameState !== 'playing' || shopOpen) return; // Pause when shop is open
 
       const game = gameRef.current;
       
-      // Sistema de velocidad fija: siempre usar exactamente 1 frame de movimiento
+      // normalizedDelta ya viene calculado desde gameLoop:
+      // - 1.0 para 60fps (framerate objetivo)
+      // - 0.5 para 120fps (cada frame mueve la mitad, pero hay 2x frames)
+      // - 2.0 para 30fps (cada frame mueve el doble, pero hay 0.5x frames)
       // Esto garantiza velocidad constante independiente del framerate
-      const normalizedDelta = 1;
       
       // Check if player is passing through any opening
       if (game.centralRect && game.snake.length > 0) {
@@ -3036,10 +3201,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             x: newHead.x,
             y: newHead.y,
             direction: game.direction,
-            segments: game.snake.slice(0, 20), // Enviar solo los primeros 20 segmentos
+            segments: game.snake, // Enviar todos los segmentos para que otros vean la longitud real
             score: game.sessionXP,
             speed: game.speed, // Enviar velocidad actual para interpolación
-            skin: currentSkin // Enviar skin actual
+            skin: currentSkin, // Enviar skin actual
+            currentHealth: game.currentHealth, // Vida actual para mostrar a otros jugadores
+            maxHealth: game.maxHealth // Vida máxima para calcular porcentaje
           }));
           game.lastWsUpdate = now;
           game.lastSentDirection = { ...game.direction };
@@ -3102,9 +3269,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           createParticle(food.x, food.y, food.color, 5);
           foodEaten = true;
           
-          // Reaparecer otro punto XP en otro lugar del mapa
+          // En modo arena, notificar al servidor. El servidor se encarga de respawnear
+          if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: 'consume_food',
+              foodId: food.id
+            }));
+          } else {
+            // Solo en modo campaña, crear comida localmente
           const newFood = createFood();
           game.food.push(newFood);
+          }
           
           return false;
         }
@@ -3144,6 +3319,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           
           createParticle(star.x, star.y, '#FFD700', 8);
           starCollected = true;
+          
+          // En modo arena, notificar al servidor
+          if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: 'consume_star',
+              starId: star.id
+            }));
+          }
+          
           return false; // Remove star
         }
         return true; // Keep star
@@ -3223,21 +3407,32 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
       // Update Killer Saws
       if (game.killerSaws && game.killerSaws.length > 0) {
         game.killerSaws.forEach(saw => {
+          // En modo arena, el servidor actualiza las posiciones - solo detectar colisiones
+          if (arenaMode) {
+            // Solo verificar colisiones, no mover (el servidor lo hace)
+          } else {
           // Rotate
-          saw.rotation += saw.rotationSpeed * normalizedDelta;
-          
-          // Move
-          saw.x += saw.velocity.x * saw.speed * normalizedDelta;
-          saw.y += saw.velocity.y * saw.speed * normalizedDelta;
+            saw.rotation = (saw.rotation || 0) + (saw.rotationSpeed || 0.05) * normalizedDelta;
+            
+            // Move (usar vx/vy si velocity no existe)
+            const vx = saw.velocity?.x ?? saw.vx ?? 0;
+            const vy = saw.velocity?.y ?? saw.vy ?? 0;
+            const speed = saw.speed ?? 1;
+            saw.x += vx * speed * normalizedDelta;
+            saw.y += vy * speed * normalizedDelta;
           
           // Bounce off walls
-          if (saw.x - saw.radius < BORDER_WIDTH || saw.x + saw.radius > game.worldWidth - BORDER_WIDTH) {
-            saw.velocity.x *= -1;
-            saw.x = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldWidth - BORDER_WIDTH - saw.radius, saw.x));
-          }
-          if (saw.y - saw.radius < BORDER_WIDTH || saw.y + saw.radius > game.worldHeight - BORDER_WIDTH) {
-            saw.velocity.y *= -1;
-            saw.y = Math.max(BORDER_WIDTH + saw.radius, Math.min(game.worldHeight - BORDER_WIDTH - saw.radius, saw.y));
+            const radius = saw.radius ?? saw.size ?? 25;
+            if (saw.x - radius < BORDER_WIDTH || saw.x + radius > game.worldWidth - BORDER_WIDTH) {
+              if (saw.velocity) saw.velocity.x *= -1;
+              else if (saw.vx !== undefined) saw.vx *= -1;
+              saw.x = Math.max(BORDER_WIDTH + radius, Math.min(game.worldWidth - BORDER_WIDTH - radius, saw.x));
+            }
+            if (saw.y - radius < BORDER_WIDTH || saw.y + radius > game.worldHeight - BORDER_WIDTH) {
+              if (saw.velocity) saw.velocity.y *= -1;
+              else if (saw.vy !== undefined) saw.vy *= -1;
+              saw.y = Math.max(BORDER_WIDTH + radius, Math.min(game.worldHeight - BORDER_WIDTH - radius, saw.y));
+            }
           }
           
           // Check collision with player
@@ -3246,7 +3441,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const dx = head.x - saw.x;
             const dy = head.y - saw.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            const collisionDist = saw.radius + game.snakeSize + 5; // Extra margen para mejor detección
+            const sawRadius = saw.radius ?? saw.size ?? 25;
+            const collisionDist = sawRadius + game.snakeSize + 5; // Extra margen para mejor detección
             
             if (dist < collisionDist) {
               // Player hit by saw! - empujar siempre para evitar quedarse pegado
@@ -3433,6 +3629,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               createParticle(snakeHead.x, snakeHead.y, '#00ffff', 15);
               createParticle(snakeHead.x, snakeHead.y, '#ffffff', 12);
               
+              // En modo arena, notificar al servidor y marcar para remover
+              if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && snake.id) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'kill_resentful',
+                  resentfulId: snake.id
+                }));
+                snake.markedForDeath = true;
+              } else {
+                // Solo modo campaña: dejar caja de vida y respawnear localmente
               // Dejar caja de vida de 5 puntos
               game.healthBoxes.push({
                 x: snakeHead.x,
@@ -3468,6 +3673,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
               
               // Efecto visual en el nuevo spawn
               createParticle(newSpawnX, newSpawnY, '#ff00ff', 10);
+              }
               
               // El jugador también recibe un pequeño empujón pero NO daño
               const pushForce = 30;
@@ -3478,13 +3684,18 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             }
           }
         });
+        
+        // En modo arena, filtrar víboras resentidas muertas (el servidor las respawnea)
+        if (arenaMode) {
+          game.resentfulSnakes = game.resentfulSnakes.filter(s => !s.markedForDeath);
+        }
       }
 
       // Update Health Boxes
       if (game.healthBoxes && game.healthBoxes.length > 0) {
         game.healthBoxes = game.healthBoxes.filter(box => {
           // Animate pulse
-          box.pulse += box.pulseSpeed * normalizedDelta;
+          box.pulse = (box.pulse || 0) + (box.pulseSpeed || 0.05) * normalizedDelta;
           
           // Check collision with player
           const head = game.snake[0];
@@ -3493,9 +3704,18 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             const dy = head.y - box.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
-            if (dist < box.size + game.snakeSize) {
+            if (dist < (box.size || 18) + game.snakeSize) {
               // Collect health box!
-              applyHeal(box.healthPoints, box.x, box.y);
+              applyHeal(box.healthPoints || 1, box.x, box.y);
+              
+              // En modo arena, notificar al servidor
+              if (arenaMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'consume_health_box',
+                  healthBoxId: box.id
+                }));
+              }
+              
               return false; // Remove health box
             }
           }
@@ -3722,9 +3942,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         
         if (screenX > -20 && screenX < CANVAS_WIDTH + 20 && 
             screenY > -20 && screenY < CANVAS_HEIGHT + 20) {
-          ctx.fillStyle = food.color;
+          // Usar color o generar desde hue
+          const foodColor = food.color ?? `hsl(${food.hue ?? 120}, 100%, 50%)`;
+          const foodSize = food.size ?? 8;
+          ctx.fillStyle = foodColor;
           ctx.beginPath();
-          ctx.arc(screenX, screenY, food.size, 0, Math.PI * 2);
+          ctx.arc(screenX, screenY, foodSize, 0, Math.PI * 2);
           ctx.fill();
         }
       });
@@ -3964,6 +4187,56 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             ctx.arc(rightEyeX - 1, rightEyeY - 1, 1, 0, Math.PI * 2);
             ctx.fill();
           }
+          
+          // === NOMBRE Y VIDA DEL JUGADOR LOCAL (solo en modo arena) ===
+          if (arenaMode && user?.username) {
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            const myName = user.username;
+            const nameWidth = ctx.measureText(myName).width;
+            const labelWidth = nameWidth + 12;
+            const labelHeight = 16;
+            const labelX = screenX - labelWidth / 2;
+            const labelY = screenY - 30;
+            
+            // Calcular porcentaje de vida
+            const healthPercent = Math.max(0, Math.min(1, game.currentHealth / game.maxHealth));
+            
+            // Color de la vida según porcentaje
+            let healthColor;
+            if (healthPercent > 0.6) {
+              healthColor = '#00ff88'; // Verde brillante (tu color)
+            } else if (healthPercent > 0.3) {
+              healthColor = '#ffaa00'; // Naranja
+            } else {
+              healthColor = '#ff3333'; // Rojo
+            }
+            
+            // Fondo oscuro (parte vacía de la vida)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.beginPath();
+            ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+            ctx.fill();
+            
+            // Barra de vida (parte llena)
+            if (healthPercent > 0) {
+              ctx.fillStyle = healthColor;
+              ctx.beginPath();
+              ctx.roundRect(labelX, labelY, labelWidth * healthPercent, labelHeight, 4);
+              ctx.fill();
+            }
+            
+            // Borde del label (cyan para ti)
+            ctx.strokeStyle = '#33ffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+            ctx.stroke();
+            
+            // Nombre del jugador (encima de la barra)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(myName, screenX, labelY + 12);
+          }
         }
       });
 
@@ -4087,7 +4360,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
                   ctx.moveTo(screenX + perpX * 8, screenY + perpY * 8);
                   ctx.lineTo(screenX - perpX * 8, screenY - perpY * 8);
                   ctx.stroke();
-                  ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = '#ffffff';
                   ctx.beginPath();
                   ctx.arc(screenX + dir.x * 3, screenY + dir.y * 3, 2, 0, Math.PI * 2);
                   ctx.fill();
@@ -4109,19 +4382,57 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
           ctx.fill();
                 ctx.beginPath();
                 ctx.arc(rightEyeX + dir.x * 1.5, rightEyeY + dir.y * 1.5, 2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Nombre del jugador
+          ctx.fill();
+          
+                // Nombre del jugador con barra de vida
                 if (player.username) {
                   ctx.font = 'bold 11px Arial';
                   ctx.textAlign = 'center';
                   const nameWidth = ctx.measureText(player.username).width;
-                  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                  ctx.fillRect(screenX - nameWidth/2 - 4, screenY - 26, nameWidth + 8, 14);
-                  ctx.fillStyle = playerSkin === 'dragon' ? '#ffcc00' : 
-                                 playerSkin === 'rainbow' ? '#ff66ff' :
-                                 playerSkin === 'cyber' ? '#00ffff' : '#00ff00';
-                  ctx.fillText(player.username, screenX, screenY - 14);
+                  const labelWidth = nameWidth + 12;
+                  const labelHeight = 16;
+                  const labelX = screenX - labelWidth / 2;
+                  const labelY = screenY - 30;
+                  
+                  // Calcular porcentaje de vida
+                  const currentHealth = player.currentHealth ?? 2;
+                  const maxHealth = player.maxHealth ?? 2;
+                  const healthPercent = Math.max(0, Math.min(1, currentHealth / maxHealth));
+                  
+                  // Color de la vida según porcentaje
+                  let healthColor;
+                  if (healthPercent > 0.6) {
+                    healthColor = '#00cc44'; // Verde
+                  } else if (healthPercent > 0.3) {
+                    healthColor = '#ffaa00'; // Naranja
+                  } else {
+                    healthColor = '#ff3333'; // Rojo
+                  }
+                  
+                  // Fondo oscuro (parte vacía de la vida)
+                  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.beginPath();
+                  ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+          ctx.fill();
+          
+                  // Barra de vida (parte llena)
+                  if (healthPercent > 0) {
+                    ctx.fillStyle = healthColor;
+          ctx.beginPath();
+                    ctx.roundRect(labelX, labelY, labelWidth * healthPercent, labelHeight, 4);
+          ctx.fill();
+                  }
+                  
+                  // Borde del label
+                  ctx.strokeStyle = healthColor;
+                  ctx.lineWidth = 1.5;
+                  ctx.beginPath();
+                  ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 4);
+                  ctx.stroke();
+                  
+                  // Nombre del jugador (encima de la barra)
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillText(player.username, screenX, labelY + 12);
                 }
               }
             }
@@ -4151,17 +4462,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         game.killerSaws.forEach(saw => {
           const screenX = saw.x - camX;
           const screenY = saw.y - camY;
+          const sawRadius = saw.radius ?? saw.size ?? 25;
+          const sawColor = saw.color ?? '#ff4444';
+          const sawRotation = saw.rotation ?? 0;
           
           if (screenX > -100 && screenX < CANVAS_WIDTH + 100 && 
               screenY > -100 && screenY < CANVAS_HEIGHT + 100) {
             ctx.save();
             ctx.translate(screenX, screenY);
-            ctx.rotate(saw.rotation);
+            ctx.rotate(sawRotation);
             
             // Draw saw body (sin shadow)
-            ctx.fillStyle = saw.color;
+            ctx.fillStyle = sawColor;
             ctx.beginPath();
-            ctx.arc(0, 0, saw.radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, sawRadius, 0, Math.PI * 2);
             ctx.fill();
             
             // Draw saw teeth (simplificado: 8 en vez de 12)
@@ -4170,9 +4484,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             for (let i = 0; i < teethCount; i++) {
               const angle = (Math.PI * 2 * i) / teethCount;
               ctx.beginPath();
-              ctx.moveTo(Math.cos(angle) * saw.radius * 0.5, Math.sin(angle) * saw.radius * 0.5);
-              ctx.lineTo(Math.cos(angle + 0.2) * saw.radius * 1.1, Math.sin(angle + 0.2) * saw.radius * 1.1);
-              ctx.lineTo(Math.cos(angle - 0.2) * saw.radius * 1.1, Math.sin(angle - 0.2) * saw.radius * 1.1);
+              ctx.moveTo(Math.cos(angle) * sawRadius * 0.5, Math.sin(angle) * sawRadius * 0.5);
+              ctx.lineTo(Math.cos(angle + 0.2) * sawRadius * 1.1, Math.sin(angle + 0.2) * sawRadius * 1.1);
+              ctx.lineTo(Math.cos(angle - 0.2) * sawRadius * 1.1, Math.sin(angle - 0.2) * sawRadius * 1.1);
               ctx.closePath();
               ctx.fill();
             }
@@ -4180,7 +4494,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
             // Center circle
             ctx.fillStyle = '#222';
             ctx.beginPath();
-            ctx.arc(0, 0, saw.radius * 0.3, 0, Math.PI * 2);
+            ctx.arc(0, 0, sawRadius * 0.3, 0, Math.PI * 2);
             ctx.fill();
             
             ctx.restore();
@@ -4627,8 +4941,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
         return; // Detener el loop
       }
       
-      // Usamos un timestep fijo para velocidad consistente
-      update(FRAME_TIME);
+      // Calcular delta time real para normalizar velocidad entre diferentes framerates
+      // Esto asegura que un jugador a 120fps vaya igual de rápido que uno a 60fps
+      const deltaTime = currentTime - lastTime;
+      lastTime = currentTime;
+      
+      // Normalizar: si deltaTime = FRAME_TIME (16.67ms), normalizedDelta = 1.0
+      // Si 120fps (8.33ms), normalizedDelta = 0.5 → se mueve la mitad por frame pero 2x frames = mismo resultado
+      // Si 30fps (33.33ms), normalizedDelta = 2.0 → se mueve el doble por frame pero 0.5x frames = mismo resultado
+      const normalizedDelta = Math.min(deltaTime / FRAME_TIME, 3); // Cap at 3 to prevent huge jumps on lag
+      
+      update(normalizedDelta);
       draw();
       animationId = requestAnimationFrame(gameLoop);
     };
@@ -4907,98 +5230,46 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     setScore(0);
     setArenaKills(0);
     
-    // Configurar tamaño del mundo para arena
-    // mapSize indica cuántas "pantallas" de ancho/alto tiene el mapa
-    // Limitar a máximo 5 pantallas para evitar sobrecarga
-    const mapSizeInScreens = Math.min(config.mapSize || 5, 5);
-    game.worldWidth = CANVAS_WIDTH * mapSizeInScreens;
-    game.worldHeight = CANVAS_HEIGHT * mapSizeInScreens;
+    // Usar dimensiones del servidor si están disponibles
+    if (game.serverWorldWidth && game.serverWorldHeight) {
+      game.worldWidth = game.serverWorldWidth;
+      game.worldHeight = game.serverWorldHeight;
+    } else {
+      // Fallback a dimensiones por defecto
+      const mapSizeInScreens = Math.min(config.mapSize || 5, 5);
+      game.worldWidth = CANVAS_WIDTH * mapSizeInScreens;
+      game.worldHeight = CANVAS_HEIGHT * mapSizeInScreens;
+    }
     
     // Sin celda central en arena
     game.centralRect = null;
     
-    // Calcular cantidad de entidades basado en el área del mapa
-    // Densidades REDUCIDAS para mejor rendimiento en multijugador
-    const screenArea = CANVAS_WIDTH * CANVAS_HEIGHT;
-    const mapArea = game.worldWidth * game.worldHeight;
-    const numScreens = mapArea / screenArea;
-    const xpPerScreen = 10; // Puntos de XP por pantalla
-    const enemiesPerScreen = 1.2; // Enemigos por pantalla (reducido)
-    const sawsPerScreen = 0.08; // Sierras por pantalla (MITAD)
-    const cannonsPerScreen = 0.08; // Cañones por pantalla (reducido)
-    const resentfulPerScreen = 0.01; // Víboras resentidas por pantalla (MITAD - muy costosas)
-    const healthBoxesPerScreen = 0.1; // Cajas de salud por pantalla
+    // Las entidades se reciben del servidor via 'map_state'
+    // Inicializar arrays vacíos que serán llenados por el servidor
+    if (!game.food) game.food = [];
+    if (!game.stars) game.stars = [];
+    if (!game.enemies) game.enemies = [];
+    if (!game.killerSaws) game.killerSaws = [];
+    if (!game.floatingCannons) game.floatingCannons = [];
+    if (!game.resentfulSnakes) game.resentfulSnakes = [];
+    if (!game.healthBoxes) game.healthBoxes = [];
     
-    // Configuración de arena para las funciones de creación
-    const arenaLevelConfig = {
-      ...config,
-      playerSpeed: config.playerSpeed || 2.5,
-      enemySpeed: config.enemySpeed || 2.8,
-      enemyShootPercentage: config.enemyShootPercentage || 50,
-      enemyShieldPercentage: config.enemyShieldPercentage || 50,
-      enemyShootCooldown: config.enemyShootCooldown || 2000,
-      enemyUpgradeLevel: config.enemyUpgradeLevel || 5
-    };
+    console.log(`⚔️ Iniciando ARENA COMPARTIDA (${game.worldWidth}x${game.worldHeight}px)`);
+    console.log(`   📡 Entidades se reciben del servidor`);
     
-    // Crear comida - cantidad basada en área del mapa
-    const foodCount = Math.floor(numScreens * xpPerScreen);
-    game.food = Array.from({ length: foodCount }, () => createFood());
-    game.initialFoodCount = game.food.length;
-    
-    // Crear enemigos con variabilidad 50/50
-    const enemyCount = Math.floor(numScreens * enemiesPerScreen);
-    game.enemies = Array.from({ length: enemyCount }, () => {
-      return createEnemy(arenaLevelConfig, 1);
-    });
-    
-    // Crear otros elementos (mínimos reducidos para mejor rendimiento)
-    const sawCount = Math.max(2, Math.floor(numScreens * sawsPerScreen));
-    const cannonCount = Math.max(2, Math.floor(numScreens * cannonsPerScreen));
-    const resentfulCount = Math.max(1, Math.floor(numScreens * resentfulPerScreen));
-    const healthBoxCount = Math.max(3, Math.floor(numScreens * healthBoxesPerScreen));
-    
-    game.killerSaws = Array.from({ length: sawCount }, () => createKillerSaw(arenaLevelConfig));
-    game.floatingCannons = Array.from({ length: cannonCount }, () => createFloatingCannon(arenaLevelConfig));
-    game.resentfulSnakes = Array.from({ length: resentfulCount }, () => createResentfulSnake(arenaLevelConfig));
-    game.healthBoxes = Array.from({ length: healthBoxCount }, () => createHealthBox(arenaLevelConfig));
-    
-    console.log(`⚔️ Iniciando ARENA (${mapSizeInScreens}x${mapSizeInScreens} pantallas = ${game.worldWidth}x${game.worldHeight}px)`);
-    console.log(`   📦 ${game.food.length} puntos XP, ${game.enemies.length} enemigos, ${game.killerSaws.length} sierras, ${game.floatingCannons.length} cañones, ${game.resentfulSnakes.length} víboras resentidas, ${game.healthBoxes.length} cajas de salud`);
-    
-    // Spawn del jugador en posición aleatoria segura
-    const margin = 100;
-    let spawnX = margin + Math.random() * (game.worldWidth - margin * 2);
-    let spawnY = margin + Math.random() * (game.worldHeight - margin * 2);
-    
-    // Buscar posición segura lejos de enemigos
-    const attempts = 50;
-    let bestX = spawnX;
-    let bestY = spawnY;
-    let bestMinDistance = 0;
-    
-    for (let i = 0; i < attempts; i++) {
-      const testX = margin + Math.random() * (game.worldWidth - margin * 2);
-      const testY = margin + Math.random() * (game.worldHeight - margin * 2);
-      
-      let minDistance = Infinity;
-      for (const enemy of game.enemies) {
-        if (enemy.segments && enemy.segments.length > 0) {
-          const head = enemy.segments[0];
-          const dx = testX - head.x;
-          const dy = testY - head.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          minDistance = Math.min(minDistance, distance);
-        }
-      }
-      
-      if (minDistance > bestMinDistance) {
-        bestMinDistance = minDistance;
-        bestX = testX;
-        bestY = testY;
-      }
+    // Usar posición de spawn del servidor
+    let spawnX, spawnY;
+    if (game.serverSpawnPosition) {
+      spawnX = game.serverSpawnPosition.x;
+      spawnY = game.serverSpawnPosition.y;
+    } else {
+      // Fallback a posición aleatoria local
+      const margin = 100;
+      spawnX = margin + Math.random() * (game.worldWidth - margin * 2);
+      spawnY = margin + Math.random() * (game.worldHeight - margin * 2);
     }
     
-    game.snake = [{ x: bestX, y: bestY }];
+    game.snake = [{ x: spawnX, y: spawnY }];
     game.direction = { x: 1, y: 0 };
     game.nextDirection = { x: 1, y: 0 };
     game.speed = config.playerSpeed || 2.5;
@@ -5006,7 +5277,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     game.snakeSize = SNAKE_SIZE;
     game.bullets = [];
     game.particles = [];
-    game.stars = [];
     game.currentXP = 0;
     game.currentStars = 0;
     game.starsNeeded = 0; // No estrellas necesarias en arena
@@ -5019,8 +5289,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     game.lastWsUpdate = 0;
     game.lastEnemyRespawn = Date.now();
     game.camera = { 
-      x: bestX - CANVAS_WIDTH / 2, 
-      y: bestY - CANVAS_HEIGHT / 2 
+      x: spawnX - CANVAS_WIDTH / 2, 
+      y: spawnY - CANVAS_HEIGHT / 2 
     };
     
     setCurrentLevelXP(0);
@@ -5031,12 +5301,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, freeShot
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'player_update',
-        x: bestX,
-        y: bestY,
+        x: spawnX,
+        y: spawnY,
         direction: game.direction,
         segments: game.snake,
         score: 0,
-        skin: currentSkin
+        skin: currentSkin,
+        speed: game.speed,
+        currentHealth: game.currentHealth,
+        maxHealth: game.maxHealth
       }));
     }
   };

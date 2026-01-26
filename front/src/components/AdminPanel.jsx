@@ -63,10 +63,12 @@ const AdminPanel = ({ onClose }) => {
   const [levels, setLevels] = useState([]);
   const [structures, setStructures] = useState([]);
   const [shopUpgrades, setShopUpgrades] = useState({});
+  const [arenaConfigs, setArenaConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
   const [editingLevel, setEditingLevel] = useState(null);
   const [editingUpgrade, setEditingUpgrade] = useState(null);
+  const [editingArena, setEditingArena] = useState(null);
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
@@ -98,7 +100,8 @@ const AdminPanel = ({ onClose }) => {
         loadUsers(),
         loadLevels(),
         loadStructures(),
-        loadShopUpgrades()
+        loadShopUpgrades(),
+        loadArenaConfigs()
       ]);
     } catch (error) {
       console.error('Error loading admin data:', error);
@@ -154,6 +157,36 @@ const AdminPanel = ({ onClose }) => {
       setShopUpgrades(data);
     } catch (error) {
       console.error('Error loading shop upgrades:', error);
+    }
+  };
+
+  const loadArenaConfigs = async () => {
+    try {
+      const response = await fetch('/api/admin/arena-configs', {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load arena configs');
+      const data = await response.json();
+      setArenaConfigs(data);
+    } catch (error) {
+      console.error('Error loading arena configs:', error);
+    }
+  };
+
+  const updateArenaConfig = async (configId, updates) => {
+    try {
+      const response = await fetch(`/api/admin/arena-configs/${configId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updates)
+      });
+      if (!response.ok) throw new Error('Failed to update arena config');
+      await loadArenaConfigs();
+      setEditingArena(null);
+      alert('Configuración de arena actualizada. Reinicia el servidor para aplicar cambios.');
+    } catch (error) {
+      console.error('Error updating arena config:', error);
+      alert('Error al actualizar configuración de arena');
     }
   };
 
@@ -285,7 +318,7 @@ const AdminPanel = ({ onClose }) => {
           marginBottom: '20px',
           borderBottom: '1px solid #33ffff'
         }}>
-          {['jugadores', 'niveles', 'tienda'].map(tab => (
+          {['jugadores', 'niveles', 'tienda', 'arena'].map(tab => (
             <button
               key={tab}
               onClick={() => {
@@ -293,6 +326,7 @@ const AdminPanel = ({ onClose }) => {
                 setEditingUser(null);
                 setEditingLevel(null);
                 setEditingUpgrade(null);
+                setEditingArena(null);
               }}
               style={{
                 padding: '10px 20px',
@@ -879,6 +913,175 @@ const AdminPanel = ({ onClose }) => {
                         Guardar
                       </Button>
                       <Button onClick={() => setEditingUpgrade(null)} style={{ borderColor: '#ff3366', color: '#ff3366' }}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Arena Tab */}
+          {activeTab === 'arena' && (
+            <div>
+              <h2 style={{ color: '#33ffff', marginBottom: '15px' }}>🏟️ Configuración de Arena Multijugador</h2>
+              <p style={{ color: '#888', marginBottom: '20px', fontSize: '14px' }}>
+                Configura el mapa compartido de la arena multijugador. Los cambios se aplicarán cuando reinicies el servidor.
+              </p>
+              
+              {arenaConfigs.map(config => (
+                <div
+                  key={config.id}
+                  style={{
+                    background: config.isActive ? 'rgba(51, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.5)',
+                    border: `2px solid ${config.isActive ? '#00ff88' : '#33ffff'}`,
+                    borderRadius: '10px',
+                    padding: '20px',
+                    marginBottom: '20px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <h3 style={{ color: '#33ffff', margin: 0 }}>
+                      {config.arenaName} {config.isActive && <span style={{ color: '#00ff88' }}>(ACTIVA)</span>}
+                    </h3>
+                    <Button onClick={() => setEditingArena({ ...config })}>
+                      Editar
+                    </Button>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px', color: '#888', fontSize: '13px' }}>
+                    <div>📏 Tamaño Mapa: <span style={{ color: '#33ffff' }}>{config.mapSize}x{config.mapSize} pantallas</span></div>
+                    <div>🍎 XP Densidad: <span style={{ color: '#33ffff' }}>{config.xpDensity}/pantalla</span></div>
+                    <div>⭐ Estrellas Densidad: <span style={{ color: '#33ffff' }}>{config.starsDensity}/pantalla</span></div>
+                    <div>⏱️ Vida Estrella: <span style={{ color: '#33ffff' }}>{config.starLifetime}s</span></div>
+                    <div>🐍 Enemigos: <span style={{ color: '#33ffff' }}>{config.enemyCount}</span></div>
+                    <div>💨 Velocidad Enemigos: <span style={{ color: '#33ffff' }}>{config.enemySpeed}</span></div>
+                    <div>🔴 Víboras Resentidas: <span style={{ color: '#33ffff' }}>{config.resentfulSnakeCount}</span></div>
+                    <div>⚙️ Sierras: <span style={{ color: '#33ffff' }}>{config.killerSawCount}</span></div>
+                    <div>🔫 Cañones: <span style={{ color: '#33ffff' }}>{config.floatingCannonCount}</span></div>
+                    <div>💚 Cajas de Vida: <span style={{ color: '#33ffff' }}>{config.healthBoxCount}</span></div>
+                    <div>🎯 % Enemigos Disparan: <span style={{ color: '#33ffff' }}>{config.enemyShootPercentage}%</span></div>
+                    <div>🛡️ % Enemigos con Escudo: <span style={{ color: '#33ffff' }}>{config.enemyShieldPercentage}%</span></div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Edit Arena Modal */}
+              {editingArena && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0, 0, 0, 0.9)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  zIndex: 10001
+                }}>
+                  <div style={{
+                    background: 'rgba(10, 10, 10, 0.98)',
+                    border: '2px solid #33ffff',
+                    borderRadius: '10px',
+                    padding: '30px',
+                    maxWidth: '800px',
+                    width: '90%',
+                    maxHeight: '90vh',
+                    overflow: 'auto'
+                  }}>
+                    <h3 style={{ color: '#33ffff', marginBottom: '20px' }}>
+                      Editar Arena: {editingArena.arenaName}
+                    </h3>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                      <InputField
+                        label="Nombre de Arena"
+                        value={editingArena.arenaName}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, arenaName: val }))}
+                        type="text"
+                      />
+                      <InputField
+                        label="📏 Tamaño Mapa (pantallas)"
+                        value={editingArena.mapSize}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, mapSize: parseInt(val) || 5 }))}
+                        min={1}
+                        max={10}
+                      />
+                      <InputField
+                        label="🍎 XP por Pantalla"
+                        value={editingArena.xpDensity}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, xpDensity: parseFloat(val) || 15 }))}
+                      />
+                      <InputField
+                        label="⭐ Estrellas por Pantalla"
+                        value={editingArena.starsDensity}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, starsDensity: parseFloat(val) || 2 }))}
+                      />
+                      <InputField
+                        label="⏱️ Vida de Estrella (seg)"
+                        value={editingArena.starLifetime}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, starLifetime: parseInt(val) || 60 }))}
+                        min={10}
+                        max={300}
+                      />
+                      <InputField
+                        label="🐍 Cantidad de Enemigos"
+                        value={editingArena.enemyCount}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, enemyCount: parseInt(val) || 30 }))}
+                      />
+                      <InputField
+                        label="💨 Velocidad Enemigos"
+                        value={editingArena.enemySpeed}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, enemySpeed: parseFloat(val) || 2.5 }))}
+                      />
+                      <InputField
+                        label="🔴 Víboras Resentidas"
+                        value={editingArena.resentfulSnakeCount}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, resentfulSnakeCount: parseInt(val) || 1 }))}
+                      />
+                      <InputField
+                        label="⚙️ Sierras Asesinas"
+                        value={editingArena.killerSawCount}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, killerSawCount: parseInt(val) || 2 }))}
+                      />
+                      <InputField
+                        label="🔫 Cañones Flotantes"
+                        value={editingArena.floatingCannonCount}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, floatingCannonCount: parseInt(val) || 2 }))}
+                      />
+                      <InputField
+                        label="💚 Cajas de Vida"
+                        value={editingArena.healthBoxCount}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, healthBoxCount: parseInt(val) || 4 }))}
+                      />
+                      <InputField
+                        label="🎯 % Enemigos Disparan"
+                        value={editingArena.enemyShootPercentage}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, enemyShootPercentage: parseInt(val) || 50 }))}
+                        min={0}
+                        max={100}
+                      />
+                      <InputField
+                        label="🛡️ % Enemigos con Escudo"
+                        value={editingArena.enemyShieldPercentage}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, enemyShieldPercentage: parseInt(val) || 50 }))}
+                        min={0}
+                        max={100}
+                      />
+                      <InputField
+                        label="⏱️ Cooldown Disparo (ms)"
+                        value={editingArena.enemyShootCooldown}
+                        onChange={(val) => setEditingArena(prev => ({ ...prev, enemyShootCooldown: parseInt(val) || 2000 }))}
+                      />
+                    </div>
+                    
+                    <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+                      <Button onClick={() => updateArenaConfig(editingArena.id, editingArena)}>
+                        Guardar
+                      </Button>
+                      <Button onClick={() => setEditingArena(null)} style={{ borderColor: '#ff3366', color: '#ff3366' }}>
                         Cancelar
                       </Button>
                     </div>
