@@ -14,3 +14,4 @@ export const down = async (pool) => {
   console.log('✅ Migration 022 rolled back: Removed is_immune column');
 };
 
+

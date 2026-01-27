@@ -7,6 +7,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const [bannedUntil, setBannedUntil] = useState(null);
   const [freeShots, setFreeShots] = useState(false);
   const [isImmune, setIsImmune] = useState(false);
 
@@ -31,6 +32,7 @@ function App() {
         setUser(data);
         setIsAdmin(data.isAdmin === true || data.isAdmin === 'true');
         setIsBanned(data.isBanned === true || data.isBanned === 'true');
+        setBannedUntil(data.bannedUntil || null);
         setFreeShots(data.freeShots === true || data.freeShots === 'true');
         setIsImmune(data.isImmune === true || data.isImmune === 'true');
         console.log('isAdmin set to:', data.isAdmin === true || data.isAdmin === 'true');
@@ -47,13 +49,14 @@ function App() {
     }
   }, []);
 
-  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, freeShotsStatus = false, isImmuneStatus = false) => {
+  const handleLogin = (userData, token, adminStatus = false, bannedStatus = false, bannedUntilDate = null, freeShotsStatus = false, isImmuneStatus = false) => {
     localStorage.setItem('token', token);
     localStorage.setItem('userId', userData.id);
     localStorage.setItem('viborita_registered', 'true'); // Marcar que este navegador tiene cuenta
     setUser(userData);
     setIsAdmin(adminStatus);
     setIsBanned(bannedStatus);
+    setBannedUntil(bannedUntilDate);
     setFreeShots(freeShotsStatus);
     setIsImmune(isImmuneStatus);
   };
@@ -64,6 +67,7 @@ function App() {
     setUser(null);
     setIsAdmin(false);
     setIsBanned(false);
+    setBannedUntil(null);
     setFreeShots(false);
     setIsImmune(false);
   };
@@ -91,7 +95,7 @@ function App() {
     return <AuthScreen onLogin={handleLogin} hasExistingAccount={hasExistingAccount} />;
   }
 
-  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} freeShots={freeShots} isImmune={isImmune} />;
+  return <SnakeGame user={user} onLogout={handleLogout} isAdmin={isAdmin} isBanned={isBanned} bannedUntil={bannedUntil} freeShots={freeShots} isImmune={isImmune} />;
 }
 
 export default App;
