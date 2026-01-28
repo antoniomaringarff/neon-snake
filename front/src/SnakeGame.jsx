@@ -1194,7 +1194,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   // Load leaderboard by total XP
   const loadLeaderboardByTotalXP = async () => {
     try {
-      const response = await fetch('/api/leaderboard?type=xp&limit=10');
+      const response = await fetch('/api/leaderboard?type=xptotal&limit=10');
       if (response.ok) {
         const data = await response.json();
         setLeaderboardByTotalXP(data);
@@ -4505,45 +4505,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         });
       }
       
-      // === HUD FLOTANTE SIMPLE - Esquina superior izquierda ===
-      // Solo: Nivel, Estrellas, Vida, XP sesión
-      const hudX = 15;
-      const hudY = 15;
-      
-      // Fondo semi-transparente
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.beginPath();
-      ctx.roundRect(hudX, hudY, 180, 70, 8);
-      ctx.fill();
-      
-      // Borde sutil
-      ctx.strokeStyle = 'rgba(51, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(hudX, hudY, 180, 70, 8);
-      ctx.stroke();
-      
-      // Nivel
-      ctx.fillStyle = '#33ffff';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(`Nivel ${game.level}`, hudX + 10, hudY + 22);
-      
-      // Estrellas (formato simple)
-      ctx.fillStyle = '#FFD700';
-      ctx.font = '13px monospace';
-      ctx.fillText(`⭐ ${game.currentStars}/${game.starsNeeded}`, hudX + 10, hudY + 42);
-      
-      // Vida
-      const healthColor = (game.currentHealth / game.maxHealth) > 0.5 ? '#00ff88' : 
-                          (game.currentHealth / game.maxHealth) > 0.25 ? '#ffaa00' : '#ff3333';
-      ctx.fillStyle = healthColor;
-      ctx.fillText(`❤️ ${game.currentHealth}/${game.maxHealth}`, hudX + 95, hudY + 42);
-      
-      // XP de sesión
-      const sessionXP = game.sessionXP || 0;
-      ctx.fillStyle = '#00aaff';
-      ctx.fillText(`⚡ +${sessionXP} XP`, hudX + 10, hudY + 62);
-      
       // === CONTROLES - Abajo izquierda, muy simple ===
       ctx.fillStyle = '#ff00ff';
       ctx.font = '12px monospace';
@@ -4847,10 +4808,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     const game = gameRef.current;
     const levelProgress = gameState === 'playing' ? (game.currentXP / game.xpNeeded) * 100 : 0;
     
-    // Compact styles for playing state
+    // Compact styles for playing state - mostrar datos de la jugada actual
     if (gameState === 'playing') {
       const compactPadding = isMobile ? '4px 8px' : '6px 12px';
       const compactFontSize = isMobile ? '11px' : '13px';
+      const sessionXP = game.sessionXP || 0;
+      const healthColor = (game.currentHealth / game.maxHealth) > 0.5 ? '#00ff88' : 
+                          (game.currentHealth / game.maxHealth) > 0.25 ? '#ffaa00' : '#ff3333';
+      
       return (
         <div style={{
           width: '100%',
@@ -4865,17 +4830,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         }}>
           <div style={{ 
             display: 'flex', 
-            gap: isMobile ? '12px' : '20px', 
-            alignItems: 'center'
+            gap: isMobile ? '10px' : '18px', 
+            alignItems: 'center',
+            flexWrap: 'wrap'
           }}>
             <span style={{ fontSize: compactFontSize, color: '#33ffff', fontWeight: 'bold' }}>
               Nivel {game.level}
             </span>
-            <span style={{ fontSize: compactFontSize, color: '#33ffff' }}>
-              XP: {currentLevelXP}
-            </span>
             <span style={{ fontSize: compactFontSize, color: '#FFD700' }}>
-              ⭐ {currentLevelStars} / {game.starsNeeded}
+              ⭐ {game.currentStars} / {game.starsNeeded}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: healthColor }}>
+              ❤️ {game.currentHealth} / {game.maxHealth}
+            </span>
+            <span style={{ fontSize: compactFontSize, color: '#00aaff' }}>
+              ⚡ +{sessionXP} XP
             </span>
           </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

@@ -15,6 +15,11 @@ export default async function leaderboardRoutes(fastify, options) {
         break;
       case 'xp':
         orderBy = 'total_xp';
+        orderByTable = 'l'; // XP ganada en partidas (de leaderboard)
+        break;
+      case 'xptotal':
+        orderBy = 'total_xp';
+        orderByTable = 'u'; // XP total del jugador (de users)
         break;
       case 'sessions':
         orderBy = 'total_sessions';
@@ -43,13 +48,17 @@ export default async function leaderboardRoutes(fastify, options) {
     }
 
     try {
+      // Para XP (xp): usar l.total_xp de leaderboard (XP ganada en partidas)
+      // Para XP Total (xptotal): usar u.total_xp de users (XP total del jugador)
+      const xpField = (type === 'xptotal') ? 'COALESCE(u.total_xp, 0)' : 'l.total_xp';
+      
       const result = await query(
         `SELECT 
           l.id,
           u.username,
           l.best_score,
           l.highest_level,
-          l.total_xp,
+          ${xpField} as total_xp,
           l.total_sessions,
           COALESCE(l.level_25_score, 0) as level_25_score,
           COALESCE(l.level_25_kills, 0) as level_25_kills,
@@ -67,7 +76,7 @@ export default async function leaderboardRoutes(fastify, options) {
         username: row.username,
         bestScore: row.best_score,
         highestLevel: row.highest_level,
-        totalXp: row.total_xp,
+        totalXp: row.total_xp || 0,
         totalSessions: row.total_sessions,
         level25Score: row.level_25_score,
         level25Kills: row.level_25_kills,
