@@ -646,7 +646,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
 
   const [selectedSkin, setSelectedSkin] = useState(() => getInitialSkin()); // Skin actual
   const [unlockedSkins, setUnlockedSkins] = useState(() => getInitialUnlockedSkins()); // Skins desbloqueados
-  const [showSkinSelector, setShowSkinSelector] = useState(false); // Mostrar selector de skins
+  const [showSkinSelector, setShowSkinSelector] = useState(false); // Mostrar selector de skins (deprecated, usar activeShopTab)
+  const [activeShopTab, setActiveShopTab] = useState('shop'); // 'shop' o 'skins' - pestaña activa en la tienda
   
   // Función helper para convertir números a texto en español
   const numberToSpanish = (num) => {
@@ -918,6 +919,18 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   useEffect(() => {
     localStorage.setItem('viborita_unlocked_skins', JSON.stringify(unlockedSkins));
   }, [unlockedSkins]);
+
+  // Sincronizar activeShopTab cuando se cambia gameState o showSkinSelector
+  useEffect(() => {
+    if (gameState === 'shop') {
+      if (showSkinSelector) {
+        setActiveShopTab('skins');
+      } else if (activeShopTab === 'skins' && !showSkinSelector) {
+        // Si estamos en shop pero activeShopTab es skins y showSkinSelector es false, resetear a shop
+        setActiveShopTab('shop');
+      }
+    }
+  }, [gameState, showSkinSelector]);
 
   // Load level configurations from API
   const loadLevelConfigs = async () => {
@@ -5277,7 +5290,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             }}>
               {/* Skin seleccionada */}
               <div 
-                onClick={() => setShowSkinSelector(true)}
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('skins');
+                  setShowSkinSelector(true);
+                }}
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -5305,7 +5322,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               
               {/* Todos los specs - siempre visibles */}
               <div 
-                onClick={() => setGameState('shop')}
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('shop');
+                }}
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -5709,7 +5729,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               flexDirection: isMobile ? 'column' : 'row'
             }}>
               <button 
-                onClick={() => setGameState('shop')}
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('shop');
+                }}
                 style={{
                   background: 'transparent',
                   border: '2px solid #ff00ff',
@@ -5734,7 +5757,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 TIENDA
               </button>
               <button 
-                onClick={() => setShowSkinSelector(true)}
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('skins');
+                }}
                 style={{
                   background: 'transparent',
                   border: '2px solid #FFD700',
@@ -6279,8 +6305,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           background: 'rgba(0, 0, 0, 0.95)',
           padding: '30px',
           borderRadius: '10px',
-          border: '3px solid #ff00ff',
-          boxShadow: '0 0 40px rgba(255, 0, 255, 0.5)',
+          border: activeShopTab === 'shop' ? '3px solid #ff00ff' : '3px solid #FFD700',
+          boxShadow: activeShopTab === 'shop' ? '0 0 40px rgba(255, 0, 255, 0.5)' : '0 0 40px rgba(255, 215, 0, 0.5)',
           maxWidth: '1400px',
           width: '100%',
           margin: '20px auto',
@@ -6288,62 +6314,116 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           overflowY: 'auto',
           position: 'relative'
         }}>
-          <button
-            onClick={() => setGameState('menu')}
-            style={{
-              position: 'absolute',
-              top: '20px',
-              right: '20px',
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '8px 16px',
-              fontSize: '14px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            VOLVER
-          </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', flex: 1 }}>
-              TIENDA
-            </h2>
+          {/* Header con pestañas y botón volver */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '20px',
+            gap: '15px'
+          }}>
+            {/* Pestañas a la izquierda */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                onClick={() => {
+                  setActiveShopTab('shop');
+                  setShowSkinSelector(false);
+                }}
+                style={{
+                  background: activeShopTab === 'shop' ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
+                  border: '2px solid #ff00ff',
+                  color: '#ff00ff',
+                  padding: '8px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  transition: 'all 0.3s',
+                  fontWeight: activeShopTab === 'shop' ? 'bold' : 'normal',
+                  boxShadow: activeShopTab === 'shop' ? '0 0 15px rgba(255, 0, 255, 0.5)' : 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeShopTab !== 'shop') {
+                    e.target.style.background = 'rgba(255, 0, 255, 0.1)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeShopTab !== 'shop') {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                TIENDA
+              </button>
+              <button
+                onClick={() => {
+                  setActiveShopTab('skins');
+                  setShowSkinSelector(true);
+                }}
+                style={{
+                  background: activeShopTab === 'skins' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
+                  border: '2px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '8px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  transition: 'all 0.3s',
+                  fontWeight: activeShopTab === 'skins' ? 'bold' : 'normal',
+                  boxShadow: activeShopTab === 'skins' ? '0 0 15px rgba(255, 215, 0, 0.5)' : 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeShopTab !== 'skins') {
+                    e.target.style.background = 'rgba(255, 215, 0, 0.1)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeShopTab !== 'skins') {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                🎨 SKINS
+              </button>
+            </div>
+            
+            {/* Botón VOLVER a la derecha */}
             <button
               onClick={() => {
                 setGameState('menu');
-                setShowSkinSelector(true);
+                setShowSkinSelector(false);
+                setActiveShopTab('shop');
               }}
               style={{
                 background: 'transparent',
-                border: '2px solid #FFD700',
-                color: '#FFD700',
+                border: '2px solid #33ffff',
+                color: '#33ffff',
                 padding: '8px 16px',
                 fontSize: '14px',
                 cursor: 'pointer',
                 borderRadius: '5px',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                flex: '0 0 auto'
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 215, 0, 0.2)';
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
               }}
               onMouseLeave={(e) => {
                 e.target.style.background = 'transparent';
               }}
             >
-              🎨 SKINS
+              VOLVER
             </button>
           </div>
-          <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
-            XP Total: {totalXP} | ⭐ Total: {totalStars}
-          </p>
+          
+          {/* Contenido según la pestaña activa */}
+          {activeShopTab === 'shop' && (
+            <>
+              <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
+                TIENDA
+              </h2>
+              <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
+                XP Total: {totalXP} | ⭐ Total: {totalStars}
+              </p>
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
             {/* Escudo */}
@@ -6682,78 +6762,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               );
             })()}
           </div>
-        </div>
-      )}
-
-      {showSkinSelector && (
-        <div style={{ 
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.95)',
-          zIndex: 2000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px',
-          overflowY: 'auto'
-        }}>
-          <div style={{ 
-            background: 'rgba(0, 0, 0, 0.95)',
-            border: '3px solid #FFD700',
-            borderRadius: '15px',
-            padding: '30px',
-            maxWidth: '1200px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 0 40px rgba(255, 215, 0, 0.5)',
-            position: 'relative'
-          }}>
-            <button
-              onClick={() => setShowSkinSelector(false)}
-              style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'transparent',
-                border: '2px solid #33ffff',
-                color: '#33ffff',
-                padding: '8px 16px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              CERRAR
-            </button>
-            
-            <h2 style={{ 
-              color: '#FFD700', 
-              textShadow: '0 0 20px #FFD700', 
-              textAlign: 'center', 
-              fontSize: '28px',
-              marginBottom: '10px'
-            }}>
-              🎨 TIENDA DE SKINS
-            </h2>
-            <p style={{ 
-              fontSize: '16px', 
-              marginBottom: '30px', 
-              textAlign: 'center',
-              color: '#aaa'
-            }}>
-              XP Total: {totalXP} | ⭐ Total: {totalStars}
-            </p>
+            </>
+          )}
+          
+          {/* Contenido de SKINS */}
+          {activeShopTab === 'skins' && (
+            <>
+              <h2 style={{ 
+                color: '#FFD700', 
+                textShadow: '0 0 20px #FFD700', 
+                textAlign: 'center', 
+                fontSize: '24px',
+                marginBottom: '15px'
+              }}>
+                🎨 TIENDA DE SKINS
+              </h2>
+              <p style={{ 
+                fontSize: '16px', 
+                marginBottom: '20px', 
+                textAlign: 'center',
+                color: '#aaa'
+              }}>
+                XP Total: {totalXP} | ⭐ Total: {totalStars}
+              </p>
             
             <div style={{ 
               display: 'grid', 
@@ -6918,7 +6949,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 );
               })}
             </div>
-          </div>
+            </>
+          )}
         </div>
       )}
 
