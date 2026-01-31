@@ -196,6 +196,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const [headLevel, setHeadLevel] = useState(1); // 1 = normal, 2 = double, 3 = triple
   const [healthLevel, setHealthLevel] = useState(0); // 0-10: puntos de vida (0=2, 1=4, 2=6... 10=22)
   const [shopOpen, setShopOpen] = useState(false);
+  const [showFloatingShop, setShowFloatingShop] = useState(null); // null, 'shop', o 'skins' - tienda flotante durante partida
   const [loading, setLoading] = useState(true);
   const [shopConfigs, setShopConfigs] = useState(null); // Configuraciones de la tienda desde la DB
   const [leaderboard, setLeaderboard] = useState([]); // Leaderboard data por XP
@@ -214,11 +215,30 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const [timeLeft, setTimeLeft] = useState(null); // Tiempo restante del baneo
   
   // Definición de skins disponibles (debe estar antes de las funciones que lo usan)
+  // Categorías: COMÚN, RARO, ÉPICO, MÍTICO, LEGENDARIO, FARMING AURA
+  // Se desbloquean por rebirths:
+  //   - rebirthCount 0: COMÚN y RARO
+  //   - rebirthCount 1: ÉPICO
+  //   - rebirthCount 2: MÍTICO
+  //   - rebirthCount 3: LEGENDARIO
+  //   - rebirthCount 4: FARMING AURA
+  const CATEGORY_REBIRTH_REQUIREMENTS = {
+    common: 0,
+    rare: 0,
+    epic: 1,
+    mythic: 2,
+    legendary: 3,
+    farming_aura: 4
+  };
+  
   const SKINS = {
+    // ========== COMÚN (gratis o muy barato) ==========
     rainbow: {
       name: 'Arcoíris',
       description: 'El clásico degradado multicolor',
-      price: 0,
+      xpPrice: 0,
+      starsPrice: 0,
+      category: 'common',
       colors: [
         { r: 0, g: 255, b: 0 },      // Verde brillante
         { r: 128, g: 255, b: 0 },    // Verde-amarillo
@@ -229,10 +249,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 255, g: 0, b: 255 }     // Rosa/Magenta
       ]
     },
+    // ========== COMÚN (solo XP, barato) ==========
     neon_blue: {
       name: 'Neón Azul',
       description: 'Brillo cibernético azul',
-      price: 50,
+      xpPrice: 200,
+      starsPrice: 0,
+      category: 'common',
       colors: [
         { r: 0, g: 255, b: 255 },    // Cyan
         { r: 0, g: 200, b: 255 },
@@ -246,7 +269,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     fire: {
       name: 'Fuego',
       description: 'Llamas ardientes',
-      price: 75,
+      xpPrice: 300,
+      starsPrice: 0,
+      category: 'common',
       colors: [
         { r: 255, g: 255, b: 100 },  // Amarillo claro
         { r: 255, g: 230, b: 0 },    // Amarillo
@@ -260,7 +285,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     ice: {
       name: 'Hielo',
       description: 'Frío glacial',
-      price: 75,
+      xpPrice: 300,
+      starsPrice: 0,
+      category: 'common',
       colors: [
         { r: 255, g: 255, b: 255 },  // Blanco
         { r: 200, g: 240, b: 255 },
@@ -271,10 +298,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 0, g: 100, b: 200 }     // Azul hielo
       ]
     },
+    // ========== RARO (solo XP, moderado) ==========
     toxic: {
       name: 'Tóxico',
       description: 'Veneno radiactivo',
-      price: 100,
+      xpPrice: 400,
+      starsPrice: 0,
+      category: 'rare',
       colors: [
         { r: 150, g: 255, b: 0 },    // Verde lima
         { r: 100, g: 255, b: 50 },
@@ -288,7 +318,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     galaxy: {
       name: 'Galaxia',
       description: 'Colores del cosmos',
-      price: 150,
+      xpPrice: 500,
+      starsPrice: 0,
+      category: 'rare',
       colors: [
         { r: 255, g: 100, b: 255 },  // Rosa
         { r: 200, g: 50, b: 255 },   // Púrpura claro
@@ -302,7 +334,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gold: {
       name: 'Oro',
       description: 'Lujo dorado',
-      price: 200,
+      xpPrice: 600,
+      starsPrice: 0,
+      category: 'rare',
       colors: [
         { r: 255, g: 255, b: 150 },  // Dorado claro
         { r: 255, g: 230, b: 100 },
@@ -316,7 +350,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     shadow: {
       name: 'Sombra',
       description: 'Oscuridad pura',
-      price: 250,
+      xpPrice: 700,
+      starsPrice: 0,
+      category: 'rare',
       colors: [
         { r: 80, g: 80, b: 100 },    // Gris azulado
         { r: 60, g: 60, b: 80 },
@@ -330,7 +366,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     unicorn: {
       name: 'Unicornio',
       description: 'Mágico y brillante',
-      price: 300,
+      xpPrice: 800,
+      starsPrice: 0,
+      category: 'rare',
       colors: [
         { r: 255, g: 182, b: 193 },  // Rosa pastel
         { r: 255, g: 218, b: 185 },  // Melocotón
@@ -341,10 +379,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 255, g: 200, b: 255 }   // Rosa lavanda
       ]
     },
+    // ========== ÉPICO (XP + estrellas) ==========
     matrix: {
       name: 'Matrix',
       description: 'Código verde digital',
-      price: 500,
+      xpPrice: 1000,
+      starsPrice: 25,
+      category: 'epic',
       colors: [
         { r: 0, g: 255, b: 0 },      // Verde brillante
         { r: 0, g: 230, b: 0 },
@@ -355,184 +396,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 0, g: 80, b: 0 }        // Verde oscuro
       ]
     },
-    spiderman: {
-      name: 'Spider-Man',
-      description: '¡Dispara telarañas! 🕷️',
-      price: 750,
-      special: 'web', // Efecto especial: telarañas en vez de balas
-      colors: [
-        { r: 255, g: 0, b: 0 },      // Rojo Spider-Man
-        { r: 220, g: 0, b: 20 },
-        { r: 180, g: 0, b: 40 },
-        { r: 0, g: 50, b: 150 },     // Azul Spider-Man
-        { r: 0, g: 30, b: 120 },
-        { r: 0, g: 20, b: 100 },
-        { r: 0, g: 10, b: 80 }       // Azul oscuro
-      ]
-    },
-    venom: {
-      name: 'Venom',
-      description: 'Simbionte oscuro 🖤',
-      price: 800,
-      special: 'venom', // Efecto especial: tentáculos negros
-      colors: [
-        { r: 30, g: 30, b: 30 },     // Negro
-        { r: 20, g: 20, b: 25 },
-        { r: 15, g: 15, b: 20 },
-        { r: 10, g: 10, b: 15 },
-        { r: 5, g: 5, b: 10 },
-        { r: 255, g: 255, b: 255 },  // Detalles blancos (ojos/dientes)
-        { r: 200, g: 200, b: 200 }
-      ]
-    },
-    captain_america: {
-      name: 'Capitán América',
-      description: '¡Lanza el escudo! 🛡️',
-      price: 750,
-      special: 'shield', // Efecto especial: escudo como proyectil
-      mask: 'captain', // Máscara especial
-      colors: [
-        { r: 0, g: 80, b: 180 },     // Azul Capitán
-        { r: 0, g: 60, b: 150 },
-        { r: 255, g: 255, b: 255 },  // Blanco
-        { r: 220, g: 220, b: 220 },
-        { r: 180, g: 0, b: 0 },      // Rojo
-        { r: 150, g: 0, b: 0 },
-        { r: 0, g: 40, b: 120 }      // Azul oscuro
-      ]
-    },
-    thor: {
-      name: 'Thor',
-      description: '¡El poder del trueno! ⚡',
-      price: 850,
-      special: 'hammer', // Efecto especial: Mjolnir con rayos
-      mask: 'thor', // Casco vikingo
-      colors: [
-        { r: 200, g: 200, b: 220 },  // Plateado/gris claro
-        { r: 150, g: 150, b: 180 },
-        { r: 100, g: 100, b: 140 },
-        { r: 180, g: 0, b: 0 },      // Capa roja
-        { r: 150, g: 0, b: 0 },
-        { r: 50, g: 50, b: 80 },
-        { r: 30, g: 30, b: 60 }      // Azul oscuro
-      ]
-    },
-    hulk: {
-      name: 'Hulk',
-      description: '¡HULK APLASTA! 💚',
-      price: 800,
-      special: 'fist', // Efecto especial: puños verdes
-      mask: 'hulk', // Pelo negro despeinado
-      colors: [
-        { r: 100, g: 200, b: 50 },   // Verde claro Hulk
-        { r: 80, g: 180, b: 40 },
-        { r: 60, g: 160, b: 30 },
-        { r: 50, g: 140, b: 25 },
-        { r: 40, g: 120, b: 20 },
-        { r: 30, g: 100, b: 15 },
-        { r: 20, g: 80, b: 10 }      // Verde oscuro
-      ]
-    },
-    harry_potter: {
-      name: 'Harry Potter',
-      description: '¡Expelliarmus! ⚡🪄',
-      price: 900,
-      special: 'spell', // Efecto especial: hechizos azul/blanco
-      mask: 'harry', // Pelo, anteojos, capa y bufanda
-      colors: [
-        { r: 116, g: 0, b: 1 },      // Rojo Gryffindor
-        { r: 148, g: 107, b: 45 },   // Dorado
-        { r: 116, g: 0, b: 1 },      // Rojo
-        { r: 148, g: 107, b: 45 },   // Dorado
-        { r: 30, g: 30, b: 30 },     // Negro (capa)
-        { r: 20, g: 20, b: 20 },
-        { r: 10, g: 10, b: 10 }
-      ]
-    },
-    stormtrooper: {
-      name: 'Stormtrooper',
-      description: '¡Por el Imperio! 🤖',
-      price: 800,
-      special: 'red_blaster', // Rayos láser rojos
-      mask: 'stormtrooper',
-      colors: [
-        { r: 255, g: 255, b: 255 },  // Blanco
-        { r: 240, g: 240, b: 240 },
-        { r: 220, g: 220, b: 220 },
-        { r: 200, g: 200, b: 200 },
-        { r: 30, g: 30, b: 30 },     // Negro (detalles)
-        { r: 20, g: 20, b: 20 },
-        { r: 10, g: 10, b: 10 }
-      ]
-    },
-    darth_vader: {
-      name: 'Darth Vader',
-      description: '¡Yo soy tu padre! ⚫',
-      price: 950,
-      special: 'sith_laser', // Rayos láser rojos
-      mask: 'vader',
-      colors: [
-        { r: 20, g: 20, b: 20 },     // Negro
-        { r: 15, g: 15, b: 15 },
-        { r: 10, g: 10, b: 10 },
-        { r: 5, g: 5, b: 5 },
-        { r: 180, g: 0, b: 0 },      // Rojo (sable)
-        { r: 150, g: 0, b: 0 },
-        { r: 120, g: 0, b: 0 }
-      ]
-    },
-    homer_simpson: {
-      name: 'Homero Simpson',
-      description: '¡Mmm... rosquillas! 🍩',
-      price: 850,
-      special: 'donut', // Dispara rosquillas
-      mask: 'homer',
-      colors: [
-        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
-        { r: 255, g: 255, b: 255 },  // Blanco (chomba)
-        { r: 250, g: 250, b: 250 },  // Blanco
-        { r: 245, g: 245, b: 245 },  // Blanco
-        { r: 70, g: 130, b: 180 },   // Azul (pantalón)
-        { r: 65, g: 120, b: 170 },   // Azul
-        { r: 60, g: 110, b: 160 }    // Azul oscuro
-      ]
-    },
-    bart_simpson: {
-      name: 'Bart Simpson',
-      description: '¡Lanza rocas! 🪨',
-      price: 800,
-      special: 'rock', // Dispara rocas
-      mask: 'bart',
-      colors: [
-        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
-        { r: 255, g: 140, b: 0 },    // Naranja (remera)
-        { r: 255, g: 130, b: 0 },    // Naranja
-        { r: 250, g: 120, b: 0 },    // Naranja
-        { r: 70, g: 130, b: 180 },   // Azul (short)
-        { r: 65, g: 120, b: 170 },   // Azul
-        { r: 60, g: 110, b: 160 }    // Azul
-      ]
-    },
-    lisa_simpson: {
-      name: 'Lisa Simpson',
-      description: '¡El conocimiento es poder! 📚',
-      price: 800,
-      special: 'book', // Dispara libros
-      mask: 'lisa',
-      colors: [
-        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
-        { r: 255, g: 100, b: 100 },  // Rojo (vestido)
-        { r: 250, g: 90, b: 90 },    // Rojo
-        { r: 245, g: 80, b: 80 },    // Rojo
-        { r: 240, g: 70, b: 70 },    // Rojo
-        { r: 235, g: 60, b: 60 },    // Rojo
-        { r: 230, g: 50, b: 50 }     // Rojo oscuro
-      ]
-    },
     maggie_simpson: {
       name: 'Maggie Simpson',
       description: '¡Chup chup! 🍼',
-      price: 750,
+      xpPrice: 1200,
+      starsPrice: 30,
+      category: 'epic',
       special: 'pacifier', // Dispara chupetes
       mask: 'maggie',
       colors: [
@@ -545,42 +414,48 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 50, g: 130, b: 230 }    // Celeste
       ]
     },
-    minion: {
-      name: 'Minion',
-      description: '¡Banana! 🍌',
-      price: 800,
-      special: 'banana', // Dispara bananas
-      mask: 'minion',
+    lisa_simpson: {
+      name: 'Lisa Simpson',
+      description: '¡El conocimiento es poder! 📚',
+      xpPrice: 1200,
+      starsPrice: 30,
+      category: 'epic',
+      special: 'book', // Dispara libros
+      mask: 'lisa',
       colors: [
-        { r: 255, g: 217, b: 15 },   // Amarillo Minion
-        { r: 255, g: 210, b: 10 },   // Amarillo
-        { r: 250, g: 200, b: 5 },    // Amarillo
-        { r: 70, g: 130, b: 180 },   // Azul (overol)
-        { r: 65, g: 120, b: 170 },   // Azul
-        { r: 60, g: 110, b: 160 },   // Azul
-        { r: 55, g: 100, b: 150 }    // Azul oscuro
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 100, b: 100 },  // Rojo (vestido)
+        { r: 250, g: 90, b: 90 },    // Rojo
+        { r: 245, g: 80, b: 80 },    // Rojo
+        { r: 240, g: 70, b: 70 },    // Rojo
+        { r: 235, g: 60, b: 60 },    // Rojo
+        { r: 230, g: 50, b: 50 }     // Rojo oscuro
       ]
     },
-    iron_man: {
-      name: 'Iron Man',
-      description: '¡Yo soy Iron Man! 🤖',
-      price: 900,
-      special: 'repulsor', // Rayos repulsores
-      mask: 'ironman',
+    bart_simpson: {
+      name: 'Bart Simpson',
+      description: '¡Lanza rocas! 🪨',
+      xpPrice: 1500,
+      starsPrice: 35,
+      category: 'epic',
+      special: 'rock', // Dispara rocas
+      mask: 'bart',
       colors: [
-        { r: 180, g: 0, b: 0 },      // Rojo metálico
-        { r: 160, g: 0, b: 0 },
-        { r: 255, g: 200, b: 50 },   // Dorado
-        { r: 240, g: 180, b: 40 },
-        { r: 180, g: 0, b: 0 },      // Rojo
-        { r: 255, g: 200, b: 50 },   // Dorado
-        { r: 160, g: 0, b: 0 }       // Rojo oscuro
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 140, b: 0 },    // Naranja (remera)
+        { r: 255, g: 130, b: 0 },    // Naranja
+        { r: 250, g: 120, b: 0 },    // Naranja
+        { r: 70, g: 130, b: 180 },   // Azul (short)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 }    // Azul
       ]
     },
     marge_simpson: {
       name: 'Marge Simpson',
       description: '¡Lanza chuletas! 🥩',
-      price: 850,
+      xpPrice: 1500,
+      starsPrice: 35,
+      category: 'epic',
       special: 'pork_chop', // Dispara chuletas
       mask: 'marge',
       colors: [
@@ -593,10 +468,156 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 245, g: 245, b: 245 }   // Blanco
       ]
     },
+    // ========== MÍTICO (XP alto + más estrellas) ==========
+    minion: {
+      name: 'Minion',
+      description: '¡Banana! 🍌',
+      xpPrice: 1500,
+      starsPrice: 40,
+      category: 'mythic',
+      special: 'banana', // Dispara bananas
+      mask: 'minion',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Minion
+        { r: 255, g: 210, b: 10 },   // Amarillo
+        { r: 250, g: 200, b: 5 },    // Amarillo
+        { r: 70, g: 130, b: 180 },   // Azul (overol)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 },   // Azul
+        { r: 55, g: 100, b: 150 }    // Azul oscuro
+      ]
+    },
+    venom: {
+      name: 'Venom',
+      description: 'Simbionte oscuro 🖤',
+      xpPrice: 1800,
+      starsPrice: 40,
+      category: 'mythic',
+      special: 'venom', // Efecto especial: tentáculos negros
+      colors: [
+        { r: 30, g: 30, b: 30 },     // Negro
+        { r: 20, g: 20, b: 25 },
+        { r: 15, g: 15, b: 20 },
+        { r: 10, g: 10, b: 15 },
+        { r: 5, g: 5, b: 10 },
+        { r: 255, g: 255, b: 255 },  // Detalles blancos (ojos/dientes)
+        { r: 200, g: 200, b: 200 }
+      ]
+    },
+    stormtrooper: {
+      name: 'Stormtrooper',
+      description: '¡Por el Imperio! 🤖',
+      xpPrice: 1800,
+      starsPrice: 45,
+      category: 'mythic',
+      special: 'red_blaster', // Rayos láser rojos
+      mask: 'stormtrooper',
+      colors: [
+        { r: 255, g: 255, b: 255 },  // Blanco
+        { r: 240, g: 240, b: 240 },
+        { r: 220, g: 220, b: 220 },
+        { r: 200, g: 200, b: 200 },
+        { r: 30, g: 30, b: 30 },     // Negro (detalles)
+        { r: 20, g: 20, b: 20 },
+        { r: 10, g: 10, b: 10 }
+      ]
+    },
+    hulk: {
+      name: 'Hulk',
+      description: '¡HULK APLASTA! 💚',
+      xpPrice: 2000,
+      starsPrice: 45,
+      category: 'mythic',
+      special: 'fist', // Efecto especial: puños verdes
+      mask: 'hulk', // Pelo negro despeinado
+      colors: [
+        { r: 100, g: 200, b: 50 },   // Verde claro Hulk
+        { r: 80, g: 180, b: 40 },
+        { r: 60, g: 160, b: 30 },
+        { r: 50, g: 140, b: 25 },
+        { r: 40, g: 120, b: 20 },
+        { r: 30, g: 100, b: 15 },
+        { r: 20, g: 80, b: 10 }      // Verde oscuro
+      ]
+    },
+    captain_america: {
+      name: 'Capitán América',
+      description: '¡Lanza el escudo! 🛡️',
+      xpPrice: 2000,
+      starsPrice: 50,
+      category: 'mythic',
+      special: 'shield', // Efecto especial: escudo como proyectil
+      mask: 'captain', // Máscara especial
+      colors: [
+        { r: 0, g: 80, b: 180 },     // Azul Capitán
+        { r: 0, g: 60, b: 150 },
+        { r: 255, g: 255, b: 255 },  // Blanco
+        { r: 220, g: 220, b: 220 },
+        { r: 180, g: 0, b: 0 },      // Rojo
+        { r: 150, g: 0, b: 0 },
+        { r: 0, g: 40, b: 120 }      // Azul oscuro
+      ]
+    },
+    // ========== LEGENDARIO (muy caro, para veteranos) ==========
+    thor: {
+      name: 'Thor',
+      description: '¡El poder del trueno! ⚡',
+      xpPrice: 2500,
+      starsPrice: 60,
+      category: 'legendary',
+      special: 'hammer', // Efecto especial: Mjolnir con rayos
+      mask: 'thor', // Casco vikingo
+      colors: [
+        { r: 200, g: 200, b: 220 },  // Plateado/gris claro
+        { r: 150, g: 150, b: 180 },
+        { r: 100, g: 100, b: 140 },
+        { r: 180, g: 0, b: 0 },      // Capa roja
+        { r: 150, g: 0, b: 0 },
+        { r: 50, g: 50, b: 80 },
+        { r: 30, g: 30, b: 60 }      // Azul oscuro
+      ]
+    },
+    spiderman: {
+      name: 'Spider-Man',
+      description: '¡Dispara telarañas! 🕷️',
+      xpPrice: 7500,
+      starsPrice: 200,
+      category: 'farming_aura',
+      special: 'web', // Efecto especial: telarañas en vez de balas
+      colors: [
+        { r: 255, g: 0, b: 0 },      // Rojo Spider-Man
+        { r: 220, g: 0, b: 20 },
+        { r: 180, g: 0, b: 40 },
+        { r: 0, g: 50, b: 150 },     // Azul Spider-Man
+        { r: 0, g: 30, b: 120 },
+        { r: 0, g: 20, b: 100 },
+        { r: 0, g: 10, b: 80 }       // Azul oscuro
+      ]
+    },
+    homer_simpson: {
+      name: 'Homero Simpson',
+      description: '¡Mmm... rosquillas! 🍩',
+      xpPrice: 3000,
+      starsPrice: 70,
+      category: 'legendary',
+      special: 'donut', // Dispara rosquillas
+      mask: 'homer',
+      colors: [
+        { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
+        { r: 255, g: 255, b: 255 },  // Blanco (chomba)
+        { r: 250, g: 250, b: 250 },  // Blanco
+        { r: 245, g: 245, b: 245 },  // Blanco
+        { r: 70, g: 130, b: 180 },   // Azul (pantalón)
+        { r: 65, g: 120, b: 170 },   // Azul
+        { r: 60, g: 110, b: 160 }    // Azul oscuro
+      ]
+    },
     gandalf: {
       name: 'Gandalf',
       description: '¡Lanza hechizos blancos! ⚪✨',
-      price: 950,
+      xpPrice: 8000,
+      starsPrice: 250,
+      category: 'farming_aura',
       special: 'white_spell', // Hechizos blancos tipo balas
       mask: 'gandalf',
       colors: [
@@ -607,6 +628,60 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         { r: 255, g: 255, b: 255 },  // Blanco (barba)
         { r: 240, g: 240, b: 240 },  // Blanco
         { r: 220, g: 220, b: 220 }   // Blanco
+      ]
+    },
+    iron_man: {
+      name: 'Iron Man',
+      description: '¡Yo soy Iron Man! 🤖',
+      xpPrice: 4000,
+      starsPrice: 90,
+      category: 'legendary',
+      special: 'repulsor', // Rayos repulsores
+      mask: 'ironman',
+      colors: [
+        { r: 180, g: 0, b: 0 },      // Rojo metálico
+        { r: 160, g: 0, b: 0 },
+        { r: 255, g: 200, b: 50 },   // Dorado
+        { r: 240, g: 180, b: 40 },
+        { r: 180, g: 0, b: 0 },      // Rojo
+        { r: 255, g: 200, b: 50 },   // Dorado
+        { r: 160, g: 0, b: 0 }       // Rojo oscuro
+      ]
+    },
+    harry_potter: {
+      name: 'Harry Potter',
+      description: '¡Expelliarmus! ⚡🪄',
+      xpPrice: 4500,
+      starsPrice: 100,
+      category: 'legendary',
+      special: 'spell', // Efecto especial: hechizos azul/blanco
+      mask: 'harry', // Pelo, anteojos, capa y bufanda
+      colors: [
+        { r: 116, g: 0, b: 1 },      // Rojo Gryffindor
+        { r: 148, g: 107, b: 45 },   // Dorado
+        { r: 116, g: 0, b: 1 },      // Rojo
+        { r: 148, g: 107, b: 45 },   // Dorado
+        { r: 30, g: 30, b: 30 },     // Negro (capa)
+        { r: 20, g: 20, b: 20 },
+        { r: 10, g: 10, b: 10 }
+      ]
+    },
+    darth_vader: {
+      name: 'Darth Vader',
+      description: '¡Yo soy tu padre! ⚫',
+      xpPrice: 5000,
+      starsPrice: 120,
+      category: 'legendary',
+      special: 'sith_laser', // Rayos láser rojos
+      mask: 'vader',
+      colors: [
+        { r: 20, g: 20, b: 20 },     // Negro
+        { r: 15, g: 15, b: 15 },
+        { r: 10, g: 10, b: 10 },
+        { r: 5, g: 5, b: 5 },
+        { r: 180, g: 0, b: 0 },      // Rojo (sable)
+        { r: 150, g: 0, b: 0 },
+        { r: 120, g: 0, b: 0 }
       ]
     }
   };
@@ -1393,64 +1468,77 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   // Create food function - moved outside useEffect to be accessible everywhere
     const createFood = (forceColor = null, forceValue = null) => {
       const game = gameRef.current;
-      // Rainbow colors: violet (most XP) -> red (least XP)
+      
+      // 8 colores con valores base de XP (valor base se multiplica por tamaño)
+      // Tabla de valores: base * 2^(talle-1)
       const colorTiers = [
-        { color: '#9400D3', hue: 280, xp: 7, name: 'violet' },    // Violet - 7 XP (smallest)
-        { color: '#4B0082', hue: 275, xp: 6, name: 'indigo' },     // Indigo - 6 XP  
-        { color: '#0000FF', hue: 240, xp: 5, name: 'blue' },       // Blue - 5 XP
-        { color: '#00FF00', hue: 120, xp: 4, name: 'green' },      // Green - 4 XP
-        { color: '#FFFF00', hue: 60, xp: 3, name: 'yellow' },      // Yellow - 3 XP
-        { color: '#FFA500', hue: 39, xp: 2, name: 'orange' },      // Orange - 2 XP
-        { color: '#FF0000', hue: 0, xp: 1, name: 'red' }           // Red - 1 XP (smallest)
+        { color: '#FF0000', hue: 0, baseXp: 1, name: 'red' },           // Rojo - base 1
+        { color: '#FFA500', hue: 39, baseXp: 2, name: 'orange' },       // Naranja - base 2
+        { color: '#FFFF00', hue: 60, baseXp: 3, name: 'yellow' },       // Amarillo - base 3
+        { color: '#90EE90', hue: 120, baseXp: 4, name: 'lightgreen' },  // Verde claro - base 4
+        { color: '#228B22', hue: 140, baseXp: 5, name: 'darkgreen' },   // Verde oscuro - base 5
+        { color: '#00BFFF', hue: 195, baseXp: 6, name: 'cyan' },        // Celeste - base 6
+        { color: '#0000FF', hue: 240, baseXp: 7, name: 'blue' },        // Azul - base 7
+        { color: '#9400D3', hue: 280, baseXp: 8, name: 'violet' }       // Violeta - base 8
       ];
       
       let tier;
-      if (forceColor === 'yellow' || forceColor === 'orange') {
+      if (forceColor) {
         tier = colorTiers.find(t => t.name === forceColor);
+        if (!tier) tier = colorTiers[Math.floor(Math.random() * colorTiers.length)];
       } else {
-        // Random weighted selection (lower XP more common)
+        // Selección ponderada de color (colores de bajo XP más comunes)
+        // Proporción: rojo más común, violeta más raro (5:1)
         const rand = Math.random();
-        if (rand < 0.05) tier = colorTiers[0]; // 5% violet
-        else if (rand < 0.10) tier = colorTiers[1]; // 5% indigo
-        else if (rand < 0.20) tier = colorTiers[2]; // 10% blue
-        else if (rand < 0.35) tier = colorTiers[3]; // 15% green
-        else if (rand < 0.55) tier = colorTiers[4]; // 20% yellow
-        else if (rand < 0.75) tier = colorTiers[5]; // 20% orange
-        else tier = colorTiers[6]; // 25% red
+        if (rand < 0.25) tier = colorTiers[0];      // 25% rojo
+        else if (rand < 0.45) tier = colorTiers[1]; // 20% naranja
+        else if (rand < 0.60) tier = colorTiers[2]; // 15% amarillo
+        else if (rand < 0.73) tier = colorTiers[3]; // 13% verde claro
+        else if (rand < 0.83) tier = colorTiers[4]; // 10% verde oscuro
+        else if (rand < 0.91) tier = colorTiers[5]; // 8% celeste
+        else if (rand < 0.97) tier = colorTiers[6]; // 6% azul
+        else tier = colorTiers[7];                   // 3% violeta
       }
       
-      // 5 sizes: 1 (smallest) to 5 (largest)
-      // Valores históricos de XP: 2, 5, 10, 15 (basado solo en tamaño, no en color)
-      const sizeIndex = Math.floor(Math.random() * 5); // 0-4
-      const sizeMultiplier = 0.4 + (sizeIndex * 0.12); // 0.4, 0.52, 0.64, 0.76, 0.88 (más pequeños)
+      // 5 tamaños (talle 1-5) con distribución ponderada
+      // Los tamaños grandes son más raros (proporción 5:4:3:2:1)
+      // Total: 15 partes -> talle1: 5/15, talle2: 4/15, talle3: 3/15, talle4: 2/15, talle5: 1/15
+      let sizeIndex; // 0-4 corresponde a talle 1-5
+      const sizeRand = Math.random();
+      if (sizeRand < 0.333) sizeIndex = 0;        // 33.3% talle 1 (más pequeño)
+      else if (sizeRand < 0.600) sizeIndex = 1;   // 26.7% talle 2
+      else if (sizeRand < 0.800) sizeIndex = 2;   // 20.0% talle 3
+      else if (sizeRand < 0.933) sizeIndex = 3;   // 13.3% talle 4
+      else sizeIndex = 4;                          // 6.7% talle 5 (más grande)
       
-      // Calculate XP based on size only (valores históricos: 2, 5, 10, 15)
-      // Mapear sizeIndex (0-4) a valores de XP históricos
-      let xpValue;
+      // Tamaño visual: talle 1 es pequeño, talle 5 es grande
+      const sizeMultiplier = 0.4 + (sizeIndex * 0.2); // 0.4, 0.6, 0.8, 1.0, 1.2
+      
+      // Calcular XP según tabla: base * 2^(talle-1)
+      // Talle 1: base*1, Talle 2: base*2, Talle 3: base*4, Talle 4: base*8, Talle 5: base*16
+      const sizeMultiplierXp = Math.pow(2, sizeIndex); // 1, 2, 4, 8, 16
+      let xpValue = tier.baseXp * sizeMultiplierXp; // Siempre calcular basado en color y tamaño
+      
+      // DEBUG: Si se pasó forceValue, mostrar advertencia (ya no lo usamos)
       if (forceValue !== null) {
-        // Limitar el valor forzado a valores históricos (2, 5, 10, 15)
-        // Redondear al valor histórico más cercano
-        if (forceValue <= 3) xpValue = 2;
-        else if (forceValue <= 7) xpValue = 5;
-        else if (forceValue <= 12) xpValue = 10;
-        else xpValue = 15;
-      } else {
-        // Valores históricos basados solo en tamaño (no en color)
-        if (sizeIndex === 0) xpValue = 2;      // Pequeño = 2 XP
-        else if (sizeIndex === 1) xpValue = 5;  // Mediano = 5 XP
-        else if (sizeIndex === 2) xpValue = 10; // Grande = 10 XP
-        else xpValue = 15;                       // Muy grande = 15 XP (sizeIndex 3 o 4)
+        console.warn(`⚠️ forceValue=${forceValue} ignorado, usando cálculo: ${tier.baseXp} * ${sizeMultiplierXp} = ${xpValue}`);
       }
       
-      return {
+      const newFood = {
         x: Math.random() * (game.worldWidth - 40) + 20,
         y: Math.random() * (game.worldHeight - 40) + 20,
         value: xpValue,
         color: tier.color,
         hue: tier.hue,
         size: FOOD_SIZE * sizeMultiplier,
-        sizeIndex: sizeIndex // Store size index for reference
+        sizeIndex: sizeIndex, // 0-4 corresponde a talle 1-5
+        colorName: tier.name  // Para referencia
       };
+      
+      // DEBUG: Ver qué valor se asigna al crear la comida
+      console.log(`🆕 Creando comida: color=${tier.name}, talle=${sizeIndex + 1}, baseXp=${tier.baseXp}, multiplier=${Math.pow(2, sizeIndex)}, value=${xpValue}`);
+      
+      return newFood;
     };
 
   // Helper function to create enemies - must be outside useEffect to be accessible
@@ -1966,8 +2054,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       // Don't handle keys if admin panel is open
       if (showAdminPanel) return;
       
-      if (e.key.toLowerCase() === 'j') {
-        setShopOpen(prev => !prev);
+      // Escape cierra la tienda flotante
+      if (e.key === 'Escape' && showFloatingShop) {
+        setShowFloatingShop(null);
+        return;
+      }
+      
+      // J abre/cierra la tienda flotante durante la partida (solo desktop)
+      if (e.key.toLowerCase() === 'j' && gameState === 'playing' && !isMobile) {
+        setShowFloatingShop(prev => prev ? null : 'shop');
+        return;
       } else if (e.key === ' ' && cannonLevel > 0) {
         e.preventDefault();
         if (!isShootingRef.current && shootBulletRef.current) {
@@ -2892,7 +2988,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     };
 
     const update = (deltaTime) => {
-      if (gameState !== 'playing' || shopOpen) return; // Pause when shop is open
+      if (gameState !== 'playing' || shopOpen || showFloatingShop) return; // Pause when shop is open
 
       const game = gameRef.current;
       
@@ -3259,6 +3355,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           // Nivel 1: 1.0x (base), Nivel 2: 1.1x (+10%), Nivel 3: 1.2x (+20%)
           const xpMultiplier = 1 + (headLevel - 1) * 0.1;
           const xpGain = Math.floor(food.value * xpMultiplier);
+          
+          // DEBUG: Ver qué valor tiene cada comida
+          console.log(`🍎 Comida: color=${food.colorName || food.color}, talle=${food.sizeIndex + 1}, value=${food.value}, xpGain=${xpGain}`);
+          
           game.currentXP += xpGain;
           game.sessionXP += xpGain;
           setCurrentLevelXP(prev => prev + xpGain);
@@ -4621,8 +4721,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       initGame();
     }
 
-    // Start game loop
-    if (gameState === 'playing' && !shopOpen) {
+    // Start game loop - pausar si la tienda flotante está abierta
+    if (gameState === 'playing' && !shopOpen && !showFloatingShop) {
       animationId = requestAnimationFrame(gameLoop);
     }
 
@@ -4664,7 +4764,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, selectedSkin, isImmune, isMobile]);
+  }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, showFloatingShop, selectedSkin, isImmune, isMobile]);
 
   const startGame = () => {
     // Resetear completamente el estado del juego antes de iniciar
@@ -4876,9 +4976,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       return;
     }
 
-    // Check if user has enough resources
-    if (totalXP >= skin.price) {
-      setTotalXP(prev => prev - skin.price);
+    // Check if category is unlocked by rebirth
+    const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+    if (rebirthCount < requiredRebirth) {
+      console.warn(`Skin "${skinKey}" requiere ${requiredRebirth} rebirth(s). Tienes ${rebirthCount}.`);
+      return;
+    }
+
+    // Check if user has enough resources (XP y estrellas)
+    const xpNeeded = skin.xpPrice || 0;
+    const starsNeeded = skin.starsPrice || 0;
+    
+    if (totalXP >= xpNeeded && totalStars >= starsNeeded) {
+      setTotalXP(prev => prev - xpNeeded);
+      setTotalStars(prev => prev - starsNeeded);
       setUnlockedSkins(prev => {
         const newUnlocked = [...prev, skinKey];
         // Guardar inmediatamente en localStorage
@@ -4935,6 +5046,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       const sessionXP = game.sessionXP || 0;
       const healthColor = (game.currentHealth / game.maxHealth) > 0.5 ? '#00ff88' : 
                           (game.currentHealth / game.maxHealth) > 0.25 ? '#ffaa00' : '#ff3333';
+      const iconSize = 16;
+      const iconTextSize = '11px';
       
       return (
         <div style={{
@@ -4967,6 +5080,204 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               ⚡ +{sessionXP} XP
             </span>
           </div>
+          
+          {/* Íconos de specs durante partida - solo desktop */}
+          {!isMobile && (
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              alignItems: 'center'
+            }}>
+              {/* Skin actual - abre skins */}
+              <div 
+                onClick={() => setShowFloatingShop('skins')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 215, 0, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 215, 0, 0.1)';
+                  e.currentTarget.style.borderColor = '#FFD700';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 215, 0, 0.3)';
+                }}
+                title="Abrir Skins"
+              >
+                <Palette size={iconSize} style={{ color: '#FFD700' }} />
+              </div>
+              
+              {/* Escudo */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(100, 149, 237, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(100, 149, 237, 0.1)';
+                  e.currentTarget.style.borderColor = '#6495ed';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(100, 149, 237, 0.3)';
+                }}
+                title="Escudo - Abrir Tienda"
+              >
+                <Shield size={iconSize} style={{ color: '#6495ed' }} />
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>{shieldLevel}</span>
+              </div>
+              
+              {/* Cabeza */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 0, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 0, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#ff00ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 0, 255, 0.3)';
+                }}
+                title="Cabeza - Abrir Tienda"
+              >
+                <Zap size={iconSize} style={{ color: '#ff00ff' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ff00ff' }}>{headLevel}</span>
+              </div>
+              
+              {/* Cañón */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 255, 0, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 0, 0.1)';
+                  e.currentTarget.style.borderColor = '#ffff00';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 0, 0.3)';
+                }}
+                title="Cañón - Abrir Tienda"
+              >
+                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>{cannonLevel}</span>
+              </div>
+              
+              {/* Imán */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 255, 136, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 255, 136, 0.1)';
+                  e.currentTarget.style.borderColor = '#00ff88';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 255, 136, 0.3)';
+                }}
+                title="Imán - Abrir Tienda"
+              >
+                <Magnet size={iconSize} style={{ color: '#00ff88' }} />
+                <span style={{ fontSize: iconTextSize, color: '#00ff88' }}>{magnetLevel}</span>
+              </div>
+              
+              {/* Velocidad */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 170, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 170, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#00aaff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 170, 255, 0.3)';
+                }}
+                title="Velocidad - Abrir Tienda"
+              >
+                <Gauge size={iconSize} style={{ color: '#00aaff' }} />
+                <span style={{ fontSize: iconTextSize, color: '#00aaff' }}>{speedLevel}</span>
+              </div>
+              
+              {/* Vida */}
+              <div 
+                onClick={() => setShowFloatingShop('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 100, 100, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 100, 100, 0.1)';
+                  e.currentTarget.style.borderColor = '#ff6464';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 100, 100, 0.3)';
+                }}
+                title="Vida - Abrir Tienda"
+              >
+                <Heart size={iconSize} style={{ color: '#ff6464' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ff6464' }}>{healthLevel}</span>
+              </div>
+            </div>
+          )}
+          
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
           {isAdmin && (
             <button
@@ -5648,6 +5959,297 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         }} />
       )}
       
+      {/* Tienda/Skins flotante durante partida - solo desktop */}
+      {showFloatingShop && gameState === 'playing' && !isMobile && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 2000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'rgba(10, 10, 30, 0.98)',
+            border: '3px solid #33ffff',
+            borderRadius: '15px',
+            padding: '20px',
+            maxWidth: '900px',
+            maxHeight: '80vh',
+            width: '100%',
+            overflowY: 'auto',
+            position: 'relative',
+            boxShadow: '0 0 50px rgba(51, 255, 255, 0.5)'
+          }}>
+            {/* Botón cerrar */}
+            <button
+              onClick={() => setShowFloatingShop(null)}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'transparent',
+                border: '2px solid #ff3366',
+                color: '#ff3366',
+                padding: '5px 15px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                zIndex: 10
+              }}
+            >
+              ✕ Cerrar
+            </button>
+            
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              <button
+                onClick={() => setShowFloatingShop('shop')}
+                style={{
+                  background: showFloatingShop === 'shop' ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
+                  border: '2px solid #ff00ff',
+                  color: '#ff00ff',
+                  padding: '8px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  fontWeight: showFloatingShop === 'shop' ? 'bold' : 'normal'
+                }}
+              >
+                🛒 TIENDA
+              </button>
+              <button
+                onClick={() => setShowFloatingShop('skins')}
+                style={{
+                  background: showFloatingShop === 'skins' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
+                  border: '2px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '8px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  fontWeight: showFloatingShop === 'skins' ? 'bold' : 'normal'
+                }}
+              >
+                🎨 SKINS
+              </button>
+            </div>
+            
+            {/* Recursos disponibles */}
+            <p style={{ textAlign: 'center', color: '#aaa', marginBottom: '15px' }}>
+              XP: <span style={{ color: '#00ff88' }}>{totalXP}</span> | ⭐: <span style={{ color: '#FFD700' }}>{totalStars}</span>
+            </p>
+            
+            {/* Contenido TIENDA */}
+            {showFloatingShop === 'shop' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                {/* Escudo */}
+                {(() => {
+                  const next = getNextUpgrade('shield');
+                  const currentLevel = shieldLevel;
+                  return (
+                    <div style={{ border: '2px solid #6495ed', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.1)' : 'transparent' }}>
+                      <Shield size={28} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#6495ed', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>ESCUDO {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('shield', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #6495ed', color: '#6495ed', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+                
+                {/* Imán */}
+                {(() => {
+                  const next = getNextUpgrade('magnet');
+                  const currentLevel = magnetLevel;
+                  return (
+                    <div style={{ border: '2px solid #00ff88', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.1)' : 'transparent' }}>
+                      <Magnet size={28} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#00ff88', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>IMÁN {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('magnet', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00ff88', color: '#00ff88', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+                
+                {/* Cañón */}
+                {(() => {
+                  const next = getNextUpgrade('cannon');
+                  const currentLevel = cannonLevel;
+                  return (
+                    <div style={{ border: '2px solid #ffff00', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.1)' : 'transparent' }}>
+                      <Sparkles size={28} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#ffff00', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>CAÑÓN {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('cannon', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ffff00', color: '#ffff00', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+                
+                {/* Velocidad */}
+                {(() => {
+                  const next = getNextUpgrade('speed');
+                  const currentLevel = speedLevel;
+                  return (
+                    <div style={{ border: '2px solid #00aaff', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(0, 170, 255, 0.1)' : 'transparent' }}>
+                      <Gauge size={28} style={{ color: '#00aaff', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#00aaff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>VELOCIDAD {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('speed', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00aaff', color: '#00aaff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+                
+                {/* Vida */}
+                {(() => {
+                  const next = getNextUpgrade('health');
+                  const currentLevel = healthLevel;
+                  return (
+                    <div style={{ border: '2px solid #ff6464', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(255, 100, 100, 0.1)' : 'transparent' }}>
+                      <Heart size={28} style={{ color: '#ff6464', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#ff6464', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>VIDA {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('health', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff6464', color: '#ff6464', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+                
+                {/* Cabeza */}
+                {(() => {
+                  const next = getNextUpgrade('head');
+                  const currentLevel = headLevel;
+                  return (
+                    <div style={{ border: '2px solid #ff00ff', padding: '12px', borderRadius: '8px', background: currentLevel > 1 ? 'rgba(255, 0, 255, 0.1)' : 'transparent' }}>
+                      <Zap size={28} style={{ color: '#ff00ff', display: 'block', margin: '0 auto' }} />
+                      <h4 style={{ color: '#ff00ff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>CABEZA {currentLevel > 1 ? `Lv.${currentLevel}` : ''}</h4>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                          <button onClick={() => buyUpgrade('head', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff00ff', color: '#ff00ff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                        </>
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            
+            {/* Contenido SKINS */}
+            {showFloatingShop === 'skins' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
+                {Object.entries(SKINS)
+                  .sort(([, a], [, b]) => {
+                    const orderA = CATEGORY_REBIRTH_REQUIREMENTS[a.category] || 0;
+                    const orderB = CATEGORY_REBIRTH_REQUIREMENTS[b.category] || 0;
+                    return orderA - orderB;
+                  })
+                  .map(([key, skin]) => {
+                    const isUnlocked = unlockedSkins.includes(key);
+                    const isSelected = selectedSkin === key;
+                    const xpNeeded = skin.xpPrice || 0;
+                    const starsNeeded = skin.starsPrice || 0;
+                    const canAffordXP = totalXP >= xpNeeded;
+                    const canAffordStars = totalStars >= starsNeeded;
+                    const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+                    const isCategoryUnlocked = rebirthCount >= requiredRebirth;
+                    const canBuy = canAffordXP && canAffordStars && isCategoryUnlocked;
+                    
+                    const getCategoryColor = () => {
+                      if (skin.category === 'farming_aura') return '#FFD700';
+                      if (skin.category === 'legendary') return '#ff4444';
+                      if (skin.category === 'mythic') return '#ff00ff';
+                      if (skin.category === 'epic') return '#aa44ff';
+                      if (skin.category === 'rare') return '#00aaff';
+                      return '#00ff88';
+                    };
+                    
+                    return (
+                      <div key={key} style={{
+                        border: isSelected ? '2px solid #FFD700' : `1px solid ${getCategoryColor()}`,
+                        borderRadius: '8px',
+                        padding: '10px',
+                        background: isSelected ? 'rgba(255, 215, 0, 0.1)' : isUnlocked ? 'rgba(0, 255, 136, 0.05)' : 'rgba(0, 0, 0, 0.3)',
+                        opacity: isUnlocked || canBuy ? 1 : 0.5
+                      }}>
+                        <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', marginBottom: '6px' }}>
+                          {skin.colors.slice(0, 5).map((color, idx) => (
+                            <div key={idx} style={{ width: '14px', height: '14px', background: `rgb(${color.r}, ${color.g}, ${color.b})`, borderRadius: '50%' }} />
+                          ))}
+                        </div>
+                        <h4 style={{ color: isSelected ? '#FFD700' : '#fff', fontSize: '11px', textAlign: 'center', margin: '4px 0' }}>{skin.name}</h4>
+                        {!isCategoryUnlocked && !isUnlocked && (
+                          <p style={{ fontSize: '9px', color: '#ff6666', textAlign: 'center', margin: '2px 0' }}>🔒 {requiredRebirth} rebirth{requiredRebirth > 1 ? 's' : ''}</p>
+                        )}
+                        {isUnlocked ? (
+                          <button onClick={() => selectSkin(key)} disabled={isSelected} style={{ width: '100%', background: 'transparent', border: `1px solid ${isSelected ? '#FFD700' : '#00ff88'}`, color: isSelected ? '#FFD700' : '#00ff88', padding: '4px', fontSize: '10px', cursor: isSelected ? 'default' : 'pointer', borderRadius: '4px' }}>
+                            {isSelected ? '✓ ACTUAL' : 'USAR'}
+                          </button>
+                        ) : (
+                          <>
+                            <p style={{ fontSize: '9px', textAlign: 'center', margin: '2px 0', color: '#aaa' }}>
+                              {xpNeeded > 0 && <span style={{ color: canAffordXP ? '#00ff88' : '#ff4444' }}>{xpNeeded} XP</span>}
+                              {starsNeeded > 0 && <span style={{ color: canAffordStars ? '#FFD700' : '#ff4444' }}> ⭐{starsNeeded}</span>}
+                            </p>
+                            <button onClick={() => buySkin(key)} disabled={!canBuy} style={{ width: '100%', background: 'transparent', border: '1px solid #FFD700', color: '#FFD700', padding: '4px', fontSize: '10px', cursor: canBuy ? 'pointer' : 'not-allowed', borderRadius: '4px', opacity: canBuy ? 1 : 0.5 }}>COMPRAR</button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Header siempre visible */}
       <UserHeader />
       
@@ -5760,6 +6362,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 onClick={() => {
                   setGameState('shop');
                   setActiveShopTab('skins');
+                  setShowSkinSelector(true);
                 }}
                 style={{
                   background: 'transparent',
@@ -6792,16 +7395,52 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               gap: '20px',
               marginTop: '20px'
             }}>
-              {Object.entries(SKINS).map(([key, skin]) => {
+              {Object.entries(SKINS)
+                .sort(([, a], [, b]) => {
+                  // Ordenar por requisito de rebirth (menor a mayor)
+                  const orderA = CATEGORY_REBIRTH_REQUIREMENTS[a.category] || 0;
+                  const orderB = CATEGORY_REBIRTH_REQUIREMENTS[b.category] || 0;
+                  return orderA - orderB;
+                })
+                .map(([key, skin]) => {
                 const isUnlocked = unlockedSkins.includes(key);
                 const isSelected = selectedSkin === key;
-                const canAfford = totalXP >= skin.price;
+                const xpNeeded = skin.xpPrice || 0;
+                const starsNeeded = skin.starsPrice || 0;
+                const canAffordXP = totalXP >= xpNeeded;
+                const canAffordStars = totalStars >= starsNeeded;
+                const canAfford = canAffordXP && canAffordStars;
+                
+                // Determinar color de categoría (estilo Brawl Stars)
+                const getCategoryColor = () => {
+                  if (skin.category === 'farming_aura') return '#FFD700'; // Dorado brillante
+                  if (skin.category === 'legendary') return '#ff4444';    // Rojo
+                  if (skin.category === 'mythic') return '#ff00ff';       // Púrpura/Magenta
+                  if (skin.category === 'epic') return '#aa44ff';         // Violeta
+                  if (skin.category === 'rare') return '#00aaff';         // Azul
+                  return '#00ff88';                                       // Verde (común)
+                };
+                
+                // Obtener label de categoría
+                const getCategoryLabel = () => {
+                  if (skin.category === 'farming_aura') return '👑 FARMING AURA';
+                  if (skin.category === 'legendary') return '🏆 LEGENDARIO';
+                  if (skin.category === 'mythic') return '💎 MÍTICO';
+                  if (skin.category === 'epic') return '⚡ ÉPICO';
+                  if (skin.category === 'rare') return '💙 RARO';
+                  return ''; // No mostrar badge para común
+                };
+                
+                // Verificar si la categoría está desbloqueada por rebirth
+                const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+                const isCategoryUnlocked = rebirthCount >= requiredRebirth;
+                const canBuy = canAfford && isCategoryUnlocked;
                 
                 return (
                   <div
                     key={key}
                     style={{
-                      border: isSelected ? '3px solid #FFD700' : isUnlocked ? '2px solid #00ff88' : '2px solid #666',
+                      border: isSelected ? '3px solid #FFD700' : isUnlocked ? '2px solid #00ff88' : `2px solid ${getCategoryColor()}`,
                       borderRadius: '10px',
                       padding: '15px',
                       background: isSelected 
@@ -6817,11 +7456,32 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       opacity: isUnlocked || canAfford ? 1 : 0.6
                     }}
                   >
+                    {/* Badge de categoría */}
+                    {!isUnlocked && skin.category !== 'common' && getCategoryLabel() && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: getCategoryColor(),
+                        color: skin.category === 'legendary' ? '#fff' : '#000',
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {getCategoryLabel()}
+                      </div>
+                    )}
+                    
                     {/* Preview de colores */}
                     <div style={{
                       display: 'flex',
                       gap: '2px',
-                      marginBottom: '5px'
+                      marginBottom: '5px',
+                      marginTop: skin.category !== 'common' && !isUnlocked && getCategoryLabel() ? '5px' : '0'
                     }}>
                       {skin.colors.slice(0, 7).map((color, idx) => (
                         <div
@@ -6865,13 +7525,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         fontStyle: 'italic'
                       }}>
                         {skin.special === 'web' && '🕷️ Telarañas'}
-                        {skin.special === 'red_blaster' && '🔴 Rallo Rojo'}
+                        {skin.special === 'red_blaster' && '🔴 Rayo Rojo'}
                         {(skin.special === 'slingshot' || skin.special === 'rock') && '🪨 Rocas'}
                         {skin.special === 'book' && '📚 Libros'}
                         {skin.special === 'pacifier' && '🍼 Chupetes'}
                         {skin.special === 'pork_chop' && '🥩 Chuletas'}
                         {skin.special === 'white_spell' && '✨ Hechizos'}
                         {skin.special === 'blaster' && '🔫 Blaster'}
+                        {skin.special === 'donut' && '🍩 Rosquillas'}
+                        {skin.special === 'banana' && '🍌 Bananas'}
+                        {skin.special === 'hammer' && '🔨 Mjolnir'}
+                        {skin.special === 'shield' && '🛡️ Escudo'}
+                        {skin.special === 'fist' && '👊 Puños'}
+                        {skin.special === 'spell' && '⚡ Hechizos'}
+                        {skin.special === 'sith_laser' && '🔴 Sable Láser'}
+                        {skin.special === 'repulsor' && '💫 Repulsores'}
+                        {skin.special === 'venom' && '🖤 Tentáculos'}
                       </div>
                     )}
                     
@@ -6905,34 +7574,76 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         {isSelected ? '✓ SELECCIONADA' : 'SELECCIONAR'}
                       </button>
                     ) : (
-                      <button
-                        onClick={() => buySkin(key)}
-                        disabled={!canAfford}
-                        style={{
-                          background: 'transparent',
-                          border: `2px solid ${canAfford ? '#FFD700' : '#666'}`,
-                          color: canAfford ? '#FFD700' : '#666',
-                          padding: '8px 16px',
-                          fontSize: '14px',
-                          cursor: canAfford ? 'pointer' : 'not-allowed',
-                          borderRadius: '5px',
-                          width: '100%',
-                          opacity: canAfford ? 1 : 0.5,
-                          transition: 'all 0.3s'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (canAfford) {
-                            e.target.style.background = 'rgba(255, 215, 0, 0.2)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (canAfford) {
-                            e.target.style.background = 'transparent';
-                          }
-                        }}
-                      >
-                        COMPRAR {skin.price} XP
-                      </button>
+                      <div style={{ width: '100%' }}>
+                        {/* Mostrar requisito de rebirth si está bloqueada */}
+                        {!isCategoryUnlocked && (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px',
+                            marginBottom: '8px',
+                            fontSize: '11px',
+                            color: '#ff6666',
+                            background: 'rgba(255, 0, 0, 0.1)',
+                            padding: '4px 8px',
+                            borderRadius: '5px'
+                          }}>
+                            🔒 Requiere {requiredRebirth} rebirth{requiredRebirth > 1 ? 's' : ''}
+                          </div>
+                        )}
+                        {/* Mostrar precio */}
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'center',
+                          gap: '10px',
+                          marginBottom: '8px',
+                          fontSize: '13px',
+                          opacity: isCategoryUnlocked ? 1 : 0.5
+                        }}>
+                          {xpNeeded > 0 && (
+                            <span style={{ color: canAffordXP && isCategoryUnlocked ? '#00ff88' : '#ff4444' }}>
+                              {xpNeeded.toLocaleString()} XP
+                            </span>
+                          )}
+                          {starsNeeded > 0 && (
+                            <span style={{ color: canAffordStars && isCategoryUnlocked ? '#FFD700' : '#ff4444' }}>
+                              ⭐ {starsNeeded}
+                            </span>
+                          )}
+                          {xpNeeded === 0 && starsNeeded === 0 && (
+                            <span style={{ color: '#00ff88' }}>GRATIS</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => buySkin(key)}
+                          disabled={!canBuy}
+                          style={{
+                            background: 'transparent',
+                            border: `2px solid ${canBuy ? '#FFD700' : '#666'}`,
+                            color: canBuy ? '#FFD700' : '#666',
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            cursor: canBuy ? 'pointer' : 'not-allowed',
+                            borderRadius: '5px',
+                            width: '100%',
+                            opacity: canBuy ? 1 : 0.5,
+                            transition: 'all 0.3s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (canBuy) {
+                              e.target.style.background = 'rgba(255, 215, 0, 0.2)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (canBuy) {
+                              e.target.style.background = 'transparent';
+                            }
+                          }}
+                        >
+                          COMPRAR
+                        </button>
+                      </div>
                     )}
                     
                     {isUnlocked && (
