@@ -24,6 +24,8 @@ import * as migration022 from './022_add_is_immune_flag.js';
 import * as migration023 from './023_initial_upgrades.js';
 import * as migration024 from './024_add_chat.js';
 import * as migration025 from './025_add_banned_until.js';
+import * as migration026 from './026_add_head_upgrades.js';
+import * as migration027 from './027_update_level_xp_enemies.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -50,7 +52,9 @@ const migrations = [
   { name: '022_add_is_immune_flag', up: migration022.up, down: migration022.down },
   { name: '023_initial_upgrades', up: migration023.up, down: migration023.down },
   { name: '024_add_chat', up: migration024.up, down: migration024.down },
-  { name: '025_add_banned_until', up: migration025.up, down: migration025.down }
+  { name: '025_add_banned_until', up: migration025.up, down: migration025.down },
+  { name: '026_add_head_upgrades', up: migration026.up, down: migration026.down },
+  { name: '027_update_level_xp_enemies', up: migration027.up, down: migration027.down }
 ];
 
 export async function runMigrations() {

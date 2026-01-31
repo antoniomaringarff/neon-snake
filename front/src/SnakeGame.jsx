@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, Shield, Zap, Magnet, Gauge, Heart } from 'lucide-react';
+import { Sparkles, Shield, Zap, Magnet, Gauge, Heart, Palette, Rocket } from 'lucide-react';
 import AdminPanel from './components/AdminPanel';
 
 // Configuración de niveles - cada nivel tiene características particulares
@@ -499,9 +499,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     },
     bart_simpson: {
       name: 'Bart Simpson',
-      description: '¡Ay caramba! 🪨',
+      description: '¡Lanza rocas! 🪨',
       price: 800,
-      special: 'slingshot', // Dispara rocas con gomera
+      special: 'rock', // Dispara rocas
       mask: 'bart',
       colors: [
         { r: 255, g: 217, b: 15 },   // Amarillo Simpson (cabeza)
@@ -1020,6 +1020,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           { level: 8, xpCost: 150, starsCost: 5, description: '18 puntos de vida máximos' },
           { level: 9, xpCost: 150, starsCost: 5, description: '20 puntos de vida máximos' },
           { level: 10, xpCost: 150, starsCost: 5, description: '22 puntos de vida máximos' }
+        ],
+        head: [
+          { level: 1, xpCost: 0, starsCost: 0, description: 'XP base (1.0x)' },
+          { level: 2, xpCost: 500, starsCost: 15, description: 'XP +10% (1.1x)' },
+          { level: 3, xpCost: 1000, starsCost: 25, description: 'XP +20% (1.2x)' }
         ]
       });
     }
@@ -1402,14 +1407,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       }
       
       // 5 sizes: 1 (smallest) to 5 (largest)
-      // XP ranges: red 1-5, orange 2-6, yellow 3-7, green 4-9, blue 5-10, indigo 6-11, violet 7-12
+      // Valores históricos de XP: 2, 5, 10, 15 (basado solo en tamaño, no en color)
       const sizeIndex = Math.floor(Math.random() * 5); // 0-4
       const sizeMultiplier = 0.4 + (sizeIndex * 0.12); // 0.4, 0.52, 0.64, 0.76, 0.88 (más pequeños)
       
-      // Calculate XP based on color base XP and size
-      // Smallest size (0): base XP, Largest size (4): base XP + 4
-      const baseXP = tier.xp;
-      const xpValue = forceValue || (baseXP + sizeIndex);
+      // Calculate XP based on size only (valores históricos: 2, 5, 10, 15)
+      // Mapear sizeIndex (0-4) a valores de XP históricos
+      let xpValue;
+      if (forceValue !== null) {
+        // Limitar el valor forzado a valores históricos (2, 5, 10, 15)
+        // Redondear al valor histórico más cercano
+        if (forceValue <= 3) xpValue = 2;
+        else if (forceValue <= 7) xpValue = 5;
+        else if (forceValue <= 12) xpValue = 10;
+        else xpValue = 15;
+      } else {
+        // Valores históricos basados solo en tamaño (no en color)
+        if (sizeIndex === 0) xpValue = 2;      // Pequeño = 2 XP
+        else if (sizeIndex === 1) xpValue = 5;  // Mediano = 5 XP
+        else if (sizeIndex === 2) xpValue = 10; // Grande = 10 XP
+        else xpValue = 15;                       // Muy grande = 15 XP (sizeIndex 3 o 4)
+      }
       
       return {
         x: Math.random() * (game.worldWidth - 40) + 20,
@@ -1745,6 +1763,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       game.baseSpeed = levelConfig.playerSpeed;
       setCurrentLevelXP(0);
       setCurrentLevelStars(0);
+      
+      // Establecer gameStartTime después de inicializar todo para evitar múltiples inicializaciones
+      if (gameRef.current.gameStartTime === null) {
+        gameRef.current.gameStartTime = Date.now();
+      }
     };
 
     const updateMousePos = (clientX, clientY) => {
@@ -2140,8 +2163,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       // Debug: contar estrellas generadas
       game.totalStarsGenerated = (game.totalStarsGenerated || 0) + starsToCreate;
       console.log(`⭐ Estrella generada! Total generadas: ${game.totalStarsGenerated}, En mapa: ${game.stars.length + starsToCreate}`);
+      // Limitar el número de items de comida y el XP por item
+      // Cada item de comida debe tener valores históricos: 2, 5, 10, o 15 XP máximo
       const foodCount = Math.min(20, Math.max(5, Math.floor(totalXP / 5))); // 5-20 food items
-      const xpPerFood = Math.floor(totalXP / foodCount);
+      const xpPerFoodRaw = Math.floor(totalXP / foodCount);
+      // Limitar el XP por comida a valores históricos (máximo 15)
+      const xpPerFood = Math.min(15, xpPerFoodRaw);
       const spreadRadius = 100; // Spread food in 100px radius
       
       for (let i = 0; i < foodCount; i++) {
@@ -3215,9 +3242,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       const levelConfig = getLevelConfig(game.level, levelConfigs);
       game.food = game.food.filter(food => {
         if (checkCollision(newHead, food, game.snakeSize + food.size)) {
-          // Head levels: 1 = normal (1x), 2 = double (2x), 3 = triple (3x)
-          const xpMultiplier = headLevel;
-          const xpGain = food.value * xpMultiplier;
+          // Head levels: cada nivel agrega 10% de bonus
+          // Nivel 1: 1.0x (base), Nivel 2: 1.1x (+10%), Nivel 3: 1.2x (+20%)
+          const xpMultiplier = 1 + (headLevel - 1) * 0.1;
+          const xpGain = Math.floor(food.value * xpMultiplier);
           game.currentXP += xpGain;
           game.sessionXP += xpGain;
           setCurrentLevelXP(prev => prev + xpGain);
@@ -3944,11 +3972,18 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             ctx.fillStyle = '#0066ff'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#66aaff'; ctx.beginPath(); ctx.ellipse(0, 0, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 0, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
-          } else if (currentSkinData.special === 'slingshot') {
+          } else if (currentSkinData.special === 'slingshot' || currentSkinData.special === 'rock') {
             const spin = (bullet.x + bullet.y) * 0.1; ctx.rotate(spin - angle);
-            ctx.fillStyle = '#8B4513'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#654321'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#4a4a4a'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+            // Roca más realista con forma irregular
+            ctx.fillStyle = '#5a5a5a'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#4a4a4a'; ctx.beginPath(); ctx.arc(-2, -1, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#6a6a6a'; ctx.beginPath(); ctx.arc(2, 1, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.arc(0, 2, 4, 0, Math.PI * 2); ctx.fill();
+            // Detalles de textura
+            ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-4, -3); ctx.lineTo(-2, -1); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(3, -2); ctx.lineTo(5, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-1, 3); ctx.lineTo(1, 5); ctx.stroke();
           } else if (currentSkinData.special === 'book') {
             const spin = (bullet.x + bullet.y) * 0.05; ctx.rotate(spin - angle);
             ctx.fillStyle = '#8B4513'; ctx.fillRect(-10, -8, 20, 16);
@@ -4011,7 +4046,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       const snakeColors = currentSkin.colors;
       
       if (game.snake && game.snake.length > 0) {
-        // Primero dibujar conexiones entre segmentos para serpiente lisa
+        const totalSegments = game.snake.length;
+        
+        // Función helper para obtener el progreso de color (0 a 1) basado en la posición proporcional
+        const getColorProgress = (segmentIndex) => {
+          if (totalSegments === 1) return 0;
+          // Distribuir colores proporcionalmente a lo largo de toda la serpiente
+          return segmentIndex / (totalSegments - 1);
+        };
+        
+        // Función para interpolar entre dos colores
+        const lerpColor = (color1, color2, t) => {
+          t = Math.max(0, Math.min(1, t)); // Clamp entre 0 y 1
+          return {
+            r: Math.round(color1.r + (color2.r - color1.r) * t),
+            g: Math.round(color1.g + (color2.g - color1.g) * t),
+            b: Math.round(color1.b + (color2.b - color1.b) * t)
+          };
+        };
+        
+        // Función para obtener el color interpolado en una posición dada
+        const getInterpolatedColor = (progress) => {
+          if (snakeColors.length === 1) return snakeColors[0];
+          
+          const colorProgress = progress * (snakeColors.length - 1);
+          const colorIndex = Math.floor(colorProgress);
+          const nextColorIndex = Math.min(colorIndex + 1, snakeColors.length - 1);
+          const t = colorProgress - colorIndex;
+          
+          return lerpColor(snakeColors[colorIndex], snakeColors[nextColorIndex], t);
+        };
+        
+        // Primero dibujar conexiones entre segmentos para serpiente lisa con gradiente
         for (let i = 0; i < game.snake.length - 1; i++) {
           const seg1 = game.snake[i];
           const seg2 = game.snake[i + 1];
@@ -4020,12 +4086,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           const screenX2 = seg2.x - camX;
           const screenY2 = seg2.y - camY;
           
-          const colorIndex = Math.min(i, snakeColors.length - 1);
-          const color = snakeColors[colorIndex];
-          const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
+          // Obtener colores interpolados para inicio y fin de la línea
+          const progress1 = getColorProgress(i);
+          const progress2 = getColorProgress(i + 1);
+          const color1 = getInterpolatedColor(progress1);
+          const color2 = getInterpolatedColor(progress2);
           
-          // Línea gruesa entre segmentos
-          ctx.strokeStyle = colorStr;
+          // Crear gradiente lineal para transición suave
+          const gradient = ctx.createLinearGradient(screenX1, screenY1, screenX2, screenY2);
+          gradient.addColorStop(0, `rgb(${color1.r}, ${color1.g}, ${color1.b})`);
+          gradient.addColorStop(1, `rgb(${color2.r}, ${color2.g}, ${color2.b})`);
+          
+          // Línea gruesa entre segmentos con gradiente
+          ctx.strokeStyle = gradient;
           ctx.lineWidth = game.snakeSize * 2;
           ctx.lineCap = 'round';
           ctx.beginPath();
@@ -4041,8 +4114,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           
           if (screenX > -50 && screenX < CANVAS_WIDTH + 50 && 
               screenY > -50 && screenY < CANVAS_HEIGHT + 50) {
-            const colorIndex = Math.min(index, snakeColors.length - 1);
-            const color = snakeColors[colorIndex];
+            const progress = getColorProgress(index);
+            const color = getInterpolatedColor(progress);
             const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
             
             ctx.fillStyle = colorStr;
@@ -4055,6 +4128,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             
             // Draw mask on head
             if (index === 0) {
+              // Draw mask on head
               const skinData = SKINS[selectedSkin] || SKINS.rainbow;
               const dir = game.direction; // Define dir before using it
               if (skinData?.mask) {
@@ -4528,6 +4602,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     };
 
     // Initialize game when starting to play
+    // Siempre reiniciar si gameStartTime es null o si no hay enemigos
+    // Esto asegura que el juego siempre se reinicie desde cero cuando se inicia una nueva partida
     if (gameState === 'playing' && (gameRef.current.gameStartTime === null || gameRef.current.enemies.length === 0)) {
       initGame();
     }
@@ -4578,21 +4654,52 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, selectedSkin, isImmune, isMobile]);
 
   const startGame = () => {
+    // Resetear completamente el estado del juego antes de iniciar
+    gameRef.current.gameStartTime = null; // Forzar reinicialización
+    gameRef.current.enemies = [];
+    gameRef.current.snake = [];
+    gameRef.current.food = [];
+    gameRef.current.stars = [];
+    gameRef.current.bullets = [];
+    gameRef.current.particles = [];
+    gameRef.current.killerSaws = [];
+    gameRef.current.floatingCannons = [];
+    gameRef.current.resentfulSnakes = [];
+    gameRef.current.healthBoxes = [];
+    gameRef.current.structures = [];
+    gameRef.current.sessionXP = 0;
+    gameRef.current.currentXP = 0;
+    gameRef.current.currentStars = 0;
+    
     // Mostrar intro del nivel primero
     setGameState('levelIntro');
   };
 
   const beginLevel = () => {
     // Esta función realmente inicia el juego después de la intro
+    // Resetear completamente el estado del juego antes de iniciar
+    gameRef.current.gameStartTime = null; // Forzar reinicialización
+    gameRef.current.enemies = [];
+    gameRef.current.snake = [];
+    gameRef.current.food = [];
+    gameRef.current.stars = [];
+    gameRef.current.bullets = [];
+    gameRef.current.particles = [];
+    gameRef.current.killerSaws = [];
+    gameRef.current.floatingCannons = [];
+    gameRef.current.resentfulSnakes = [];
+    gameRef.current.healthBoxes = [];
+    gameRef.current.structures = [];
+    
     gameRef.current.level = level;
     const levelConfig = getLevelConfig(level, levelConfigs);
     gameRef.current.starsNeeded = levelConfig.starsNeeded;
-    gameRef.current.gameStartTime = Date.now();
     gameRef.current.sessionXP = 0;
     gameRef.current.headHits = 0; // Reset head hits counter
     gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setShopOpen(false);
+    // NO establecer gameStartTime aquí - se establecerá en initGame después de inicializar todo
     setGameState('playing');
     // initGame se ejecutará dentro del useEffect cuando gameState cambie a 'playing'
   };
@@ -4847,7 +4954,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               ⚡ +{sessionXP} XP
             </span>
           </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
           {isAdmin && (
             <button
               onClick={() => setShowAdminPanel(true)}
@@ -4872,7 +4979,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             </button>
           )}
           <button
-            onClick={onLogout}
+            onClick={() => setGameState('menu')}
             style={{
               background: 'transparent',
               border: '1px solid #ff3366',
@@ -4890,7 +4997,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               e.target.style.background = 'transparent';
             }}
           >
-            Salir
+            Abandonar
           </button>
         </div>
         </div>
@@ -5007,39 +5114,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           )}
           <div style={{ 
             display: 'flex', 
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             alignItems: 'center', 
             width: '100%'
           }}>
-            <div style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              alignItems: 'center', 
-              flexWrap: 'wrap'
-          }}>
-            {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
-              </div>
-            )}
-            {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                  {headLevel === 2 ? 'Doble' : 'Triple'}
-                </span>
-              </div>
-            )}
-            {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                  Cañón {cannonLevel === 2 ? 'x2' : ''}
-                </span>
-              </div>
-            )}
-          </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {isAdmin && (
               <button
@@ -5189,34 +5267,220 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             </div>
           )}
         </div>
-          <div style={{ 
-            display: 'flex', 
-          gap: '12px', 
-          alignItems: 'center'
-          }}>
-            {shieldLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {/* Right side: Specs and Skin - Solo en PC */}
+          {!isMobile && (
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              alignItems: 'center',
+              flexWrap: 'wrap'
+            }}>
+              {/* Skin seleccionada */}
+              <div 
+                onClick={() => setShowSkinSelector(true)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 215, 0, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 215, 0, 0.1)';
+                  e.currentTarget.style.borderColor = '#FFD700';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 215, 0, 0.3)';
+                }}
+              >
+                <Palette size={iconSize} style={{ color: '#FFD700' }} />
+                <span style={{ fontSize: iconTextSize, color: '#FFD700' }}>
+                  {(SKINS[selectedSkin] && SKINS[selectedSkin].name) || 'Rainbow'}
+                </span>
+              </div>
+              
+              {/* Todos los specs - siempre visibles */}
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(100, 149, 237, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(100, 149, 237, 0.1)';
+                  e.currentTarget.style.borderColor = '#6495ed';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(100, 149, 237, 0.3)';
+                }}
+              >
                 <Shield size={iconSize} style={{ color: '#6495ed' }} />
-                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>Escudo {shieldLevel}</span>
+                <span style={{ fontSize: iconTextSize, color: '#6495ed' }}>{shieldLevel}</span>
               </div>
-            )}
-            {headLevel > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Zap size={iconSize} style={{ color: headLevel === 2 ? '#ff00ff' : '#9400D3' }} />
-                <span style={{ fontSize: iconTextSize, color: headLevel === 2 ? '#ff00ff' : '#9400D3' }}>
-                  {headLevel === 2 ? 'Doble' : 'Triple'}
-                </span>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 0, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 0, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#ff00ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 0, 255, 0.3)';
+                }}
+              >
+                <Zap size={iconSize} style={{ color: '#ff00ff' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ff00ff' }}>{headLevel}</span>
               </div>
-            )}
-            {cannonLevel > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 255, 0, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 0, 0.1)';
+                  e.currentTarget.style.borderColor = '#ffff00';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 0, 0.3)';
+                }}
+              >
                 <Sparkles size={iconSize} style={{ color: '#ffff00' }} />
-                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>
-                  Cañón {cannonLevel === 2 ? 'x2' : ''}
-                </span>
+                <span style={{ fontSize: iconTextSize, color: '#ffff00' }}>{cannonLevel}</span>
               </div>
-            )}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 255, 136, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 255, 136, 0.1)';
+                  e.currentTarget.style.borderColor = '#00ff88';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 255, 136, 0.3)';
+                }}
+              >
+                <Magnet size={iconSize} style={{ color: '#00ff88' }} />
+                <span style={{ fontSize: iconTextSize, color: '#00ff88' }}>{magnetLevel}</span>
+              </div>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 170, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 170, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#00aaff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 170, 255, 0.3)';
+                }}
+              >
+                <Gauge size={iconSize} style={{ color: '#00aaff' }} />
+                <span style={{ fontSize: iconTextSize, color: '#00aaff' }}>{speedLevel}</span>
+              </div>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 100, 100, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 100, 100, 0.1)';
+                  e.currentTarget.style.borderColor = '#ff6464';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 100, 100, 0.3)';
+                }}
+              >
+                <Rocket size={iconSize} style={{ color: '#ff6464' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ff6464' }}>{bulletSpeedLevel}</span>
+              </div>
+              
+              <div 
+                onClick={() => setGameState('shop')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(255, 80, 80, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 80, 80, 0.1)';
+                  e.currentTarget.style.borderColor = '#ff5050';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 80, 80, 0.3)';
+                }}
+              >
+                <Heart size={iconSize} style={{ color: '#ff5050' }} />
+                <span style={{ fontSize: iconTextSize, color: '#ff5050' }}>{healthLevel}</span>
+              </div>
+            </div>
+          )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
           {isAdmin && (
             <button
               onClick={() => setShowAdminPanel(true)}
@@ -5250,8 +5514,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   fontSize: '11px',
             cursor: 'pointer',
                   borderRadius: '3px',
-            transition: 'all 0.3s',
-                  marginLeft: '10px'
+            transition: 'all 0.3s'
           }}
           onMouseEnter={(e) => {
             e.target.style.background = 'rgba(255, 51, 102, 0.2)';
@@ -5263,7 +5526,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 Salir
         </button>
         </div>
-          </div>
       </div>
     );
   };
@@ -5391,21 +5653,28 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           width: '100%',
           maxWidth: '1200px',
           padding: '20px',
-          alignItems: isMobile ? 'center' : 'flex-start',
-          justifyContent: 'center'
+          alignItems: isMobile ? 'center' : 'stretch',
+          justifyContent: 'center',
+          height: '100%'
         }}>
           {/* Left side: Main action buttons */}
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.7)',
-            padding: '30px',
+          padding: '30px',
           borderRadius: '10px',
           border: '2px solid #33ffff',
-            boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-            width: isMobile ? '100%' : 'auto',
-            minWidth: isMobile ? 'auto' : '400px',
-            flex: isMobile ? 'none' : '0 0 400px'
-          }}>
+          boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+          width: isMobile ? '100%' : 'auto',
+          minWidth: isMobile ? 'auto' : '400px',
+          flex: isMobile ? 'none' : '0 0 400px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          alignSelf: 'stretch' // Ocupa toda la altura disponible
+        }}>
+          {/* Logo y texto arriba */}
+          <div style={{ flex: '0 0 auto' }}>
             <img 
               src="/logo.png" 
               alt="Neon Snake" 
@@ -5417,51 +5686,42 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
               }} 
             />
-            <p style={{ fontSize: '16px', marginBottom: '30px', lineHeight: '1.6', color: '#aaa' }}>
-            Mueve el mouse/trackpad para controlar tu serpiente<br/>
-            Come puntos brillantes para ganar XP<br/>
-            ⭐ Recoge estrellas para avanzar de nivel
-          </p>
-            <div style={{ display: 'flex', gap: '15px', flexDirection: isMobile ? 'column' : 'row', flexWrap: 'wrap' }}>
-          <button 
-            onClick={startGame}
-            style={{
-              background: 'transparent',
-              border: '2px solid #33ffff',
-              color: '#33ffff',
-              padding: '15px 40px',
-                  fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #33ffff',
-              boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
-                  flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : '150px',
-                  transition: 'all 0.3s'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(51, 255, 255, 0.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'transparent';
-            }}
-          >
-            JUGAR
-          </button>
-          <button 
-            onClick={() => setGameState('shop')}
-            style={{
-              background: 'transparent',
-              border: '2px solid #ff00ff',
-              color: '#ff00ff',
-              padding: '15px 40px',
-                  fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #ff00ff',
+            <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
+              Mueve el mouse/trackpad para controlar tu serpiente<br/>
+              Come puntos brillantes para ganar XP<br/>
+              ⭐ Recoge estrellas para avanzar de nivel
+            </p>
+          </div>
+          
+          {/* Botones abajo - siempre contra el fondo */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: '15px',
+            width: '100%',
+            marginTop: 'auto',
+            flex: '0 0 auto'
+          }}>
+            {/* Fila superior: TIENDA y SKINS (más chicos) */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '15px', 
+              flexDirection: isMobile ? 'column' : 'row'
+            }}>
+              <button 
+                onClick={() => setGameState('shop')}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #ff00ff',
+                  color: '#ff00ff',
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #ff00ff',
                   boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
                   flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : '150px',
+                  minWidth: isMobile ? '100%' : 'auto',
                   transition: 'all 0.3s'
                 }}
                 onMouseEnter={(e) => {
@@ -5469,37 +5729,65 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 }}
                 onMouseLeave={(e) => {
                   e.target.style.background = 'transparent';
-            }}
-          >
-            TIENDA
-          </button>
-          <button 
-            onClick={() => setShowSkinSelector(true)}
-            style={{
-              background: 'transparent',
-              border: '2px solid #FFD700',
-              color: '#FFD700',
-              padding: '15px 40px',
-              fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #FFD700',
-              boxShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
-              flex: isMobile ? 'none' : 1,
-              minWidth: isMobile ? '100%' : '150px',
-              transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 215, 0, 0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-            SKINS
-          </button>
+                }}
+              >
+                TIENDA
+              </button>
+              <button 
+                onClick={() => setShowSkinSelector(true)}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #FFD700',
+                  color: '#FFD700',
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #FFD700',
+                  boxShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
+                  flex: isMobile ? 'none' : 1,
+                  minWidth: isMobile ? '100%' : 'auto',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 215, 0, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                SKINS
+              </button>
             </div>
+            
+            {/* Fila inferior: JUGAR (grande, ancho completo) */}
+            <button 
+              onClick={startGame}
+              style={{
+                background: 'transparent',
+                border: '2px solid #33ffff',
+                color: '#33ffff',
+                padding: '20px 40px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #33ffff',
+                boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                width: '100%',
+                transition: 'all 0.3s',
+                fontWeight: 'bold'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              JUGAR
+            </button>
           </div>
+        </div>
 
           {/* Right side: Leaderboards */}
           <div style={{ 
@@ -5573,119 +5861,112 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             </div>
 
-            {/* Ranking por Nivel */}
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.7)',
-              padding: '12px',
-              borderRadius: '8px',
-              border: '2px solid #33ffff',
-              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-              flex: '1',
-              minWidth: isMobile ? 'auto' : '300px'
-            }}>
-              <h2 style={{ 
-                color: '#33ffff', 
-                textShadow: '0 0 20px #33ffff', 
-                textAlign: 'center',
-                marginBottom: '10px',
-                fontSize: '14px'
-              }}>
-                ⭐ RANKING NIVEL
-              </h2>
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {leaderboardByLevel.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #33ffff' }}>
-                        <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>#</th>
-                        <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>Usuario</th>
-                        <th style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '11px' }}>Nivel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardByLevel.map((entry, index) => (
-                        <tr 
-                          key={index}
-                          style={{ 
-                            borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
-                            backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '6px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '12px' }}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </td>
-                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
-                            {entry.username}
-                          </td>
-                          <td style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>
-                            {entry.highestLevel || 1}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* Ranking por Rebirths */}
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.7)',
-              padding: '12px',
-              borderRadius: '8px',
-              border: '2px solid #ff3366',
-              boxShadow: '0 0 30px rgba(255, 51, 102, 0.3)',
-              flex: '1',
-              minWidth: isMobile ? 'auto' : '300px'
-            }}>
-              <h2 style={{ 
-                color: '#ff3366', 
-                textShadow: '0 0 20px #ff3366', 
-                textAlign: 'center',
-                marginBottom: '10px',
-                fontSize: '14px'
-              }}>
-                🔄 RANKING REBIRTHS
-              </h2>
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {leaderboardByRebirth.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #ff3366' }}>
-                        <th style={{ padding: '6px', textAlign: 'left', color: '#ff3366', fontSize: '11px' }}>#</th>
-                        <th style={{ padding: '6px', textAlign: 'left', color: '#ff3366', fontSize: '11px' }}>Usuario</th>
-                        <th style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '11px' }}>Rebirths</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardByRebirth.map((entry, index) => (
-                        <tr 
-                          key={index}
-                          style={{ 
-                            borderBottom: '1px solid rgba(255, 51, 102, 0.2)',
-                            backgroundColor: entry.username === user?.username ? 'rgba(255, 51, 102, 0.1)' : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '6px', color: index < 3 ? '#ff3366' : '#ff00ff', fontSize: '12px' }}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </td>
-                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#ff3366' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
-                            {entry.username}
-                          </td>
-                          <td style={{ padding: '6px', textAlign: 'right', color: '#ff00ff', fontSize: '12px' }}>
-                            {entry.rebirthCount || 0}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+            {/* Ranking combinado: Rebirth, Nivel y Niveles Totales */}
+            {(() => {
+              // Combinar datos de ambos leaderboards
+              const combinedData = [];
+              const userMap = new Map();
+              
+              // Agregar datos de rebirth
+              leaderboardByRebirth.forEach(entry => {
+                userMap.set(entry.username, {
+                  username: entry.username,
+                  rebirthCount: entry.rebirthCount || 0,
+                  highestLevel: 0,
+                  totalSessions: entry.totalSessions || 0
+                });
+              });
+              
+              // Agregar/actualizar datos de nivel
+              leaderboardByLevel.forEach(entry => {
+                if (userMap.has(entry.username)) {
+                  userMap.get(entry.username).highestLevel = entry.highestLevel || 1;
+                  userMap.get(entry.username).totalSessions = entry.totalSessions || userMap.get(entry.username).totalSessions || 0;
+                } else {
+                  userMap.set(entry.username, {
+                    username: entry.username,
+                    rebirthCount: 0,
+                    highestLevel: entry.highestLevel || 1,
+                    totalSessions: entry.totalSessions || 0
+                  });
+                }
+              });
+              
+              // Convertir a array y ordenar: primero por rebirth (desc), luego por nivel (desc)
+              combinedData.push(...Array.from(userMap.values()));
+              combinedData.sort((a, b) => {
+                if (b.rebirthCount !== a.rebirthCount) {
+                  return b.rebirthCount - a.rebirthCount;
+                }
+                return (b.highestLevel || 1) - (a.highestLevel || 1);
+              });
+              
+              return (
+                <div style={{ 
+                  background: 'rgba(0, 0, 0, 0.7)',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '2px solid #33ffff',
+                  boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+                  flex: '2', // Ocupa dos casilleros
+                  minWidth: isMobile ? 'auto' : '600px'
+                }}>
+                  <h2 style={{ 
+                    color: '#33ffff', 
+                    textShadow: '0 0 20px #33ffff', 
+                    textAlign: 'center',
+                    marginBottom: '10px',
+                    fontSize: '14px'
+                  }}>
+                    🔄⭐ RANKING REBIRTH & NIVEL
+                  </h2>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {combinedData.length === 0 ? (
+                      <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #33ffff' }}>
+                            <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>#</th>
+                            <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>Usuario</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '11px' }}>Rebirth</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '11px' }}>Nivel</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Niveles Totales</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {combinedData.map((entry, index) => (
+                            <tr 
+                              key={entry.username}
+                              style={{ 
+                                borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
+                                backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
+                              }}
+                            >
+                              <td style={{ padding: '6px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '12px' }}>
+                                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                              </td>
+                              <td style={{ padding: '6px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
+                                {entry.username}
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '12px' }}>
+                                {entry.rebirthCount || 0}
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
+                                {entry.highestLevel || 1}
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>
+                                {entry.totalSessions || 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             </div>
 
             {/* Segunda fila: 3 rankings abajo */}
@@ -6554,7 +6835,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       }}>
                         {skin.special === 'web' && '🕷️ Telarañas'}
                         {skin.special === 'red_blaster' && '🔴 Rallo Rojo'}
-                        {skin.special === 'slingshot' && '🪨 Rocas'}
+                        {(skin.special === 'slingshot' || skin.special === 'rock') && '🪨 Rocas'}
                         {skin.special === 'book' && '📚 Libros'}
                         {skin.special === 'pacifier' && '🍼 Chupetes'}
                         {skin.special === 'pork_chop' && '🥩 Chuletas'}
@@ -6947,119 +7228,112 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             </div>
 
-            {/* Ranking por Nivel */}
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.7)',
-              padding: '20px',
-              borderRadius: '10px',
-              border: '2px solid #33ffff',
-              boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
-              flex: '1',
-              minWidth: '250px'
-            }}>
-              <h2 style={{ 
-                color: '#33ffff', 
-                textShadow: '0 0 20px #33ffff', 
-                textAlign: 'center',
-                marginBottom: '15px',
-                fontSize: '20px'
-              }}>
-                ⭐ RANKING NIVEL
-              </h2>
-              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-                {leaderboardByLevel.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #33ffff' }}>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>#</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>Usuario</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>Nivel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardByLevel.map((entry, index) => (
-                        <tr 
-                          key={index}
-                          style={{ 
-                            borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
-                            backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '8px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '13px' }}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </td>
-                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
-                            {entry.username}
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '13px' }}>
-                            {entry.highestLevel || 1}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* Ranking por Rebirths */}
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.7)',
-              padding: '20px',
-              borderRadius: '10px',
-              border: '2px solid #ff3366',
-              boxShadow: '0 0 30px rgba(255, 51, 102, 0.3)',
-              flex: '1',
-              minWidth: '250px'
-            }}>
-              <h2 style={{ 
-                color: '#ff3366', 
-                textShadow: '0 0 20px #ff3366', 
-                textAlign: 'center',
-                marginBottom: '15px',
-                fontSize: '20px'
-              }}>
-                🔄 RANKING REBIRTHS
-              </h2>
-              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-                {leaderboardByRebirth.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #ff3366' }}>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#ff3366', fontSize: '12px' }}>#</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#ff3366', fontSize: '12px' }}>Usuario</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '12px' }}>Rebirths</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardByRebirth.map((entry, index) => (
-                        <tr 
-                          key={index}
-                          style={{ 
-                            borderBottom: '1px solid rgba(255, 51, 102, 0.2)',
-                            backgroundColor: entry.username === user?.username ? 'rgba(255, 51, 102, 0.1)' : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '8px', color: index < 3 ? '#ff3366' : '#ff00ff', fontSize: '13px' }}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </td>
-                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#ff3366' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
-                            {entry.username}
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'right', color: '#ff00ff', fontSize: '13px' }}>
-                            {entry.rebirthCount || 0}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+            {/* Ranking combinado: Rebirth, Nivel y Niveles Totales */}
+            {(() => {
+              // Combinar datos de ambos leaderboards
+              const combinedData = [];
+              const userMap = new Map();
+              
+              // Agregar datos de rebirth
+              leaderboardByRebirth.forEach(entry => {
+                userMap.set(entry.username, {
+                  username: entry.username,
+                  rebirthCount: entry.rebirthCount || 0,
+                  highestLevel: 0,
+                  totalSessions: entry.totalSessions || 0
+                });
+              });
+              
+              // Agregar/actualizar datos de nivel
+              leaderboardByLevel.forEach(entry => {
+                if (userMap.has(entry.username)) {
+                  userMap.get(entry.username).highestLevel = entry.highestLevel || 1;
+                  userMap.get(entry.username).totalSessions = entry.totalSessions || userMap.get(entry.username).totalSessions || 0;
+                } else {
+                  userMap.set(entry.username, {
+                    username: entry.username,
+                    rebirthCount: 0,
+                    highestLevel: entry.highestLevel || 1,
+                    totalSessions: entry.totalSessions || 0
+                  });
+                }
+              });
+              
+              // Convertir a array y ordenar: primero por rebirth (desc), luego por nivel (desc)
+              combinedData.push(...Array.from(userMap.values()));
+              combinedData.sort((a, b) => {
+                if (b.rebirthCount !== a.rebirthCount) {
+                  return b.rebirthCount - a.rebirthCount;
+                }
+                return (b.highestLevel || 1) - (a.highestLevel || 1);
+              });
+              
+              return (
+                <div style={{ 
+                  background: 'rgba(0, 0, 0, 0.7)',
+                  padding: '20px',
+                  borderRadius: '10px',
+                  border: '2px solid #33ffff',
+                  boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+                  flex: '2', // Ocupa dos casilleros
+                  minWidth: '500px'
+                }}>
+                  <h2 style={{ 
+                    color: '#33ffff', 
+                    textShadow: '0 0 20px #33ffff', 
+                    textAlign: 'center',
+                    marginBottom: '15px',
+                    fontSize: '20px'
+                  }}>
+                    🔄⭐ RANKING REBIRTH & NIVEL
+                  </h2>
+                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                    {combinedData.length === 0 ? (
+                      <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #33ffff' }}>
+                            <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>#</th>
+                            <th style={{ padding: '8px', textAlign: 'left', color: '#33ffff', fontSize: '12px' }}>Usuario</th>
+                            <th style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '12px' }}>Rebirth</th>
+                            <th style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>Nivel</th>
+                            <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>Niveles Totales</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {combinedData.map((entry, index) => (
+                            <tr 
+                              key={entry.username}
+                              style={{ 
+                                borderBottom: '1px solid rgba(51, 255, 255, 0.2)',
+                                backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
+                              }}
+                            >
+                              <td style={{ padding: '8px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '13px' }}>
+                                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                              </td>
+                              <td style={{ padding: '8px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                                {entry.username}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', color: '#ff3366', fontSize: '13px' }}>
+                                {entry.rebirthCount || 0}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
+                                {entry.highestLevel || 1}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '13px' }}>
+                                {entry.totalSessions || 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             </div>
 
             {/* Segunda fila: 3 rankings abajo */}
@@ -7612,6 +7886,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               // Save progress before returning to menu
               // NO resetear el nivel - mantener el nivel alcanzado
               saveUserProgress();
+              // Resetear el estado del juego para que se reinicie completamente cuando se vuelva a jugar
+              gameRef.current.gameStartTime = null;
+              gameRef.current.enemies = [];
+              gameRef.current.snake = [];
+              gameRef.current.food = [];
+              gameRef.current.stars = [];
+              gameRef.current.bullets = [];
+              gameRef.current.particles = [];
+              gameRef.current.killerSaws = [];
+              gameRef.current.floatingCannons = [];
+              gameRef.current.resentfulSnakes = [];
+              gameRef.current.healthBoxes = [];
+              gameRef.current.structures = [];
               setGameState('menu');
             }}
             style={{
@@ -8039,6 +8326,57 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       background: 'transparent',
                               border: '2px solid #00ff00',
                               color: '#00ff00',
+                              padding: '10px 20px',
+                              fontSize: '16px',
+                              cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
+                      borderRadius: '5px',
+                              opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1,
+                      width: '100%',
+                              marginTop: '10px'
+                    }}
+                  >
+                            COMPRAR NIVEL {next.level}
+                  </button>
+                        </>
+                      ) : (
+                        <p style={{ textAlign: 'center', fontSize: '14px', marginTop: '10px', color: '#888' }}>
+                          Nivel Máximo
+                        </p>
+                      )}
+                </div>
+                  );
+                })()}
+
+                {/* Cabeza XP */}
+                {(() => {
+                  const next = getNextUpgrade('head');
+                  const currentLevel = headLevel;
+                  return (
+                <div style={{ 
+                      border: '2px solid #9400D3', 
+                      padding: '20px', 
+                  borderRadius: '10px',
+                      background: currentLevel > 1 ? 'rgba(148, 0, 211, 0.2)' : 'transparent',
+                      minWidth: '220px'
+                    }}>
+                      <Zap size={48} style={{ color: '#9400D3', display: 'block', margin: '0 auto' }} />
+                      <h3 style={{ color: '#9400D3', textAlign: 'center', fontSize: '18px', marginTop: '10px' }}>
+                        CABEZA XP {currentLevel > 1 ? `Nivel ${currentLevel}` : ''}
+                      </h3>
+                      {next ? (
+                        <>
+                          <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
+                          <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
+                            {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          </p>
+                  <button 
+                            onClick={() => buyItem(next.item)}
+                            disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)}
+                    style={{
+                      background: 'transparent',
+                              border: '2px solid #9400D3',
+                              color: '#9400D3',
                               padding: '10px 20px',
                               fontSize: '16px',
                               cursor: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 'not-allowed' : 'pointer',
