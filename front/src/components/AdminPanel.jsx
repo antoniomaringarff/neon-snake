@@ -331,6 +331,8 @@ const AdminPanel = ({ onClose }) => {
                       <th style={{ padding: '10px', textAlign: 'left' }}>Estrellas</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Mejor Score</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Nivel</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Rebirth</th>
+                      <th style={{ padding: '10px', textAlign: 'left' }}>Serie</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Estado</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Admin</th>
                       <th style={{ padding: '10px', textAlign: 'left' }}>Acciones</th>
@@ -344,6 +346,8 @@ const AdminPanel = ({ onClose }) => {
                         <td style={{ padding: '10px' }}>{user.totalStars}</td>
                         <td style={{ padding: '10px' }}>{user.bestScore}</td>
                         <td style={{ padding: '10px' }}>{user.currentLevel}</td>
+                        <td style={{ padding: '10px', color: '#ff3366' }}>{user.rebirthCount || 0}</td>
+                        <td style={{ padding: '10px', color: '#FFD700' }}>{user.currentSeries || 1}</td>
                         <td style={{ padding: '10px' }}>
                           <span style={{ color: user.isBanned ? '#ff3366' : '#00ff00' }}>
                             {user.isBanned ? 'Baneado' : 'Activo'}
@@ -465,8 +469,46 @@ const AdminPanel = ({ onClose }) => {
                         min={0}
                         max={10}
                       />
+                      <InputField
+                        label="Rebirth"
+                        value={editingUser.rebirthCount}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, rebirthCount: val }))}
+                        min={0}
+                      />
+                      <InputField
+                        label="Serie"
+                        value={editingUser.currentSeries}
+                        onChange={(val) => setEditingUser(prev => ({ ...prev, currentSeries: val }))}
+                        min={1}
+                      />
                     </div>
-                    <div style={{ marginTop: '20px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    <div style={{ marginTop: '20px', marginBottom: '15px' }}>
+                      <Button
+                        onClick={() => setEditingUser(prev => ({
+                          ...prev,
+                          totalXp: Math.max(prev.totalXp || 0, 999999),
+                          totalStars: Math.max(prev.totalStars || 0, 9999),
+                          bestScore: Math.max(prev.bestScore || 0, 999999),
+                          currentLevel: 25,
+                          shieldLevel: 10,
+                          headLevel: 3,
+                          cannonLevel: 5,
+                          magnetLevel: 10,
+                          speedLevel: 10,
+                          bulletSpeedLevel: 10,
+                          healthLevel: 10,
+                          rebirthCount: Math.max(prev.rebirthCount || 0, 10),
+                          currentSeries: Math.max(prev.currentSeries || 1, 10),
+                          isAdmin: true,
+                          freeShots: true,
+                          isImmune: true
+                        }))}
+                        style={{ background: 'linear-gradient(135deg, #ff3366, #FFD700)', border: 'none', color: '#000', fontWeight: 'bold', padding: '10px 20px' }}
+                      >
+                        🚀 MAXIMIZAR TODO
+                      </Button>
+                    </div>
+                    <div style={{ marginTop: '20px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <label style={{ color: '#33ffff', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <input
                           type="checkbox"
