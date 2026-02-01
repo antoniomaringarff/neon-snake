@@ -246,7 +246,7 @@ export default async function chatRoutes(fastify, options) {
         [messageId]
       );
 
-      if (userResult.rows.length === 0) {
+      if (messageResult.rows.length === 0) {
         return reply.code(404).send({ error: 'Message not found' });
       }
 
