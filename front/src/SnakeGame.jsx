@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge, Heart, Palette, Rocket } from 'lucide-react';
 import AdminPanel from './components/AdminPanel';
-import Leaderboards from './components/Leaderboards';
-import ChatBox from './components/ChatBox';
-import GameOverScreen from './screens/GameOverScreen';
-import VictoryScreen from './screens/VictoryScreen';
 
 // Configuración de niveles - cada nivel tiene características particulares
 // Esta función ahora usa los niveles cargados desde la DB si están disponibles
@@ -5091,7 +5087,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             gap: '8px', 
             alignItems: 'center'
           }}>
-            {/* Skin actual - abre skins */}
+              {/* Skin actual - abre skins */}
               <div 
                 onClick={() => setShowFloatingShop('skins')}
                 style={{ 
@@ -6269,23 +6265,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         position: 'relative',
         width: '100%',
         minHeight: 0,
-        WebkitOverflowScrolling: 'touch' // Smooth scrolling en iOS
+        WebkitOverflowScrolling: 'touch'
       }}>
 
       {(gameState === 'menu' || gameState === 'levelComplete') && (
         <div style={{ 
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? '12px' : '20px',
+          gap: '20px',
           width: '100%',
           maxWidth: '1200px',
-          padding: isMobile ? '10px' : '20px',
+          padding: '20px',
           alignItems: isMobile ? 'center' : 'stretch',
           justifyContent: 'center',
-          height: isMobile ? 'auto' : '100%',
-          minHeight: isMobile ? 'auto' : '100%',
-          marginTop: isMobile ? '0' : 'auto',
-          marginBottom: isMobile ? '0' : 'auto'
+          height: '100%'
         }}>
           {/* Left side: Main action buttons */}
         <div style={{ 
@@ -6447,7 +6440,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           <div style={{ 
             display: 'flex',
             flexDirection: 'column',
-            gap: isMobile ? '10px' : '15px',
+            gap: '15px',
             width: isMobile ? '100%' : 'auto',
             flex: isMobile ? 'none' : '1'
           }}>
@@ -6455,39 +6448,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             <div style={{ 
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '10px' : '20px',
+              gap: '20px',
               width: '100%'
             }}>
             {/* Ranking por XP */}
             <div style={{ 
               background: 'rgba(0, 0, 0, 0.7)',
-              padding: isMobile ? '8px' : '12px',
+              padding: '12px',
               borderRadius: '8px',
               border: '2px solid #FFD700',
               boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
               flex: '1',
-              minWidth: isMobile ? 'auto' : '300px',
-              width: isMobile ? '100%' : 'auto'
+              minWidth: isMobile ? 'auto' : '300px'
             }}>
               <h2 style={{ 
                 color: '#FFD700', 
                 textShadow: '0 0 20px #FFD700', 
                 textAlign: 'center',
-                marginBottom: isMobile ? '6px' : '10px',
-                fontSize: isMobile ? '12px' : '14px'
+                marginBottom: '10px',
+                fontSize: '14px'
               }}>
                 🏆 RANKING XP
               </h2>
-              <div style={{ maxHeight: isMobile ? '150px' : '200px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                 {leaderboard.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+                  <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                        <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                        <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                        <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>XP</th>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                        <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                        <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>XP</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6499,13 +6491,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
                           }}
                         >
-                          <td style={{ padding: isMobile ? '4px' : '6px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: isMobile ? '10px' : '12px' }}>
+                          <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '12px' }}>
                             {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                           </td>
-                          <td style={{ padding: isMobile ? '4px' : '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: isMobile ? '10px' : '12px' }}>
+                          <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
                             {entry.username}
                           </td>
-                          <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '10px' : '12px' }}>
+                          <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
                             {entry.totalXp?.toLocaleString() || 0}
                           </td>
                         </tr>
@@ -6559,35 +6551,34 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               return (
                 <div style={{ 
                   background: 'rgba(0, 0, 0, 0.7)',
-                  padding: isMobile ? '8px' : '12px',
+                  padding: '12px',
                   borderRadius: '8px',
                   border: '2px solid #33ffff',
                   boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
                   flex: '2', // Ocupa dos casilleros
-                  minWidth: isMobile ? 'auto' : '600px',
-                  width: isMobile ? '100%' : 'auto'
+                  minWidth: isMobile ? 'auto' : '600px'
                 }}>
                   <h2 style={{ 
                     color: '#33ffff', 
                     textShadow: '0 0 20px #33ffff', 
                     textAlign: 'center',
-                    marginBottom: isMobile ? '6px' : '10px',
-                    fontSize: isMobile ? '12px' : '14px'
+                    marginBottom: '10px',
+                    fontSize: '14px'
                   }}>
                     🔄⭐ RANKING REBIRTH & NIVEL
                   </h2>
-                  <div style={{ maxHeight: isMobile ? '150px' : '200px', overflowY: 'auto', overflowX: isMobile ? 'auto' : 'hidden' }}>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                     {combinedData.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+                      <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
                     ) : (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? '400px' : 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid #33ffff' }}>
-                            <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                            <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                            <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff3366', fontSize: isMobile ? '9px' : '11px' }}>Rebirth</th>
-                            <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>Nivel</th>
-                            <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>Niveles Totales</th>
+                            <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>#</th>
+                            <th style={{ padding: '6px', textAlign: 'left', color: '#33ffff', fontSize: '11px' }}>Usuario</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '11px' }}>Rebirth</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '11px' }}>Nivel</th>
+                            <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Niveles Totales</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -6599,19 +6590,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                                 backgroundColor: entry.username === user?.username ? 'rgba(51, 255, 255, 0.1)' : 'transparent'
                               }}
                             >
-                              <td style={{ padding: isMobile ? '4px' : '6px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: isMobile ? '10px' : '12px' }}>
+                              <td style={{ padding: '6px', color: index < 3 ? '#33ffff' : '#FFD700', fontSize: '12px' }}>
                                 {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                               </td>
-                              <td style={{ padding: isMobile ? '4px' : '6px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: isMobile ? '10px' : '12px' }}>
+                              <td style={{ padding: '6px', color: entry.username === user?.username ? '#33ffff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
                                 {entry.username}
                               </td>
-                              <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff3366', fontSize: isMobile ? '10px' : '12px' }}>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#ff3366', fontSize: '12px' }}>
                                 {entry.rebirthCount || 0}
                               </td>
-                              <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '10px' : '12px' }}>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
                                 {entry.highestLevel || 1}
                               </td>
-                              <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '10px' : '12px' }}>
+                              <td style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>
                                 {entry.totalSessions || 0}
                               </td>
                             </tr>
@@ -6629,39 +6620,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             <div style={{ 
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
-              gap: isMobile ? '10px' : '20px',
+              gap: '20px',
               width: '100%'
             }}>
               {/* Ranking por XP Total */}
               <div style={{ 
                 background: 'rgba(0, 0, 0, 0.7)',
-                padding: isMobile ? '8px' : '20px',
+                padding: '20px',
                 borderRadius: '8px',
                 border: '2px solid #00ff88',
                 boxShadow: '0 0 30px rgba(0, 255, 136, 0.3)',
                 flex: '1',
-                minWidth: isMobile ? 'auto' : '300px',
-                width: isMobile ? '100%' : 'auto'
+                minWidth: isMobile ? 'auto' : '300px'
               }}>
                 <h2 style={{ 
                   color: '#00ff88', 
                   textShadow: '0 0 20px #00ff88', 
                   textAlign: 'center',
-                  marginBottom: isMobile ? '6px' : '10px',
-                  fontSize: isMobile ? '12px' : '14px'
+                  marginBottom: '10px',
+                  fontSize: '14px'
                 }}>
                   💎 XP TOTAL
                 </h2>
-                <div style={{ maxHeight: isMobile ? '150px' : '200px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                   {leaderboardByTotalXP.length === 0 ? (
-                    <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #00ff88' }}>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#00ff88', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#00ff88', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#00ff88', fontSize: isMobile ? '9px' : '11px' }}>XP</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#00ff88', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#00ff88', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#00ff88', fontSize: '11px' }}>XP</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6673,13 +6663,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               backgroundColor: entry.username === user?.username ? 'rgba(0, 255, 136, 0.1)' : 'transparent'
                             }}
                           >
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: index < 3 ? '#00ff88' : '#33ffff', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: index < 3 ? '#00ff88' : '#33ffff', fontSize: '12px' }}>
                               {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: entry.username === user?.username ? '#00ff88' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#00ff88' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
                               {entry.username}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#33ffff', fontSize: '12px' }}>
                               {entry.totalXp?.toLocaleString() || 0}
                             </td>
                           </tr>
@@ -6693,33 +6683,32 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               {/* Ranking por Estrellas Totales */}
               <div style={{ 
                 background: 'rgba(0, 0, 0, 0.7)',
-                padding: isMobile ? '8px' : '12px',
+                padding: '12px',
                 borderRadius: '8px',
                 border: '2px solid #FFD700',
                 boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
                 flex: '1',
-                minWidth: isMobile ? 'auto' : '300px',
-                width: isMobile ? '100%' : 'auto'
+                minWidth: isMobile ? 'auto' : '300px'
               }}>
                 <h2 style={{ 
                   color: '#FFD700', 
                   textShadow: '0 0 20px #FFD700', 
                   textAlign: 'center',
-                  marginBottom: isMobile ? '6px' : '10px',
-                  fontSize: isMobile ? '12px' : '14px'
+                  marginBottom: '10px',
+                  fontSize: '14px'
                 }}>
                   ⭐ ESTRELLAS TOTALES
                 </h2>
-                <div style={{ maxHeight: isMobile ? '150px' : '200px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                   {leaderboardByTotalStars.length === 0 ? (
-                    <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>Estrellas</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#FFD700', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#FFD700', fontSize: '11px' }}>Estrellas</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6731,13 +6720,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
                             }}
                           >
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: index < 3 ? '#FFD700' : '#ffff00', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: index < 3 ? '#FFD700' : '#ffff00', fontSize: '12px' }}>
                               {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
                               {entry.username}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ffff00', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#ffff00', fontSize: '12px' }}>
                               {entry.totalStars?.toLocaleString() || 0}
                             </td>
                           </tr>
@@ -6751,33 +6740,32 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               {/* Ranking por Serie */}
               <div style={{ 
                 background: 'rgba(0, 0, 0, 0.7)',
-                padding: isMobile ? '8px' : '20px',
+                padding: '20px',
                 borderRadius: '8px',
                 border: '2px solid #ff00ff',
                 boxShadow: '0 0 30px rgba(255, 0, 255, 0.3)',
                 flex: '1',
-                minWidth: isMobile ? 'auto' : '300px',
-                width: isMobile ? '100%' : 'auto'
+                minWidth: isMobile ? 'auto' : '300px'
               }}>
                 <h2 style={{ 
                   color: '#ff00ff', 
                   textShadow: '0 0 20px #ff00ff', 
                   textAlign: 'center',
-                  marginBottom: isMobile ? '6px' : '10px',
-                  fontSize: isMobile ? '12px' : '14px'
+                  marginBottom: '10px',
+                  fontSize: '14px'
                 }}>
                   🔢 SERIE
                 </h2>
-                <div style={{ maxHeight: isMobile ? '150px' : '200px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                   {leaderboardBySeries.length === 0 ? (
-                    <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+                    <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Cargando...</p>
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #ff00ff' }}>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#ff00ff', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#ff00ff', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                          <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff00ff', fontSize: isMobile ? '9px' : '11px' }}>Serie</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#ff00ff', fontSize: '11px' }}>#</th>
+                          <th style={{ padding: '6px', textAlign: 'left', color: '#ff00ff', fontSize: '11px' }}>Usuario</th>
+                          <th style={{ padding: '6px', textAlign: 'right', color: '#ff00ff', fontSize: '11px' }}>Serie</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6789,13 +6777,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               backgroundColor: entry.username === user?.username ? 'rgba(255, 0, 255, 0.1)' : 'transparent'
                             }}
                           >
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: index < 3 ? '#ff00ff' : '#ff88ff', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: index < 3 ? '#ff00ff' : '#ff88ff', fontSize: '12px' }}>
                               {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', color: entry.username === user?.username ? '#ff00ff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', color: entry.username === user?.username ? '#ff00ff' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '12px' }}>
                               {entry.username}
                             </td>
-                            <td style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff88ff', fontSize: isMobile ? '10px' : '12px' }}>
+                            <td style={{ padding: '6px', textAlign: 'right', color: '#ff88ff', fontSize: '12px' }}>
                               {entry.currentSeries || 1}
                             </td>
                           </tr>
@@ -6809,9 +6797,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
 
             {/* Chat */}
             <div style={{ 
-              marginTop: isMobile ? '10px' : '15px',
+              marginTop: '15px',
               background: 'rgba(0, 0, 0, 0.8)',
-              padding: isMobile ? '8px' : '12px',
+              padding: '12px',
               borderRadius: '8px',
               border: '2px solid #33ffff',
               boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
@@ -6821,8 +6809,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 color: '#33ffff', 
                 textShadow: '0 0 20px #33ffff', 
                 textAlign: 'center',
-                marginBottom: isMobile ? '6px' : '10px',
-                fontSize: isMobile ? '12px' : '14px'
+                marginBottom: '10px',
+                fontSize: '14px'
               }}>
                 💬 CHAT
               </h2>
@@ -7847,29 +7835,168 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         );
       })()}
 
-      {gameState === 'gameComplete' && victoryData && (
+      {gameState === 'levelComplete' && (
         <div style={{ 
           display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          gap: '30px',
           width: '100%',
-          maxWidth: '800px',
-          padding: '40px',
-          gap: '30px'
+          maxWidth: '1200px',
+          padding: '20px',
+          alignItems: 'flex-start'
         }}>
-          {/* Pantalla de Victoria */}
+          {/* Left side: Level complete info */}
+        <div style={{ 
+          textAlign: 'center',
+          background: 'rgba(0, 0, 0, 0.9)',
+          padding: '40px',
+          borderRadius: '10px',
+          border: '2px solid #00ff88',
+          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
+            zIndex: 100,
+            flex: '0 0 400px'
+        }}>
+          <Sparkles size={64} style={{ color: '#00ff88' }} />
+          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
+            ¡NIVEL COMPLETADO!
+          </h2>
+          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
+          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <button 
+            onClick={nextLevel}
+            style={{
+              background: 'transparent',
+              border: '2px solid #00ff88',
+              color: '#00ff88',
+              padding: '15px 40px',
+                fontSize: '20px',
+              cursor: 'pointer',
+              borderRadius: '5px',
+              textShadow: '0 0 10px #00ff88',
+                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+            }}
+          >
+            SIGUIENTE NIVEL
+          </button>
+            <button 
+              onClick={() => {
+                setGameState('playing');
+                setShopOpen(true);
+              }}
+              style={{
+                background: 'transparent',
+                border: '2px solid #ff00ff',
+                color: '#ff00ff',
+                padding: '15px 40px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                borderRadius: '5px',
+                textShadow: '0 0 10px #ff00ff',
+                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              IR A LA TIENDA
+          </button>
+            </div>
+          </div>
+
+          {/* Right side: Leaderboards */}
           <div style={{ 
-            textAlign: 'center',
-            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
-            padding: '60px',
-            borderRadius: '20px',
-            border: '3px solid #FFD700',
-            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
-            width: '100%'
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '30px',
+            flex: '1',
+            minWidth: '300px'
           }}>
-            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
-            <h1 style={{
+            {/* Primera fila: 3 rankings arriba */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '20px',
+              width: '100%',
+              flexWrap: 'wrap'
+            }}>
+            {/* Ranking por XP */}
+            <div style={{ 
+              background: 'rgba(0, 0, 0, 0.7)',
+              padding: '20px',
+              borderRadius: '10px',
+              border: '2px solid #FFD700',
+              boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
+              flex: '1',
+              minWidth: '250px'
+            }}>
+              <h2 style={{ 
+                color: '#FFD700', 
+                textShadow: '0 0 20px #FFD700', 
+                textAlign: 'center',
+                marginBottom: '15px',
+                fontSize: '20px'
+              }}>
+                🏆 RANKING XP
+              </h2>
+              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                {leaderboard.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #FFD700' }}>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
+                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
+                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((entry, index) => (
+                        <tr 
+                          key={index}
+                          style={{ 
+                            borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+                            backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
+                          }}
+                        >
+                          <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '13px' }}>
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                          </td>
+                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
+                            {entry.username}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
+                            {entry.totalXp?.toLocaleString() || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Ranking combinado: Rebirth, Nivel y Niveles Totales */}
+            {(() => {
+              // Combinar datos de ambos leaderboards
+              const combinedData = [];
+              const userMap = new Map();
+              
+              // Agregar datos de rebirth
+              leaderboardByRebirth.forEach(entry => {
                 userMap.set(entry.username, {
                   username: entry.username,
                   rebirthCount: entry.rebirthCount || 0,
@@ -8569,8 +8696,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             width={CANVAS_WIDTH} 
             height={CANVAS_HEIGHT}
             style={{
-              width: '100%',
-              height: '100%',
+              width: isMobile ? '100%' : '100%',
+              height: isMobile ? '100%' : '100%',
               border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
               boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
