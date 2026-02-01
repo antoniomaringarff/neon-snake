@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge, Heart, Palette, Rocket } from 'lucide-react';
 import AdminPanel from './components/AdminPanel';
+import Leaderboards from './components/Leaderboards';
+import ChatBox from './components/ChatBox';
+import GameOverScreen from './screens/GameOverScreen';
+import VictoryScreen from './screens/VictoryScreen';
 
 // Configuración de niveles - cada nivel tiene características particulares
 // Esta función ahora usa los niveles cargados desde la DB si están disponibles
@@ -5081,14 +5085,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             </span>
           </div>
           
-          {/* Íconos de specs durante partida - solo desktop */}
-          {!isMobile && (
-            <div style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              alignItems: 'center'
-            }}>
-              {/* Skin actual - abre skins */}
+          {/* Íconos de specs durante partida */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '8px', 
+            alignItems: 'center'
+          }}>
+            {/* Skin actual - abre skins */}
               <div 
                 onClick={() => setShowFloatingShop('skins')}
                 style={{ 
@@ -5275,8 +5278,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <Heart size={iconSize} style={{ color: '#ff6464' }} />
                 <span style={{ fontSize: iconTextSize, color: '#ff6464' }}>{healthLevel}</span>
               </div>
-            </div>
-          )}
+          </div>
           
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
           {isAdmin && (
@@ -5942,11 +5944,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column',
-      height: '100vh',
+      height: gameState === 'playing' ? '100vh' : 'auto',
+      minHeight: '100vh',
       background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
       color: '#33ffff',
       fontFamily: 'monospace',
-      overflow: 'hidden'
+      overflow: gameState === 'playing' ? 'hidden' : 'auto'
     }}>
       {/* Admin Panel */}
       {showAdminPanel && (
@@ -6261,15 +6264,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         alignItems: 'center',
         justifyContent: isMobile && gameState === 'menu' ? 'flex-start' : 'center',
         padding: gameState === 'playing' ? '0' : (isMobile ? '10px' : '20px'),
-        overflow: gameState === 'playing' ? 'hidden' : 'auto',
+        paddingBottom: gameState === 'playing' ? '0' : (isMobile ? '20px' : '40px'),
+        overflow: gameState === 'playing' ? 'hidden' : 'visible',
         position: 'relative',
         width: '100%',
-        height: '100%',
-        minHeight: isMobile ? 'auto' : '100%',
+        minHeight: 0,
         WebkitOverflowScrolling: 'touch' // Smooth scrolling en iOS
       }}>
 
-      {gameState === 'menu' && (
+      {(gameState === 'menu' || gameState === 'levelComplete') && (
         <div style={{ 
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
@@ -6290,8 +6293,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           background: 'rgba(0, 0, 0, 0.7)',
           padding: '30px',
           borderRadius: '10px',
-          border: '2px solid #33ffff',
-          boxShadow: '0 0 30px rgba(51, 255, 255, 0.3)',
+          border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
+          boxShadow: gameState === 'levelComplete' ? '0 0 30px rgba(0, 255, 136, 0.3)' : '0 0 30px rgba(51, 255, 255, 0.3)',
           width: isMobile ? '100%' : 'auto',
           minWidth: isMobile ? 'auto' : '400px',
           flex: isMobile ? 'none' : '0 0 400px',
@@ -6300,24 +6303,41 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           justifyContent: 'space-between',
           alignSelf: 'stretch' // Ocupa toda la altura disponible
         }}>
-          {/* Logo y texto arriba */}
+          {/* Logo y texto arriba o mensaje de nivel completado */}
           <div style={{ flex: '0 0 auto' }}>
-            <img 
-              src="/logo.png" 
-              alt="Neon Snake" 
-              style={{ 
-                width: '100%', 
-                maxWidth: '400px', 
-                height: 'auto',
-                marginBottom: '20px',
-                filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
-              }} 
-            />
-            <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
-              Mueve el mouse/trackpad para controlar tu serpiente<br/>
-              Come puntos brillantes para ganar XP<br/>
-              ⭐ Recoge estrellas para avanzar de nivel
-            </p>
+            {gameState === 'levelComplete' ? (
+              <>
+                <Sparkles size={64} style={{ color: '#00ff88', display: 'block', margin: '0 auto 20px' }} />
+                <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px', fontSize: '32px' }}>
+                  ¡NIVEL COMPLETADO!
+                </h2>
+                <p style={{ fontSize: '24px', marginBottom: '20px', color: '#33ffff' }}>
+                  ⭐ Estrellas: {gameRef.current.currentStars}
+                </p>
+                <p style={{ fontSize: '20px', marginBottom: '0', color: '#33ffff' }}>
+                  XP Ganado: {gameRef.current.sessionXP}
+                </p>
+              </>
+            ) : (
+              <>
+                <img 
+                  src="/logo.png" 
+                  alt="Neon Snake" 
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '400px', 
+                    height: 'auto',
+                    marginBottom: '20px',
+                    filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
+                  }} 
+                />
+                <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
+                  Mueve el mouse/trackpad para controlar tu serpiente<br/>
+                  Come puntos brillantes para ganar XP<br/>
+                  ⭐ Recoge estrellas para avanzar de nivel
+                </p>
+              </>
+            )}
           </div>
           
           {/* Botones abajo - siempre contra el fondo */}
@@ -6394,31 +6414,31 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </button>
             </div>
             
-            {/* Fila inferior: JUGAR (grande, ancho completo) */}
+            {/* Fila inferior: JUGAR o SIGUIENTE NIVEL (grande, ancho completo) */}
             <button 
-              onClick={startGame}
+              onClick={gameState === 'levelComplete' ? nextLevel : startGame}
               style={{
                 background: 'transparent',
-                border: '2px solid #33ffff',
-                color: '#33ffff',
+                border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
+                color: gameState === 'levelComplete' ? '#00ff88' : '#33ffff',
                 padding: '20px 40px',
                 fontSize: '24px',
                 cursor: 'pointer',
                 borderRadius: '5px',
-                textShadow: '0 0 10px #33ffff',
-                boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                textShadow: gameState === 'levelComplete' ? '0 0 10px #00ff88' : '0 0 10px #33ffff',
+                boxShadow: gameState === 'levelComplete' ? '0 0 20px rgba(0, 255, 136, 0.5)' : '0 0 20px rgba(51, 255, 255, 0.5)',
                 width: '100%',
                 transition: 'all 0.3s',
                 fontWeight: 'bold'
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.1)';
+                e.target.style.background = gameState === 'levelComplete' ? 'rgba(0, 255, 136, 0.1)' : 'rgba(51, 255, 255, 0.1)';
               }}
               onMouseLeave={(e) => {
                 e.target.style.background = 'transparent';
               }}
             >
-              JUGAR
+              {gameState === 'levelComplete' ? 'SIGUIENTE NIVEL' : 'JUGAR'}
             </button>
           </div>
         </div>
@@ -7827,168 +7847,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         );
       })()}
 
-      {gameState === 'levelComplete' && (
+      {gameState === 'gameComplete' && victoryData && (
         <div style={{ 
           display: 'flex',
-          gap: '30px',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
           width: '100%',
-          maxWidth: '1200px',
-          padding: '20px',
-          alignItems: 'flex-start'
-        }}>
-          {/* Left side: Level complete info */}
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.9)',
+          maxWidth: '800px',
           padding: '40px',
-          borderRadius: '10px',
-          border: '2px solid #00ff88',
-          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
-            zIndex: 100,
-            flex: '0 0 400px'
+          gap: '30px'
         }}>
-          <Sparkles size={64} style={{ color: '#00ff88' }} />
-          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
-            ¡NIVEL COMPLETADO!
-          </h2>
-          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
-          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <button 
-            onClick={nextLevel}
-            style={{
-              background: 'transparent',
-              border: '2px solid #00ff88',
-              color: '#00ff88',
-              padding: '15px 40px',
-                fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #00ff88',
-                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-            }}
-          >
-            SIGUIENTE NIVEL
-          </button>
-            <button 
-              onClick={() => {
-                setGameState('playing');
-                setShopOpen(true);
-              }}
-              style={{
-                background: 'transparent',
-                border: '2px solid #ff00ff',
-                color: '#ff00ff',
-                padding: '15px 40px',
-                fontSize: '20px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #ff00ff',
-                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              IR A LA TIENDA
-          </button>
-            </div>
-          </div>
-
-          {/* Right side: Leaderboards */}
+          {/* Pantalla de Victoria */}
           <div style={{ 
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '30px',
-            flex: '1',
-            minWidth: '300px'
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 255, 0.2))',
+            padding: '60px',
+            borderRadius: '20px',
+            border: '3px solid #FFD700',
+            boxShadow: '0 0 50px rgba(255, 215, 0, 0.8), inset 0 0 30px rgba(255, 215, 0, 0.3)',
+            width: '100%'
           }}>
-            {/* Primera fila: 3 rankings arriba */}
-            <div style={{ 
-              display: 'flex',
-              flexDirection: 'row',
-              gap: '20px',
-              width: '100%',
-              flexWrap: 'wrap'
-            }}>
-            {/* Ranking por XP */}
-            <div style={{ 
-              background: 'rgba(0, 0, 0, 0.7)',
-              padding: '20px',
-              borderRadius: '10px',
-              border: '2px solid #FFD700',
-              boxShadow: '0 0 30px rgba(255, 215, 0, 0.3)',
-              flex: '1',
-              minWidth: '250px'
-            }}>
-              <h2 style={{ 
-                color: '#FFD700', 
-                textShadow: '0 0 20px #FFD700', 
-                textAlign: 'center',
-                marginBottom: '15px',
-                fontSize: '20px'
-              }}>
-                🏆 RANKING XP
-              </h2>
-              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-                {leaderboard.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#888' }}>Cargando...</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #FFD700' }}>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>#</th>
-                        <th style={{ padding: '8px', textAlign: 'left', color: '#FFD700', fontSize: '12px' }}>Usuario</th>
-                        <th style={{ padding: '8px', textAlign: 'right', color: '#FFD700', fontSize: '12px' }}>XP</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboard.map((entry, index) => (
-                        <tr 
-                          key={index}
-                          style={{ 
-                            borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-                            backgroundColor: entry.username === user?.username ? 'rgba(255, 215, 0, 0.1)' : 'transparent'
-                          }}
-                        >
-                          <td style={{ padding: '8px', color: index < 3 ? '#FFD700' : '#33ffff', fontSize: '13px' }}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </td>
-                          <td style={{ padding: '8px', color: entry.username === user?.username ? '#FFD700' : '#fff', fontWeight: entry.username === user?.username ? 'bold' : 'normal', fontSize: '13px' }}>
-                            {entry.username}
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'right', color: '#33ffff', fontSize: '13px' }}>
-                            {entry.totalXp?.toLocaleString() || 0}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* Ranking combinado: Rebirth, Nivel y Niveles Totales */}
-            {(() => {
-              // Combinar datos de ambos leaderboards
-              const combinedData = [];
-              const userMap = new Map();
-              
-              // Agregar datos de rebirth
-              leaderboardByRebirth.forEach(entry => {
+            <div style={{ fontSize: '80px', marginBottom: '20px' }}>🎉🏆🎉</div>
+            <h1 style={{
                 userMap.set(entry.username, {
                   username: entry.username,
                   rebirthCount: entry.rebirthCount || 0,
@@ -8674,21 +8555,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       {gameState === 'playing' && (
         <div style={{
           width: '100%',
-          height: '100%',
+          flex: 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
           overflow: 'hidden',
-          backgroundColor: '#0a0a0a'
+          backgroundColor: '#0a0a0a',
+          minHeight: 0
         }}>
           <canvas 
             ref={canvasRef} 
             width={CANVAS_WIDTH} 
             height={CANVAS_HEIGHT}
             style={{
-              width: isMobile ? '100%' : '100%',
-              height: isMobile ? '100%' : '100%',
+              width: '100%',
+              height: '100%',
               border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
               boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
