@@ -207,4 +207,72 @@ export default async function usersRoutes(fastify, options) {
       throw error;
     }
   });
+
+  // Get game levels (public endpoint for all authenticated users)
+  fastify.get('/levels', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const result = await query(
+        `SELECT 
+          gl.id,
+          gl.level_number,
+          gl.stars_needed,
+          gl.player_speed,
+          gl.enemy_speed,
+          gl.enemy_count,
+          gl.enemy_density,
+          gl.enemy_shoot_percentage,
+          gl.enemy_shield_percentage,
+          gl.enemy_shoot_cooldown,
+          gl.xp_density,
+          gl.xp_points,
+          gl.map_size,
+          gl.structures_count,
+          gl.killer_saw_count,
+          gl.floating_cannon_count,
+          gl.resentful_snake_count,
+          gl.health_box_count,
+          gl.enemy_upgrade_level,
+          gl.background_type,
+          gl.structure_id,
+          gl.has_central_cell,
+          gl.central_cell_opening_speed,
+          gs.name as structure_name
+        FROM game_levels gl
+        LEFT JOIN game_structures gs ON gl.structure_id = gs.id
+        ORDER BY gl.level_number`
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        levelNumber: row.level_number,
+        starsNeeded: row.stars_needed,
+        playerSpeed: parseFloat(row.player_speed),
+        enemySpeed: parseFloat(row.enemy_speed),
+        enemyCount: row.enemy_count,
+        enemyDensity: row.enemy_density,
+        enemyShootPercentage: row.enemy_shoot_percentage,
+        enemyShieldPercentage: row.enemy_shield_percentage,
+        enemyShootCooldown: row.enemy_shoot_cooldown,
+        xpDensity: row.xp_density,
+        xpPoints: row.xp_points,
+        mapSize: row.map_size,
+        structuresCount: row.structures_count,
+        killerSawCount: row.killer_saw_count,
+        floatingCannonCount: row.floating_cannon_count,
+        resentfulSnakeCount: row.resentful_snake_count,
+        healthBoxCount: row.health_box_count,
+        enemyUpgradeLevel: row.enemy_upgrade_level,
+        backgroundType: row.background_type,
+        structureId: row.structure_id,
+        structureName: row.structure_name,
+        hasCentralCell: row.has_central_cell,
+        centralCellOpeningSpeed: parseFloat(row.central_cell_opening_speed) || 0.5
+      }));
+    } catch (error) {
+      console.error('Error getting levels:', error);
+      throw error;
+    }
+  });
 }

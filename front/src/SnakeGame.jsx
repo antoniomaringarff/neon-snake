@@ -1010,7 +1010,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   // Load level configurations from API
   const loadLevelConfigs = async () => {
     try {
-      const response = await fetch('/api/admin/levels', {
+      // Use public endpoint for all users, admin endpoint only for editing
+      const response = await fetch('/api/users/levels', {
         headers: getAuthHeaders()
       });
       if (response.ok) {
