@@ -1840,17 +1840,24 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       console.log(`🗺️ Mapa nivel ${game.level}: mapSize=${levelConfig.mapSize}, BASE_UNIT=${BASE_UNIT}, worldSize=${worldSize}px`);
       console.log(`🎨 Skin seleccionada: ${selectedSkin}`);
       
-      // Posición inicial del jugador (centro del canvas visible)
-      const playerStartX = CANVAS_WIDTH / 2;
-      const playerStartY = CANVAS_HEIGHT / 2;
+      // Posición inicial del jugador (centro del MUNDO, no del canvas visible)
+      // Esto asegura que siempre empiece en una zona segura del mapa
+      const playerStartX = worldSize / 2;
+      const playerStartY = worldSize / 2;
       game.snake = [{ x: playerStartX, y: playerStartY }];
-      game.direction = { x: 1, y: 0 };
-      game.nextDirection = { x: 1, y: 0 };
+      
+      // Dirección inicial aleatoria para variedad
+      const randomAngle = Math.random() * Math.PI * 2;
+      game.direction = { 
+        x: Math.cos(randomAngle), 
+        y: Math.sin(randomAngle) 
+      };
+      game.nextDirection = { ...game.direction };
       game.food = Array.from({ length: levelConfig.xpPoints }, createFood);
       game.stars = []; // Reset stars
       
       // Crear enemigos asegurándose de que no estén demasiado cerca del jugador al inicio
-      const minDistanceFromPlayer = 150; // Distancia mínima del jugador al inicio
+      const minDistanceFromPlayer = 300; // Distancia mínima del jugador al inicio (aumentada para más seguridad)
       game.enemies = [];
       let attempts = 0;
       const maxAttempts = levelConfig.enemyCount * 10; // Máximo de intentos para evitar loops infinitos
@@ -4829,6 +4836,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.resentfulSnakes = [];
     gameRef.current.healthBoxes = [];
     gameRef.current.structures = [];
+    // Resetear dirección para evitar estado residual
+    gameRef.current.direction = { x: 1, y: 0 };
+    gameRef.current.nextDirection = { x: 1, y: 0 };
+    
+    // Resetear joystick para evitar movimiento residual
+    joystickRef.current.isActive = false;
+    joystickRef.current.direction = { x: 0, y: 0 };
+    joystickRef.current.intensity = 0;
+    setJoystickActive(false);
+    setJoystickDirection({ x: 0, y: 0 });
     
     gameRef.current.level = level;
     const levelConfig = getLevelConfig(level, levelConfigs);
@@ -8681,7 +8698,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               // Save progress before returning to menu
               // NO resetear el nivel - mantener el nivel alcanzado
               saveUserProgress();
-              // Resetear el estado del juego para que se reinicie completamente cuando se vuelva a jugar
+              // Resetear el estado del juego COMPLETAMENTE para que se reinicie desde cero
               gameRef.current.gameStartTime = null;
               gameRef.current.enemies = [];
               gameRef.current.snake = [];
@@ -8694,6 +8711,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               gameRef.current.resentfulSnakes = [];
               gameRef.current.healthBoxes = [];
               gameRef.current.structures = [];
+              // Resetear dirección para evitar estado residual
+              gameRef.current.direction = { x: 1, y: 0 };
+              gameRef.current.nextDirection = { x: 1, y: 0 };
+              // Resetear joystick
+              joystickRef.current.isActive = false;
+              joystickRef.current.direction = { x: 0, y: 0 };
+              joystickRef.current.intensity = 0;
+              setJoystickActive(false);
+              setJoystickDirection({ x: 0, y: 0 });
               setGameState('menu');
             }}
             style={{
