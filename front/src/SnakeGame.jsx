@@ -6262,43 +6262,45 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       {(gameState === 'menu' || gameState === 'levelComplete') && (
         <div style={{ 
           display: 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: '20px',
+          flexDirection: (isMobile && !isLandscape) ? 'column' : 'row',
+          gap: (isMobile && isLandscape) ? '15px' : '20px',
           width: '100%',
           maxWidth: '1200px',
-          padding: '20px',
-          alignItems: isMobile ? 'center' : 'stretch',
+          padding: (isMobile && isLandscape) ? '10px' : '20px',
+          alignItems: (isMobile && !isLandscape) ? 'center' : 'stretch',
           justifyContent: 'center',
           height: '100%'
         }}>
-          {/* Left side: Main action buttons */}
+          {/* Left side: Logo/Info */}
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.7)',
-          padding: '30px',
+          padding: (isMobile && isLandscape) ? '15px' : '30px',
           borderRadius: '10px',
           border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
           boxShadow: gameState === 'levelComplete' ? '0 0 30px rgba(0, 255, 136, 0.3)' : '0 0 30px rgba(51, 255, 255, 0.3)',
-          width: isMobile ? '100%' : 'auto',
+          width: (isMobile && !isLandscape) ? '100%' : 'auto',
           minWidth: isMobile ? 'auto' : '400px',
-          flex: isMobile ? 'none' : '0 0 400px',
+          flex: (isMobile && isLandscape) ? '1' : (isMobile ? 'none' : '0 0 400px'),
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          alignSelf: 'stretch' // Ocupa toda la altura disponible
+          flexDirection: (isMobile && isLandscape) ? 'row' : 'column',
+          justifyContent: (isMobile && isLandscape) ? 'space-between' : 'space-between',
+          alignItems: (isMobile && isLandscape) ? 'center' : 'stretch',
+          gap: (isMobile && isLandscape) ? '20px' : '0',
+          alignSelf: 'stretch'
         }}>
-          {/* Logo y texto arriba o mensaje de nivel completado */}
-          <div style={{ flex: '0 0 auto' }}>
+          {/* Logo y texto */}
+          <div style={{ flex: (isMobile && isLandscape) ? '1' : '0 0 auto' }}>
             {gameState === 'levelComplete' ? (
               <>
-                <Sparkles size={64} style={{ color: '#00ff88', display: 'block', margin: '0 auto 20px' }} />
-                <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px', fontSize: '32px' }}>
+                <Sparkles size={(isMobile && isLandscape) ? 40 : 64} style={{ color: '#00ff88', display: 'block', margin: '0 auto 10px' }} />
+                <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '10px', fontSize: (isMobile && isLandscape) ? '20px' : '32px' }}>
                   ¡NIVEL COMPLETADO!
                 </h2>
-                <p style={{ fontSize: '24px', marginBottom: '20px', color: '#33ffff' }}>
+                <p style={{ fontSize: (isMobile && isLandscape) ? '16px' : '24px', marginBottom: '10px', color: '#33ffff' }}>
                   ⭐ Estrellas: {gameRef.current.currentStars}
                 </p>
-                <p style={{ fontSize: '20px', marginBottom: '0', color: '#33ffff' }}>
+                <p style={{ fontSize: (isMobile && isLandscape) ? '14px' : '20px', marginBottom: '0', color: '#33ffff' }}>
                   XP Ganado: {gameRef.current.sessionXP}
                 </p>
               </>
@@ -6309,35 +6311,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   alt="Neon Snake" 
                   style={{ 
                     width: '100%', 
-                    maxWidth: '400px', 
+                    maxWidth: (isMobile && isLandscape) ? '200px' : '400px', 
                     height: 'auto',
-                    marginBottom: '20px',
+                    marginBottom: (isMobile && isLandscape) ? '10px' : '20px',
                     filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
                   }} 
                 />
-                <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
-                  Mueve el mouse/trackpad para controlar tu serpiente<br/>
-                  Come puntos brillantes para ganar XP<br/>
-                  ⭐ Recoge estrellas para avanzar de nivel
-                </p>
+                {!(isMobile && isLandscape) && (
+                  <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
+                    Mueve el mouse/trackpad para controlar tu serpiente<br/>
+                    Come puntos brillantes para ganar XP<br/>
+                    ⭐ Recoge estrellas para avanzar de nivel
+                  </p>
+                )}
               </>
             )}
           </div>
           
-          {/* Botones abajo - siempre contra el fondo */}
+          {/* Botones - al lado en landscape, abajo en portrait */}
           <div style={{ 
             display: 'flex', 
             flexDirection: 'column',
-            gap: '15px',
-            width: '100%',
-            marginTop: 'auto',
-            flex: '0 0 auto'
+            gap: (isMobile && isLandscape) ? '8px' : '15px',
+            width: (isMobile && isLandscape) ? 'auto' : '100%',
+            minWidth: (isMobile && isLandscape) ? '140px' : 'auto',
+            marginTop: (isMobile && isLandscape) ? '0' : 'auto',
+            flex: '0 0 auto',
+            justifyContent: 'center'
           }}>
-            {/* Fila superior: TIENDA y SKINS (más chicos) */}
+            {/* TIENDA y SKINS */}
             <div style={{ 
               display: 'flex', 
-              gap: '15px', 
-              flexDirection: isMobile ? 'column' : 'row'
+              gap: (isMobile && isLandscape) ? '8px' : '15px', 
+              flexDirection: (isMobile && isLandscape) ? 'column' : (isMobile ? 'column' : 'row')
             }}>
               <button 
                 onClick={() => {
@@ -6348,14 +6354,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '2px solid #ff00ff',
                   color: '#ff00ff',
-                  padding: '10px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '6px 12px' : '10px 20px',
+                  fontSize: (isMobile && isLandscape) ? '12px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   textShadow: '0 0 10px #ff00ff',
                   boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : 'auto',
+                  flex: (isMobile && isLandscape) ? 'none' : (isMobile ? 'none' : 1),
+                  minWidth: (isMobile && !isLandscape) ? '100%' : 'auto',
                   transition: 'all 0.3s'
                 }}
                 onMouseEnter={(e) => {
@@ -6377,14 +6383,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '2px solid #FFD700',
                   color: '#FFD700',
-                  padding: '10px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '6px 12px' : '10px 20px',
+                  fontSize: (isMobile && isLandscape) ? '12px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   textShadow: '0 0 10px #FFD700',
                   boxShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
-                  flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : 'auto',
+                  flex: (isMobile && isLandscape) ? 'none' : (isMobile ? 'none' : 1),
+                  minWidth: (isMobile && !isLandscape) ? '100%' : 'auto',
                   transition: 'all 0.3s'
                 }}
                 onMouseEnter={(e) => {
@@ -6398,20 +6404,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </button>
             </div>
             
-            {/* Fila inferior: JUGAR o SIGUIENTE NIVEL (grande, ancho completo) */}
+            {/* Botón JUGAR o SIGUIENTE NIVEL */}
             <button 
               onClick={gameState === 'levelComplete' ? nextLevel : startGame}
               style={{
                 background: 'transparent',
                 border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
                 color: gameState === 'levelComplete' ? '#00ff88' : '#33ffff',
-                padding: '20px 40px',
-                fontSize: '24px',
+                padding: (isMobile && isLandscape) ? '8px 16px' : '20px 40px',
+                fontSize: (isMobile && isLandscape) ? '14px' : '24px',
                 cursor: 'pointer',
                 borderRadius: '5px',
                 textShadow: gameState === 'levelComplete' ? '0 0 10px #00ff88' : '0 0 10px #33ffff',
                 boxShadow: gameState === 'levelComplete' ? '0 0 20px rgba(0, 255, 136, 0.5)' : '0 0 20px rgba(51, 255, 255, 0.5)',
-                width: '100%',
+                width: (isMobile && isLandscape) ? 'auto' : '100%',
                 transition: 'all 0.3s',
                 fontWeight: 'bold'
               }}
@@ -6427,7 +6433,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           </div>
         </div>
 
-          {/* Right side: Leaderboards */}
+          {/* Right side: Leaderboards - ocultar en mobile landscape */}
+          {!(isMobile && isLandscape) && (
           <div style={{ 
             display: 'flex',
             flexDirection: 'column',
@@ -6908,6 +6915,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
