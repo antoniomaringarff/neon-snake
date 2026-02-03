@@ -5115,7 +5115,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             </span>
           </div>
           
-          {/* Íconos de specs durante partida */}
+          {/* Íconos de specs durante partida - solo en landscape si es mobile */}
+          {(!isMobile || isLandscape) && (
           <div style={{ 
             display: 'flex', 
             gap: '8px', 
@@ -5309,8 +5310,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <span style={{ fontSize: iconTextSize, color: '#ff6464' }}>{healthLevel}</span>
               </div>
           </div>
+          )}
           
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: isMobile && !isLandscape ? '0' : '20px' }}>
           {isAdmin && (
             <button
               onClick={() => setShowAdminPanel(true)}
