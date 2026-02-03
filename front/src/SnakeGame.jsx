@@ -6262,14 +6262,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       {(gameState === 'menu' || gameState === 'levelComplete') && (
         <div style={{ 
           display: 'flex',
-          flexDirection: (isMobile && !isLandscape) ? 'column' : 'row',
-          gap: (isMobile && isLandscape) ? '15px' : '20px',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: (isMobile && isLandscape) ? '10px' : '20px',
           width: '100%',
           maxWidth: '1200px',
           padding: (isMobile && isLandscape) ? '10px' : '20px',
-          alignItems: (isMobile && !isLandscape) ? 'center' : 'stretch',
+          alignItems: isMobile ? 'center' : 'stretch',
           justifyContent: 'center',
-          height: '100%'
+          height: isMobile ? 'auto' : '100%'
         }}>
           {/* Left side: Logo/Info */}
         <div style={{ 
@@ -6433,8 +6433,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           </div>
         </div>
 
-          {/* Right side: Leaderboards - ocultar en mobile landscape */}
-          {!(isMobile && isLandscape) && (
+          {/* Leaderboards - debajo en mobile landscape, al lado en desktop */}
           <div style={{ 
             display: 'flex',
             flexDirection: 'column',
@@ -6915,7 +6914,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             </div>
           </div>
-          )}
         </div>
       )}
 
