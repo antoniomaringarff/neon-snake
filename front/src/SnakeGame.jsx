@@ -128,15 +128,23 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
 const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUntil = null, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
   
   // Calculate canvas dimensions based on screen size
   // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
   // En desktop: usar tamaño fijo 800x600
   const getCanvasDimensions = () => {
     if (window.innerWidth <= 768) {
-      // Mobile: usar todo el ancho y casi toda la altura
-      const width = window.innerWidth - 4; // Pequeño margen para el borde
-      const height = window.innerHeight - 80; // Solo dejar espacio mínimo para header
+      // Mobile landscape: usar todo el espacio disponible menos los controles
+      if (window.innerWidth > window.innerHeight) {
+        const controlWidth = 120; // Ancho de cada control (izq y der)
+        const width = window.innerWidth - (controlWidth * 2) - 20; // Espacio para controles
+        const height = window.innerHeight - 50; // Header mínimo
+        return { width: Math.floor(width), height: Math.floor(height) };
+      }
+      // Mobile portrait: dimensiones normales (aunque se mostrará mensaje de rotar)
+      const width = window.innerWidth - 4;
+      const height = window.innerHeight - 80;
       return { width: Math.floor(width), height: Math.floor(height) };
     }
     return { width: 800, height: 600 };
@@ -144,14 +152,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   
   const [canvasDimensions, setCanvasDimensions] = useState(getCanvasDimensions());
   
-  // Update dimensions on resize
+  // Update dimensions and orientation on resize
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
+      setIsLandscape(window.innerWidth > window.innerHeight);
       setCanvasDimensions(getCanvasDimensions());
     };
+    
+    const handleOrientationChange = () => {
+      // Pequeño delay para que el navegador actualice las dimensiones
+      setTimeout(() => {
+        setIsLandscape(window.innerWidth > window.innerHeight);
+        setCanvasDimensions(getCanvasDimensions());
+      }, 100);
+    };
+    
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleOrientationChange);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
   }, []);
   
   // Dynamic canvas dimensions
@@ -8690,38 +8713,44 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           position: 'relative',
           overflow: 'hidden',
           backgroundColor: '#0a0a0a',
-          minHeight: 0
+          minHeight: 0,
+          // En mobile landscape, dejar espacio para los controles laterales
+          paddingLeft: (isMobile && isLandscape) ? '120px' : '0',
+          paddingRight: (isMobile && isLandscape) ? '120px' : '0'
         }}>
           <canvas 
             ref={canvasRef} 
             width={CANVAS_WIDTH} 
             height={CANVAS_HEIGHT}
             style={{
-              width: isMobile ? '100%' : '100%',
-              height: isMobile ? '100%' : '100%',
+              width: (isMobile && isLandscape) ? '100%' : (isMobile ? '100%' : '100%'),
+              height: (isMobile && isLandscape) ? '100%' : (isMobile ? '100%' : '100%'),
+              maxWidth: '100%',
+              maxHeight: '100%',
               border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
               boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
               display: 'block',
               imageRendering: 'pixelated',
-              touchAction: 'none', // Prevent default touch behaviors
-              WebkitTouchCallout: 'none', // Prevent iOS callout
-              WebkitUserSelect: 'none', // Prevent text selection
+              touchAction: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
               userSelect: 'none'
             }}
           />
           
-          {/* Mobile Controls */}
-          {isMobile && gameState === 'playing' && (
+          {/* Mobile Landscape Controls - Joystick LEFT, Shoot RIGHT */}
+          {isMobile && gameState === 'playing' && isLandscape && (
             <>
-              {/* Joystick - Bottom Right */}
+              {/* Joystick - LEFT side */}
               <div
                 style={{
                   position: 'absolute',
-                  bottom: '20px',
-                  right: '20px',
-                  width: '120px',
-                  height: '120px',
+                  left: '15px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '100px',
+                  height: '100px',
                   pointerEvents: 'none',
                   zIndex: 100
                 }}
@@ -8730,8 +8759,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <div
                   style={{
                     position: 'absolute',
-                    width: '120px',
-                    height: '120px',
+                    width: '100px',
+                    height: '100px',
                     borderRadius: '50%',
                     background: 'rgba(51, 255, 255, 0.2)',
                     border: '2px solid rgba(51, 255, 255, 0.5)',
@@ -8745,8 +8774,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <div
                   style={{
                     position: 'absolute',
-                    width: '50px',
-                    height: '50px',
+                    width: '45px',
+                    height: '45px',
                     borderRadius: '50%',
                     background: joystickActive 
                       ? 'rgba(51, 255, 255, 0.9)' 
@@ -8756,10 +8785,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       ? '0 0 20px rgba(51, 255, 255, 0.8)' 
                       : '0 0 10px rgba(51, 255, 255, 0.4)',
                     left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.x * 35}px`
+                      ? `${50 + joystickDirection.x * 27}px`
                       : '50%',
                     top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.y * 35}px`
+                      ? `${50 + joystickDirection.y * 27}px`
                       : '50%',
                     transform: 'translate(-50%, -50%)',
                     transition: joystickActive ? 'none' : 'all 0.2s ease-out',
@@ -8768,15 +8797,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 />
               </div>
 
-              {/* Shoot Button - Bottom Left */}
+              {/* Shoot Button - RIGHT side */}
               {cannonLevel > 0 && (
                 <button
                   onTouchStart={(e) => {
                     e.stopPropagation();
                     if (!isShootingRef.current && shootBulletRef.current) {
                       isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                      shootBulletRef.current();
+                      if (startAutoFireRef.current) startAutoFireRef.current();
                     }
                   }}
                   onTouchEnd={(e) => {
@@ -8789,16 +8818,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   }}
                   style={{
                     position: 'absolute',
-                    bottom: '25px',
-                    left: '25px',
-                    width: '60px',
-                    height: '60px',
+                    right: '25px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '80px',
+                    height: '80px',
                     borderRadius: '50%',
                     background: 'rgba(255, 51, 102, 0.6)',
-                    border: '2px solid rgba(255, 51, 102, 0.8)',
+                    border: '3px solid rgba(255, 51, 102, 0.8)',
                     color: '#fff',
                     cursor: 'pointer',
-                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+                    boxShadow: '0 0 20px rgba(255, 51, 102, 0.5)',
                     zIndex: 100,
                     display: 'flex',
                     alignItems: 'center',
@@ -8807,15 +8837,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     WebkitTapHighlightColor: 'transparent',
                     userSelect: 'none',
                     transition: 'all 0.1s ease',
-                    fontSize: '0',
+                    fontSize: '24px',
                     padding: '0'
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     if (!isShootingRef.current && shootBulletRef.current) {
                       isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                      shootBulletRef.current();
+                      if (startAutoFireRef.current) startAutoFireRef.current();
                     }
                   }}
                   onMouseUp={(e) => {
@@ -8826,9 +8856,80 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     if (stopAutoFireRef.current) stopAutoFireRef.current();
                   }}
                   title="Disparar (mantener para auto-fire)"
-                />
+                >
+                  🎯
+                </button>
               )}
             </>
+          )}
+          
+          {/* Mobile Portrait - Show rotate message */}
+          {isMobile && gameState === 'playing' && !isLandscape && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.95)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '20px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ 
+                fontSize: '80px', 
+                marginBottom: '20px',
+                animation: 'rotate-phone 1.5s ease-in-out infinite'
+              }}>
+                📱
+              </div>
+              <style>
+                {`
+                  @keyframes rotate-phone {
+                    0%, 100% { transform: rotate(0deg); }
+                    25% { transform: rotate(-30deg); }
+                    75% { transform: rotate(30deg); }
+                  }
+                `}
+              </style>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff',
+                fontSize: '24px',
+                marginBottom: '15px'
+              }}>
+                ¡Gira tu teléfono!
+              </h2>
+              <p style={{ 
+                color: '#aaa', 
+                fontSize: '16px',
+                maxWidth: '280px',
+                lineHeight: '1.5'
+              }}>
+                Para una mejor experiencia, juega en modo horizontal (landscape)
+              </p>
+              <div style={{
+                marginTop: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '20px',
+                color: '#666'
+              }}>
+                <span style={{ fontSize: '40px', opacity: 0.5 }}>📱</span>
+                <span style={{ fontSize: '24px' }}>→</span>
+                <span style={{ 
+                  fontSize: '40px', 
+                  transform: 'rotate(90deg)',
+                  color: '#33ffff'
+                }}>📱</span>
+              </div>
+            </div>
           )}
           
           {shopOpen && (
