@@ -6921,14 +6921,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.95)',
-          padding: '30px',
-          borderRadius: '10px',
+          padding: (isMobile && isLandscape) ? '10px 15px' : '30px',
+          borderRadius: (isMobile && isLandscape) ? '5px' : '10px',
           border: activeShopTab === 'shop' ? '3px solid #ff00ff' : '3px solid #FFD700',
           boxShadow: activeShopTab === 'shop' ? '0 0 40px rgba(255, 0, 255, 0.5)' : '0 0 40px rgba(255, 215, 0, 0.5)',
           maxWidth: '1400px',
-          width: '100%',
-          margin: '20px auto',
-          maxHeight: 'calc(100vh - 200px)',
+          width: (isMobile && isLandscape) ? 'calc(100% - 20px)' : '100%',
+          margin: (isMobile && isLandscape) ? '5px auto' : '20px auto',
+          maxHeight: (isMobile && isLandscape) ? 'none' : 'calc(100vh - 200px)',
+          minHeight: (isMobile && isLandscape) ? 'calc(100vh - 60px)' : 'auto',
           overflowY: 'auto',
           position: 'relative'
         }}>
@@ -6937,8 +6938,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            marginBottom: '20px',
-            gap: '15px'
+            marginBottom: (isMobile && isLandscape) ? '10px' : '20px',
+            gap: (isMobile && isLandscape) ? '8px' : '15px'
           }}>
             {/* Pestañas a la izquierda */}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -6951,8 +6952,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: activeShopTab === 'shop' ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
                   border: '2px solid #ff00ff',
                   color: '#ff00ff',
-                  padding: '8px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '5px 12px' : '8px 20px',
+                  fontSize: (isMobile && isLandscape) ? '11px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   transition: 'all 0.3s',
@@ -6981,8 +6982,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: activeShopTab === 'skins' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
                   border: '2px solid #FFD700',
                   color: '#FFD700',
-                  padding: '8px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '5px 12px' : '8px 20px',
+                  fontSize: (isMobile && isLandscape) ? '11px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   transition: 'all 0.3s',
@@ -7390,14 +7391,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 color: '#FFD700', 
                 textShadow: '0 0 20px #FFD700', 
                 textAlign: 'center', 
-                fontSize: '24px',
-                marginBottom: '15px'
+                fontSize: (isMobile && isLandscape) ? '16px' : '24px',
+                marginBottom: (isMobile && isLandscape) ? '8px' : '15px'
               }}>
                 🎨 TIENDA DE SKINS
               </h2>
               <p style={{ 
-                fontSize: '16px', 
-                marginBottom: '20px', 
+                fontSize: (isMobile && isLandscape) ? '12px' : '16px', 
+                marginBottom: (isMobile && isLandscape) ? '10px' : '20px', 
                 textAlign: 'center',
                 color: '#aaa'
               }}>
@@ -7406,9 +7407,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-              gap: '20px',
-              marginTop: '20px'
+              gridTemplateColumns: (isMobile && isLandscape) ? 'repeat(auto-fill, minmax(150px, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))', 
+              gap: (isMobile && isLandscape) ? '10px' : '20px',
+              marginTop: (isMobile && isLandscape) ? '10px' : '20px'
             }}>
               {Object.entries(SKINS)
                 .sort(([, a], [, b]) => {
@@ -7456,8 +7457,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     key={key}
                     style={{
                       border: isSelected ? '3px solid #FFD700' : isUnlocked ? '2px solid #00ff88' : `2px solid ${getCategoryColor()}`,
-                      borderRadius: '10px',
-                      padding: '15px',
+                      borderRadius: (isMobile && isLandscape) ? '6px' : '10px',
+                      padding: (isMobile && isLandscape) ? '8px' : '15px',
                       background: isSelected 
                         ? 'rgba(255, 215, 0, 0.2)' 
                         : isUnlocked 
@@ -7466,7 +7467,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '10px',
+                      gap: (isMobile && isLandscape) ? '5px' : '10px',
                       position: 'relative',
                       opacity: isUnlocked || canAfford ? 1 : 0.6
                     }}
