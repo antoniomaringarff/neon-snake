@@ -988,10 +988,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     };
   };
 
-  // Detect mobile screen size
+  // Detect mobile screen size - usar detectMobile() consistentemente
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(detectMobile());
+      setIsLandscape(window.innerWidth > window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
