@@ -5369,112 +5369,70 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     const iconTextSize = isMobile ? '10px' : '12px';
     
     if (isMobile) {
-      // Mobile layout: column
+      // Mobile layout: horizontal compacto para landscape, más espaciado para portrait
       return (
         <div style={{
           width: '100%',
           background: 'rgba(0, 0, 0, 0.95)',
           borderBottom: '2px solid #33ffff',
-          padding: headerPadding,
+          padding: isLandscape ? '4px 10px' : headerPadding,
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
-          zIndex: 1000,
-          gap: '8px'
+          zIndex: 1000
         }}>
+          {/* Info del usuario - lado izquierdo */}
           <div style={{ 
             display: 'flex', 
-            gap: gap, 
+            gap: isLandscape ? '12px' : gap, 
             alignItems: 'center', 
-            flexWrap: 'wrap',
-            width: '100%'
+            flexWrap: 'nowrap',
+            overflow: 'hidden'
           }}>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Usuario</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {user?.username || 'Usuario'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>XP Total</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {totalXP}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>⭐ Total</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
                 {totalStars}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Nivel</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {level}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Serie</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
                 {currentSeries}
               </div>
             </div>
             {rebirthCount > 0 && (
               <div>
-                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+                <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Rebirth</div>
+                <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: isLandscape ? '12px' : '16px', height: isLandscape ? '12px' : '16px' }} /> {rebirthCount}
                 </div>
               </div>
             )}
           </div>
-          {gameState === 'playing' && (
-            <div style={{ width: '100%' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
-                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 80, 80, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
-                  height: '100%',
-                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
-                  boxShadow: '0 0 10px #ff5050',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'flex-end',
-            alignItems: 'center', 
-            width: '100%'
-          }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          
+          {/* Botones - lado derecho */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
             {isAdmin && (
               <button
                 onClick={() => setShowAdminPanel(true)}
@@ -5482,8 +5440,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '1px solid #33ffff',
                   color: '#33ffff',
-                  padding: '4px 8px',
-                  fontSize: '10px',
+                  padding: isLandscape ? '3px 6px' : '4px 8px',
+                  fontSize: isLandscape ? '9px' : '10px',
                   cursor: 'pointer',
                   borderRadius: '3px',
                   transition: 'all 0.3s'
@@ -5498,28 +5456,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 Admin
               </button>
             )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-                  padding: '4px 8px',
-                  fontSize: '10px',
-              cursor: 'pointer',
-                  borderRadius: '3px',
-                  transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-                Salir
-          </button>
-          </div>
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                padding: isLandscape ? '3px 6px' : '4px 8px',
+                fontSize: isLandscape ? '9px' : '10px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Salir
+            </button>
           </div>
         </div>
       );
