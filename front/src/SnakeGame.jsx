@@ -8690,10 +8690,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           position: 'relative',
           overflow: 'hidden',
           backgroundColor: '#0a0a0a',
-          minHeight: 0,
-          // En mobile landscape, dejar espacio para los controles laterales
-          paddingLeft: (isMobile && isLandscape) ? '120px' : '0',
-          paddingRight: (isMobile && isLandscape) ? '120px' : '0'
+          minHeight: 0
         }}>
           <canvas 
             ref={canvasRef} 
@@ -8716,16 +8713,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             }}
           />
           
-          {/* Mobile Landscape Controls - Joystick LEFT, Shoot RIGHT */}
+          {/* Mobile Landscape Controls - Shoot LEFT, Joystick RIGHT - floating over canvas */}
           {isMobile && gameState === 'playing' && isLandscape && (
             <>
-              {/* Joystick - LEFT side */}
+              {/* Joystick - RIGHT side, bottom */}
               <div
                 style={{
                   position: 'absolute',
-                  left: '15px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
+                  right: '20px',
+                  bottom: '20px',
                   width: '100px',
                   height: '100px',
                   pointerEvents: 'none',
@@ -8774,7 +8770,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 />
               </div>
 
-              {/* Shoot Button - RIGHT side */}
+              {/* Shoot Button - LEFT side, bottom */}
               {cannonLevel > 0 && (
                 <button
                   onTouchStart={(e) => {
@@ -8795,9 +8791,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   }}
                   style={{
                     position: 'absolute',
-                    right: '25px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
+                    left: '20px',
+                    bottom: '20px',
                     width: '80px',
                     height: '80px',
                     borderRadius: '50%',
