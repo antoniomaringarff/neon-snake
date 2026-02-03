@@ -127,14 +127,24 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
 
 const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUntil = null, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // Detectar mobile: pantalla pequeña O dispositivo táctil con pantalla no muy grande
+  const detectMobile = () => {
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const smallScreen = window.innerWidth <= 768 || window.innerHeight <= 500;
+    const mediumScreenWithTouch = hasTouch && (window.innerWidth <= 1024 || window.innerHeight <= 768);
+    return smallScreen || mediumScreenWithTouch;
+  };
+  
+  const [isMobile, setIsMobile] = useState(detectMobile());
   const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
   
   // Calculate canvas dimensions based on screen size
   // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
   // En desktop: usar tamaño fijo 800x600
   const getCanvasDimensions = () => {
-    if (window.innerWidth <= 768) {
+    const mobile = detectMobile();
+    if (mobile) {
       // Mobile landscape: usar todo el espacio disponible menos los controles
       if (window.innerWidth > window.innerHeight) {
         const controlWidth = 120; // Ancho de cada control (izq y der)
@@ -155,7 +165,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   // Update dimensions and orientation on resize
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(detectMobile());
       setIsLandscape(window.innerWidth > window.innerHeight);
       setCanvasDimensions(getCanvasDimensions());
     };
