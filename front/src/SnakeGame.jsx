@@ -4727,15 +4727,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         });
       }
       
-      // === CONTROLES - Abajo izquierda, muy simple ===
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = '12px monospace';
-      ctx.fillText('[J] Tienda', 15, CANVAS_HEIGHT - 25);
-      
-      if (cannonLevel > 0) {
-        ctx.fillStyle = '#00ff00';
-        ctx.fillText(`[ESPACIO] Disparar`, 120, CANVAS_HEIGHT - 25);
-      }
     };
 
     // Game loop
