@@ -127,16 +127,34 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
 
 const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUntil = null, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  
+  // Detectar mobile: pantalla pequeña O dispositivo táctil con pantalla no muy grande
+  const detectMobile = () => {
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const smallScreen = window.innerWidth <= 768 || window.innerHeight <= 500;
+    const mediumScreenWithTouch = hasTouch && (window.innerWidth <= 1024 || window.innerHeight <= 768);
+    return smallScreen || mediumScreenWithTouch;
+  };
+  
+  const [isMobile, setIsMobile] = useState(detectMobile());
+  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
   
   // Calculate canvas dimensions based on screen size
   // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
   // En desktop: usar tamaño fijo 800x600
   const getCanvasDimensions = () => {
-    if (window.innerWidth <= 768) {
-      // Mobile: usar todo el ancho y casi toda la altura
-      const width = window.innerWidth - 4; // Pequeño margen para el borde
-      const height = window.innerHeight - 80; // Solo dejar espacio mínimo para header
+    const mobile = detectMobile();
+    if (mobile) {
+      // Mobile landscape: usar todo el espacio disponible menos los controles
+      if (window.innerWidth > window.innerHeight) {
+        const controlWidth = 120; // Ancho de cada control (izq y der)
+        const width = window.innerWidth - (controlWidth * 2) - 20; // Espacio para controles
+        const height = window.innerHeight - 50; // Header mínimo
+        return { width: Math.floor(width), height: Math.floor(height) };
+      }
+      // Mobile portrait: dimensiones normales (aunque se mostrará mensaje de rotar)
+      const width = window.innerWidth - 4;
+      const height = window.innerHeight - 80;
       return { width: Math.floor(width), height: Math.floor(height) };
     }
     return { width: 800, height: 600 };
@@ -144,14 +162,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   
   const [canvasDimensions, setCanvasDimensions] = useState(getCanvasDimensions());
   
-  // Update dimensions on resize
+  // Update dimensions and orientation on resize
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(detectMobile());
+      setIsLandscape(window.innerWidth > window.innerHeight);
       setCanvasDimensions(getCanvasDimensions());
     };
+    
+    const handleOrientationChange = () => {
+      // Pequeño delay para que el navegador actualice las dimensiones
+      setTimeout(() => {
+        setIsLandscape(window.innerWidth > window.innerHeight);
+        setCanvasDimensions(getCanvasDimensions());
+      }, 100);
+    };
+    
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleOrientationChange);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
   }, []);
   
   // Dynamic canvas dimensions
@@ -955,10 +988,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     };
   };
 
-  // Detect mobile screen size
+  // Detect mobile screen size - usar detectMobile() consistentemente
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(detectMobile());
+      setIsLandscape(window.innerWidth > window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -4693,15 +4727,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         });
       }
       
-      // === CONTROLES - Abajo izquierda, muy simple ===
-      ctx.fillStyle = '#ff00ff';
-      ctx.font = '12px monospace';
-      ctx.fillText('[J] Tienda', 15, CANVAS_HEIGHT - 25);
-      
-      if (cannonLevel > 0) {
-        ctx.fillStyle = '#00ff00';
-        ctx.fillText(`[ESPACIO] Disparar`, 120, CANVAS_HEIGHT - 25);
-      }
     };
 
     // Game loop
@@ -5082,7 +5107,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             </span>
           </div>
           
-          {/* Íconos de specs durante partida */}
+          {/* Íconos de specs durante partida - solo en landscape si es mobile */}
+          {(!isMobile || isLandscape) && (
           <div style={{ 
             display: 'flex', 
             gap: '8px', 
@@ -5276,8 +5302,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <span style={{ fontSize: iconTextSize, color: '#ff6464' }}>{healthLevel}</span>
               </div>
           </div>
+          )}
           
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: isMobile && !isLandscape ? '0' : '20px' }}>
           {isAdmin && (
             <button
               onClick={() => setShowAdminPanel(true)}
@@ -5336,112 +5363,70 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     const iconTextSize = isMobile ? '10px' : '12px';
     
     if (isMobile) {
-      // Mobile layout: column
+      // Mobile layout: horizontal compacto para landscape, más espaciado para portrait
       return (
         <div style={{
           width: '100%',
           background: 'rgba(0, 0, 0, 0.95)',
           borderBottom: '2px solid #33ffff',
-          padding: headerPadding,
+          padding: isLandscape ? '4px 10px' : headerPadding,
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           boxShadow: '0 2px 20px rgba(51, 255, 255, 0.3)',
-          zIndex: 1000,
-          gap: '8px'
+          zIndex: 1000
         }}>
+          {/* Info del usuario - lado izquierdo */}
           <div style={{ 
             display: 'flex', 
-            gap: gap, 
+            gap: isLandscape ? '12px' : gap, 
             alignItems: 'center', 
-            flexWrap: 'wrap',
-            width: '100%'
+            flexWrap: 'nowrap',
+            overflow: 'hidden'
           }}>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Usuario</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {user?.username || 'Usuario'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>XP Total</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {totalXP}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>⭐ Total</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
                 {totalStars}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Nivel</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {level}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
-              <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Serie</div>
+              <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
                 {currentSeries}
               </div>
             </div>
             {rebirthCount > 0 && (
               <div>
-                <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
-                <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
+                <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Rebirth</div>
+                <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: isLandscape ? '12px' : '16px', height: isLandscape ? '12px' : '16px' }} /> {rebirthCount}
                 </div>
               </div>
             )}
           </div>
-          {gameState === 'playing' && (
-            <div style={{ width: '100%' }}>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso: ⭐ {game.currentStars} / {game.starsNeeded}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 215, 0, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${(game.currentStars / game.starsNeeded) * 100}%`,
-                  height: '100%',
-                  background: '#FFD700',
-                  boxShadow: '0 0 10px #FFD700',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
-                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
-              </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255, 80, 80, 0.2)',
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${Math.max(0, (game.currentHealth / game.maxHealth) * 100)}%`,
-                  height: '100%',
-                  background: game.currentHealth / game.maxHealth > 0.3 ? '#ff5050' : '#ff2222',
-                  boxShadow: '0 0 10px #ff5050',
-                  transition: 'width 0.3s'
-                }} />
-              </div>
-            </div>
-          )}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'flex-end',
-            alignItems: 'center', 
-            width: '100%'
-          }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          
+          {/* Botones - lado derecho */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
             {isAdmin && (
               <button
                 onClick={() => setShowAdminPanel(true)}
@@ -5449,8 +5434,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '1px solid #33ffff',
                   color: '#33ffff',
-                  padding: '4px 8px',
-                  fontSize: '10px',
+                  padding: isLandscape ? '3px 6px' : '4px 8px',
+                  fontSize: isLandscape ? '9px' : '10px',
                   cursor: 'pointer',
                   borderRadius: '3px',
                   transition: 'all 0.3s'
@@ -5465,28 +5450,27 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 Admin
               </button>
             )}
-          <button
-            onClick={onLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid #ff3366',
-              color: '#ff3366',
-                  padding: '4px 8px',
-                  fontSize: '10px',
-              cursor: 'pointer',
-                  borderRadius: '3px',
-                  transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 51, 102, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'transparent';
-            }}
-          >
-                Salir
-          </button>
-          </div>
+            <button
+              onClick={onLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid #ff3366',
+                color: '#ff3366',
+                padding: isLandscape ? '3px 6px' : '4px 8px',
+                fontSize: isLandscape ? '9px' : '10px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 51, 102, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Salir
+            </button>
           </div>
         </div>
       );
@@ -6273,42 +6257,44 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         <div style={{ 
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          gap: '20px',
+          gap: (isMobile && isLandscape) ? '10px' : '20px',
           width: '100%',
           maxWidth: '1200px',
-          padding: '20px',
+          padding: (isMobile && isLandscape) ? '10px' : '20px',
           alignItems: isMobile ? 'center' : 'stretch',
           justifyContent: 'center',
-          height: '100%'
+          height: isMobile ? 'auto' : '100%'
         }}>
-          {/* Left side: Main action buttons */}
+          {/* Left side: Logo/Info */}
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.7)',
-          padding: '30px',
+          padding: (isMobile && isLandscape) ? '15px' : '30px',
           borderRadius: '10px',
           border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
           boxShadow: gameState === 'levelComplete' ? '0 0 30px rgba(0, 255, 136, 0.3)' : '0 0 30px rgba(51, 255, 255, 0.3)',
-          width: isMobile ? '100%' : 'auto',
+          width: (isMobile && !isLandscape) ? '100%' : 'auto',
           minWidth: isMobile ? 'auto' : '400px',
-          flex: isMobile ? 'none' : '0 0 400px',
+          flex: (isMobile && isLandscape) ? '1' : (isMobile ? 'none' : '0 0 400px'),
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          alignSelf: 'stretch' // Ocupa toda la altura disponible
+          flexDirection: (isMobile && isLandscape) ? 'row' : 'column',
+          justifyContent: (isMobile && isLandscape) ? 'space-between' : 'space-between',
+          alignItems: (isMobile && isLandscape) ? 'center' : 'stretch',
+          gap: (isMobile && isLandscape) ? '20px' : '0',
+          alignSelf: 'stretch'
         }}>
-          {/* Logo y texto arriba o mensaje de nivel completado */}
-          <div style={{ flex: '0 0 auto' }}>
+          {/* Logo y texto */}
+          <div style={{ flex: (isMobile && isLandscape) ? '1' : '0 0 auto' }}>
             {gameState === 'levelComplete' ? (
               <>
-                <Sparkles size={64} style={{ color: '#00ff88', display: 'block', margin: '0 auto 20px' }} />
-                <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px', fontSize: '32px' }}>
+                <Sparkles size={(isMobile && isLandscape) ? 40 : 64} style={{ color: '#00ff88', display: 'block', margin: '0 auto 10px' }} />
+                <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '10px', fontSize: (isMobile && isLandscape) ? '20px' : '32px' }}>
                   ¡NIVEL COMPLETADO!
                 </h2>
-                <p style={{ fontSize: '24px', marginBottom: '20px', color: '#33ffff' }}>
+                <p style={{ fontSize: (isMobile && isLandscape) ? '16px' : '24px', marginBottom: '10px', color: '#33ffff' }}>
                   ⭐ Estrellas: {gameRef.current.currentStars}
                 </p>
-                <p style={{ fontSize: '20px', marginBottom: '0', color: '#33ffff' }}>
+                <p style={{ fontSize: (isMobile && isLandscape) ? '14px' : '20px', marginBottom: '0', color: '#33ffff' }}>
                   XP Ganado: {gameRef.current.sessionXP}
                 </p>
               </>
@@ -6319,35 +6305,39 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   alt="Neon Snake" 
                   style={{ 
                     width: '100%', 
-                    maxWidth: '400px', 
+                    maxWidth: (isMobile && isLandscape) ? '200px' : '400px', 
                     height: 'auto',
-                    marginBottom: '20px',
+                    marginBottom: (isMobile && isLandscape) ? '10px' : '20px',
                     filter: 'drop-shadow(0 0 20px rgba(0, 255, 0, 0.5))'
                   }} 
                 />
-                <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
-                  Mueve el mouse/trackpad para controlar tu serpiente<br/>
-                  Come puntos brillantes para ganar XP<br/>
-                  ⭐ Recoge estrellas para avanzar de nivel
-                </p>
+                {!(isMobile && isLandscape) && (
+                  <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
+                    Mueve el mouse/trackpad para controlar tu serpiente<br/>
+                    Come puntos brillantes para ganar XP<br/>
+                    ⭐ Recoge estrellas para avanzar de nivel
+                  </p>
+                )}
               </>
             )}
           </div>
           
-          {/* Botones abajo - siempre contra el fondo */}
+          {/* Botones - al lado en landscape, abajo en portrait */}
           <div style={{ 
             display: 'flex', 
             flexDirection: 'column',
-            gap: '15px',
-            width: '100%',
-            marginTop: 'auto',
-            flex: '0 0 auto'
+            gap: (isMobile && isLandscape) ? '8px' : '15px',
+            width: (isMobile && isLandscape) ? 'auto' : '100%',
+            minWidth: (isMobile && isLandscape) ? '140px' : 'auto',
+            marginTop: (isMobile && isLandscape) ? '0' : 'auto',
+            flex: '0 0 auto',
+            justifyContent: 'center'
           }}>
-            {/* Fila superior: TIENDA y SKINS (más chicos) */}
+            {/* TIENDA y SKINS */}
             <div style={{ 
               display: 'flex', 
-              gap: '15px', 
-              flexDirection: isMobile ? 'column' : 'row'
+              gap: (isMobile && isLandscape) ? '8px' : '15px', 
+              flexDirection: (isMobile && isLandscape) ? 'column' : (isMobile ? 'column' : 'row')
             }}>
               <button 
                 onClick={() => {
@@ -6358,14 +6348,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '2px solid #ff00ff',
                   color: '#ff00ff',
-                  padding: '10px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '6px 12px' : '10px 20px',
+                  fontSize: (isMobile && isLandscape) ? '12px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   textShadow: '0 0 10px #ff00ff',
                   boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : 'auto',
+                  flex: (isMobile && isLandscape) ? 'none' : (isMobile ? 'none' : 1),
+                  minWidth: (isMobile && !isLandscape) ? '100%' : 'auto',
                   transition: 'all 0.3s'
                 }}
                 onMouseEnter={(e) => {
@@ -6387,14 +6377,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: 'transparent',
                   border: '2px solid #FFD700',
                   color: '#FFD700',
-                  padding: '10px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '6px 12px' : '10px 20px',
+                  fontSize: (isMobile && isLandscape) ? '12px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   textShadow: '0 0 10px #FFD700',
                   boxShadow: '0 0 20px rgba(255, 215, 0, 0.5)',
-                  flex: isMobile ? 'none' : 1,
-                  minWidth: isMobile ? '100%' : 'auto',
+                  flex: (isMobile && isLandscape) ? 'none' : (isMobile ? 'none' : 1),
+                  minWidth: (isMobile && !isLandscape) ? '100%' : 'auto',
                   transition: 'all 0.3s'
                 }}
                 onMouseEnter={(e) => {
@@ -6408,20 +6398,20 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </button>
             </div>
             
-            {/* Fila inferior: JUGAR o SIGUIENTE NIVEL (grande, ancho completo) */}
+            {/* Botón JUGAR o SIGUIENTE NIVEL */}
             <button 
               onClick={gameState === 'levelComplete' ? nextLevel : startGame}
               style={{
                 background: 'transparent',
                 border: gameState === 'levelComplete' ? '2px solid #00ff88' : '2px solid #33ffff',
                 color: gameState === 'levelComplete' ? '#00ff88' : '#33ffff',
-                padding: '20px 40px',
-                fontSize: '24px',
+                padding: (isMobile && isLandscape) ? '8px 16px' : '20px 40px',
+                fontSize: (isMobile && isLandscape) ? '14px' : '24px',
                 cursor: 'pointer',
                 borderRadius: '5px',
                 textShadow: gameState === 'levelComplete' ? '0 0 10px #00ff88' : '0 0 10px #33ffff',
                 boxShadow: gameState === 'levelComplete' ? '0 0 20px rgba(0, 255, 136, 0.5)' : '0 0 20px rgba(51, 255, 255, 0.5)',
-                width: '100%',
+                width: (isMobile && isLandscape) ? 'auto' : '100%',
                 transition: 'all 0.3s',
                 fontWeight: 'bold'
               }}
@@ -6437,7 +6427,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           </div>
         </div>
 
-          {/* Right side: Leaderboards */}
+          {/* Leaderboards - debajo en mobile landscape, al lado en desktop */}
           <div style={{ 
             display: 'flex',
             flexDirection: 'column',
@@ -6925,14 +6915,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         <div style={{ 
           textAlign: 'center',
           background: 'rgba(0, 0, 0, 0.95)',
-          padding: '30px',
-          borderRadius: '10px',
+          padding: (isMobile && isLandscape) ? '10px 15px' : '30px',
+          borderRadius: (isMobile && isLandscape) ? '5px' : '10px',
           border: activeShopTab === 'shop' ? '3px solid #ff00ff' : '3px solid #FFD700',
           boxShadow: activeShopTab === 'shop' ? '0 0 40px rgba(255, 0, 255, 0.5)' : '0 0 40px rgba(255, 215, 0, 0.5)',
           maxWidth: '1400px',
-          width: '100%',
-          margin: '20px auto',
-          maxHeight: 'calc(100vh - 200px)',
+          width: (isMobile && isLandscape) ? 'calc(100% - 20px)' : '100%',
+          margin: (isMobile && isLandscape) ? '5px auto' : '20px auto',
+          maxHeight: (isMobile && isLandscape) ? 'none' : 'calc(100vh - 200px)',
+          minHeight: (isMobile && isLandscape) ? 'calc(100vh - 60px)' : 'auto',
           overflowY: 'auto',
           position: 'relative'
         }}>
@@ -6941,8 +6932,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            marginBottom: '20px',
-            gap: '15px'
+            marginBottom: (isMobile && isLandscape) ? '10px' : '20px',
+            gap: (isMobile && isLandscape) ? '8px' : '15px'
           }}>
             {/* Pestañas a la izquierda */}
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -6955,8 +6946,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: activeShopTab === 'shop' ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
                   border: '2px solid #ff00ff',
                   color: '#ff00ff',
-                  padding: '8px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '5px 12px' : '8px 20px',
+                  fontSize: (isMobile && isLandscape) ? '11px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   transition: 'all 0.3s',
@@ -6985,8 +6976,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   background: activeShopTab === 'skins' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
                   border: '2px solid #FFD700',
                   color: '#FFD700',
-                  padding: '8px 20px',
-                  fontSize: '14px',
+                  padding: (isMobile && isLandscape) ? '5px 12px' : '8px 20px',
+                  fontSize: (isMobile && isLandscape) ? '11px' : '14px',
                   cursor: 'pointer',
                   borderRadius: '5px',
                   transition: 'all 0.3s',
@@ -7394,14 +7385,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 color: '#FFD700', 
                 textShadow: '0 0 20px #FFD700', 
                 textAlign: 'center', 
-                fontSize: '24px',
-                marginBottom: '15px'
+                fontSize: (isMobile && isLandscape) ? '16px' : '24px',
+                marginBottom: (isMobile && isLandscape) ? '8px' : '15px'
               }}>
                 🎨 TIENDA DE SKINS
               </h2>
               <p style={{ 
-                fontSize: '16px', 
-                marginBottom: '20px', 
+                fontSize: (isMobile && isLandscape) ? '12px' : '16px', 
+                marginBottom: (isMobile && isLandscape) ? '10px' : '20px', 
                 textAlign: 'center',
                 color: '#aaa'
               }}>
@@ -7410,9 +7401,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-              gap: '20px',
-              marginTop: '20px'
+              gridTemplateColumns: (isMobile && isLandscape) ? 'repeat(auto-fill, minmax(150px, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))', 
+              gap: (isMobile && isLandscape) ? '10px' : '20px',
+              marginTop: (isMobile && isLandscape) ? '10px' : '20px'
             }}>
               {Object.entries(SKINS)
                 .sort(([, a], [, b]) => {
@@ -7460,8 +7451,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     key={key}
                     style={{
                       border: isSelected ? '3px solid #FFD700' : isUnlocked ? '2px solid #00ff88' : `2px solid ${getCategoryColor()}`,
-                      borderRadius: '10px',
-                      padding: '15px',
+                      borderRadius: (isMobile && isLandscape) ? '6px' : '10px',
+                      padding: (isMobile && isLandscape) ? '8px' : '15px',
                       background: isSelected 
                         ? 'rgba(255, 215, 0, 0.2)' 
                         : isUnlocked 
@@ -7470,7 +7461,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '10px',
+                      gap: (isMobile && isLandscape) ? '5px' : '10px',
                       position: 'relative',
                       opacity: isUnlocked || canAfford ? 1 : 0.6
                     }}
@@ -7688,149 +7679,191 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         const introMessage = getLevelIntroMessage(level, levelConfigs);
         if (!introMessage) return null;
         
+        const isCompact = isMobile && isLandscape;
+        
         return (
         <div style={{ 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          maxWidth: '600px',
-          padding: '20px'
+          maxWidth: isCompact ? '95%' : '600px',
+          padding: isCompact ? '5px' : '20px',
+          height: isCompact ? 'calc(100vh - 50px)' : 'auto',
+          overflow: isCompact ? 'hidden' : 'visible'
         }}>
           <div style={{ 
             textAlign: 'center',
             background: 'rgba(0, 0, 0, 0.95)',
-            padding: '40px',
-            borderRadius: '10px',
-            border: '3px solid #33ffff',
+            padding: isCompact ? '10px 15px' : '40px',
+            borderRadius: isCompact ? '6px' : '10px',
+            border: isCompact ? '2px solid #33ffff' : '3px solid #33ffff',
             boxShadow: '0 0 40px rgba(51, 255, 255, 0.5)',
-            width: '100%'
+            width: '100%',
+            display: isCompact ? 'flex' : 'block',
+            flexDirection: isCompact ? 'row' : 'column',
+            gap: isCompact ? '15px' : '0',
+            alignItems: isCompact ? 'stretch' : 'center'
           }}>
-            {/* Título del nivel */}
-            <h1 style={{ 
-              color: '#33ffff', 
-              textShadow: '0 0 20px #33ffff', 
-              marginBottom: '10px',
-              fontSize: isMobile ? '28px' : '36px'
-            }}>
-              NIVEL {level}
-            </h1>
-            <h2 style={{ 
-              color: '#ff00ff', 
-              textShadow: '0 0 15px #ff00ff', 
-              marginBottom: '30px',
-              fontSize: isMobile ? '20px' : '24px',
-              fontStyle: 'italic'
-            }}>
-              "{introMessage.title}"
-            </h2>
-
-            {/* Objetivo */}
-            <div style={{ 
-              marginBottom: '25px',
-              padding: '15px',
-              background: 'rgba(51, 255, 255, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #33ffff'
-            }}>
-              <p style={{ 
+            {/* Columna izquierda en mobile landscape */}
+            <div style={{ flex: isCompact ? 1 : 'none' }}>
+              {/* Título del nivel */}
+              <h1 style={{ 
                 color: '#33ffff', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '5px'
+                textShadow: '0 0 20px #33ffff', 
+                marginBottom: isCompact ? '3px' : '10px',
+                fontSize: isCompact ? '18px' : (isMobile ? '28px' : '36px')
               }}>
-                OBJETIVO:
-              </p>
-              <p style={{ 
-                color: '#ffffff', 
-                fontSize: isMobile ? '18px' : '20px'
+                NIVEL {level}
+              </h1>
+              <h2 style={{ 
+                color: '#ff00ff', 
+                textShadow: '0 0 15px #ff00ff', 
+                marginBottom: isCompact ? '8px' : '30px',
+                fontSize: isCompact ? '12px' : (isMobile ? '20px' : '24px'),
+                fontStyle: 'italic'
               }}>
-                Recolecta {introMessage.objective} estrellas ⭐
-              </p>
-            </div>
+                "{introMessage.title}"
+              </h2>
 
-            {/* Peligros */}
-            <div style={{ 
-              marginBottom: '25px',
-              padding: '15px',
-              background: 'rgba(255, 0, 0, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #ff3366'
-            }}>
-              <p style={{ 
-                color: '#ff3366', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '10px'
-              }}>
-                PELIGROS:
-              </p>
-              {introMessage.dangers.map((danger, idx) => (
-                <p key={idx} style={{ 
-                  color: '#ffaaaa', 
-                  fontSize: isMobile ? '14px' : '16px',
-                  marginBottom: '5px',
-                  textAlign: 'left'
-                }}>
-                  • {danger}
-                </p>
-              ))}
-            </div>
-
-            {/* Consejo */}
-            <div style={{ 
-              marginBottom: '30px',
-              padding: '15px',
-              background: 'rgba(255, 215, 0, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #FFD700'
-            }}>
-              <p style={{ 
-                color: '#FFD700', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '10px'
-              }}>
-                CONSEJO:
-              </p>
-              <p style={{ 
-                color: '#ffffaa', 
-                fontSize: isMobile ? '14px' : '16px',
-                lineHeight: '1.5',
-                textAlign: 'left'
-              }}>
-                {introMessage.tip}
-              </p>
-            </div>
-
-            {/* Botón COMENZAR */}
-            <button 
-              onClick={beginLevel}
-              style={{
-                background: 'transparent',
-                border: '3px solid #33ffff',
-                color: '#33ffff',
-                padding: '15px 50px',
-                fontSize: isMobile ? '18px' : '22px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
+              {/* Objetivo */}
+              <div style={{ 
+                marginBottom: isCompact ? '8px' : '25px',
+                padding: isCompact ? '6px 8px' : '15px',
+                background: 'rgba(51, 255, 255, 0.1)',
                 borderRadius: '5px',
-                textShadow: '0 0 10px #33ffff',
-                boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
-                transition: 'all 0.3s',
-                width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-                e.target.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-                e.target.style.transform = 'scale(1)';
-              }}
-            >
-              COMENZAR
-            </button>
+                border: '1px solid #33ffff'
+              }}>
+                <p style={{ 
+                  color: '#33ffff', 
+                  fontSize: isCompact ? '10px' : (isMobile ? '16px' : '18px'),
+                  fontWeight: 'bold',
+                  marginBottom: isCompact ? '2px' : '5px'
+                }}>
+                  OBJETIVO:
+                </p>
+                <p style={{ 
+                  color: '#ffffff', 
+                  fontSize: isCompact ? '12px' : (isMobile ? '18px' : '20px')
+                }}>
+                  Recolecta {introMessage.objective} estrellas ⭐
+                </p>
+              </div>
+
+              {/* Botón COMENZAR - en mobile landscape va aquí */}
+              {isCompact && (
+                <button 
+                  onClick={beginLevel}
+                  style={{
+                    background: 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid #33ffff',
+                    color: '#33ffff',
+                    padding: '8px 20px',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    borderRadius: '5px',
+                    textShadow: '0 0 10px #33ffff',
+                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                    transition: 'all 0.3s',
+                    width: '100%',
+                    marginTop: '5px'
+                  }}
+                >
+                  ▶ COMENZAR
+                </button>
+              )}
+            </div>
+
+            {/* Columna derecha en mobile landscape */}
+            <div style={{ flex: isCompact ? 1 : 'none' }}>
+              {/* Peligros */}
+              <div style={{ 
+                marginBottom: isCompact ? '8px' : '25px',
+                padding: isCompact ? '6px 8px' : '15px',
+                background: 'rgba(255, 0, 0, 0.1)',
+                borderRadius: '5px',
+                border: '1px solid #ff3366'
+              }}>
+                <p style={{ 
+                  color: '#ff3366', 
+                  fontSize: isCompact ? '10px' : (isMobile ? '16px' : '18px'),
+                  fontWeight: 'bold',
+                  marginBottom: isCompact ? '4px' : '10px'
+                }}>
+                  PELIGROS:
+                </p>
+                {introMessage.dangers.map((danger, idx) => (
+                  <p key={idx} style={{ 
+                    color: '#ffaaaa', 
+                    fontSize: isCompact ? '10px' : (isMobile ? '14px' : '16px'),
+                    marginBottom: isCompact ? '2px' : '5px',
+                    textAlign: 'left'
+                  }}>
+                    • {danger}
+                  </p>
+                ))}
+              </div>
+
+              {/* Consejo - oculto en mobile landscape para ahorrar espacio */}
+              {!isCompact && (
+                <div style={{ 
+                  marginBottom: '30px',
+                  padding: '15px',
+                  background: 'rgba(255, 215, 0, 0.1)',
+                  borderRadius: '5px',
+                  border: '1px solid #FFD700'
+                }}>
+                  <p style={{ 
+                    color: '#FFD700', 
+                    fontSize: isMobile ? '16px' : '18px',
+                    fontWeight: 'bold',
+                    marginBottom: '10px'
+                  }}>
+                    CONSEJO:
+                  </p>
+                  <p style={{ 
+                    color: '#ffffaa', 
+                    fontSize: isMobile ? '14px' : '16px',
+                    lineHeight: '1.5',
+                    textAlign: 'left'
+                  }}>
+                    {introMessage.tip}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Botón COMENZAR - en desktop/mobile portrait va al final */}
+            {!isCompact && (
+              <button 
+                onClick={beginLevel}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '15px 50px',
+                  fontSize: isMobile ? '18px' : '22px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #33ffff',
+                  boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                COMENZAR
+              </button>
+            )}
           </div>
         </div>
         );
@@ -8697,31 +8730,33 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             width={CANVAS_WIDTH} 
             height={CANVAS_HEIGHT}
             style={{
-              width: isMobile ? '100%' : '100%',
-              height: isMobile ? '100%' : '100%',
+              width: (isMobile && isLandscape) ? '100%' : (isMobile ? '100%' : '100%'),
+              height: (isMobile && isLandscape) ? '100%' : (isMobile ? '100%' : '100%'),
+              maxWidth: '100%',
+              maxHeight: '100%',
               border: isMobile ? '2px solid #33ffff' : '3px solid #33ffff',
               boxShadow: isMobile ? '0 0 20px rgba(51, 255, 255, 0.4)' : '0 0 40px rgba(51, 255, 255, 0.4)',
               borderRadius: '0',
               display: 'block',
               imageRendering: 'pixelated',
-              touchAction: 'none', // Prevent default touch behaviors
-              WebkitTouchCallout: 'none', // Prevent iOS callout
-              WebkitUserSelect: 'none', // Prevent text selection
+              touchAction: 'none',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
               userSelect: 'none'
             }}
           />
           
-          {/* Mobile Controls */}
-          {isMobile && gameState === 'playing' && (
+          {/* Mobile Landscape Controls - Shoot LEFT, Joystick RIGHT - floating over canvas */}
+          {isMobile && gameState === 'playing' && isLandscape && (
             <>
-              {/* Joystick - Bottom Right */}
+              {/* Joystick - RIGHT side, bottom */}
               <div
                 style={{
                   position: 'absolute',
-                  bottom: '20px',
                   right: '20px',
-                  width: '120px',
-                  height: '120px',
+                  bottom: '20px',
+                  width: '100px',
+                  height: '100px',
                   pointerEvents: 'none',
                   zIndex: 100
                 }}
@@ -8730,8 +8765,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <div
                   style={{
                     position: 'absolute',
-                    width: '120px',
-                    height: '120px',
+                    width: '100px',
+                    height: '100px',
                     borderRadius: '50%',
                     background: 'rgba(51, 255, 255, 0.2)',
                     border: '2px solid rgba(51, 255, 255, 0.5)',
@@ -8745,8 +8780,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 <div
                   style={{
                     position: 'absolute',
-                    width: '50px',
-                    height: '50px',
+                    width: '45px',
+                    height: '45px',
                     borderRadius: '50%',
                     background: joystickActive 
                       ? 'rgba(51, 255, 255, 0.9)' 
@@ -8756,10 +8791,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                       ? '0 0 20px rgba(51, 255, 255, 0.8)' 
                       : '0 0 10px rgba(51, 255, 255, 0.4)',
                     left: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.x * 35}px`
+                      ? `${50 + joystickDirection.x * 27}px`
                       : '50%',
                     top: joystickActive && (joystickDirection.x !== 0 || joystickDirection.y !== 0)
-                      ? `${60 + joystickDirection.y * 35}px`
+                      ? `${50 + joystickDirection.y * 27}px`
                       : '50%',
                     transform: 'translate(-50%, -50%)',
                     transition: joystickActive ? 'none' : 'all 0.2s ease-out',
@@ -8768,15 +8803,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 />
               </div>
 
-              {/* Shoot Button - Bottom Left */}
+              {/* Shoot Button - LEFT side, bottom */}
               {cannonLevel > 0 && (
                 <button
                   onTouchStart={(e) => {
                     e.stopPropagation();
                     if (!isShootingRef.current && shootBulletRef.current) {
                       isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                      shootBulletRef.current();
+                      if (startAutoFireRef.current) startAutoFireRef.current();
                     }
                   }}
                   onTouchEnd={(e) => {
@@ -8789,16 +8824,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   }}
                   style={{
                     position: 'absolute',
-                    bottom: '25px',
-                    left: '25px',
-                    width: '60px',
-                    height: '60px',
+                    left: '20px',
+                    bottom: '20px',
+                    width: '80px',
+                    height: '80px',
                     borderRadius: '50%',
                     background: 'rgba(255, 51, 102, 0.6)',
-                    border: '2px solid rgba(255, 51, 102, 0.8)',
+                    border: '3px solid rgba(255, 51, 102, 0.8)',
                     color: '#fff',
                     cursor: 'pointer',
-                    boxShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+                    boxShadow: '0 0 20px rgba(255, 51, 102, 0.5)',
                     zIndex: 100,
                     display: 'flex',
                     alignItems: 'center',
@@ -8807,15 +8842,15 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     WebkitTapHighlightColor: 'transparent',
                     userSelect: 'none',
                     transition: 'all 0.1s ease',
-                    fontSize: '0',
+                    fontSize: '24px',
                     padding: '0'
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     if (!isShootingRef.current && shootBulletRef.current) {
                       isShootingRef.current = true;
-                      shootBulletRef.current(); // Disparo inmediato
-                      if (startAutoFireRef.current) startAutoFireRef.current(); // Iniciar auto-fire
+                      shootBulletRef.current();
+                      if (startAutoFireRef.current) startAutoFireRef.current();
                     }
                   }}
                   onMouseUp={(e) => {
@@ -8826,9 +8861,80 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     if (stopAutoFireRef.current) stopAutoFireRef.current();
                   }}
                   title="Disparar (mantener para auto-fire)"
-                />
+                >
+                  🎯
+                </button>
               )}
             </>
+          )}
+          
+          {/* Mobile Portrait - Show rotate message */}
+          {isMobile && gameState === 'playing' && !isLandscape && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.95)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '20px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ 
+                fontSize: '80px', 
+                marginBottom: '20px',
+                animation: 'rotate-phone 1.5s ease-in-out infinite'
+              }}>
+                📱
+              </div>
+              <style>
+                {`
+                  @keyframes rotate-phone {
+                    0%, 100% { transform: rotate(0deg); }
+                    25% { transform: rotate(-30deg); }
+                    75% { transform: rotate(30deg); }
+                  }
+                `}
+              </style>
+              <h2 style={{ 
+                color: '#33ffff', 
+                textShadow: '0 0 20px #33ffff',
+                fontSize: '24px',
+                marginBottom: '15px'
+              }}>
+                ¡Gira tu teléfono!
+              </h2>
+              <p style={{ 
+                color: '#aaa', 
+                fontSize: '16px',
+                maxWidth: '280px',
+                lineHeight: '1.5'
+              }}>
+                Para una mejor experiencia, juega en modo horizontal (landscape)
+              </p>
+              <div style={{
+                marginTop: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '20px',
+                color: '#666'
+              }}>
+                <span style={{ fontSize: '40px', opacity: 0.5 }}>📱</span>
+                <span style={{ fontSize: '24px' }}>→</span>
+                <span style={{ 
+                  fontSize: '40px', 
+                  transform: 'rotate(90deg)',
+                  color: '#33ffff'
+                }}>📱</span>
+              </div>
+            </div>
           )}
           
           {shopOpen && (
