@@ -7688,149 +7688,191 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         const introMessage = getLevelIntroMessage(level, levelConfigs);
         if (!introMessage) return null;
         
+        const isCompact = isMobile && isLandscape;
+        
         return (
         <div style={{ 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          maxWidth: '600px',
-          padding: '20px'
+          maxWidth: isCompact ? '95%' : '600px',
+          padding: isCompact ? '5px' : '20px',
+          height: isCompact ? 'calc(100vh - 50px)' : 'auto',
+          overflow: isCompact ? 'hidden' : 'visible'
         }}>
           <div style={{ 
             textAlign: 'center',
             background: 'rgba(0, 0, 0, 0.95)',
-            padding: '40px',
-            borderRadius: '10px',
-            border: '3px solid #33ffff',
+            padding: isCompact ? '10px 15px' : '40px',
+            borderRadius: isCompact ? '6px' : '10px',
+            border: isCompact ? '2px solid #33ffff' : '3px solid #33ffff',
             boxShadow: '0 0 40px rgba(51, 255, 255, 0.5)',
-            width: '100%'
+            width: '100%',
+            display: isCompact ? 'flex' : 'block',
+            flexDirection: isCompact ? 'row' : 'column',
+            gap: isCompact ? '15px' : '0',
+            alignItems: isCompact ? 'stretch' : 'center'
           }}>
-            {/* Título del nivel */}
-            <h1 style={{ 
-              color: '#33ffff', 
-              textShadow: '0 0 20px #33ffff', 
-              marginBottom: '10px',
-              fontSize: isMobile ? '28px' : '36px'
-            }}>
-              NIVEL {level}
-            </h1>
-            <h2 style={{ 
-              color: '#ff00ff', 
-              textShadow: '0 0 15px #ff00ff', 
-              marginBottom: '30px',
-              fontSize: isMobile ? '20px' : '24px',
-              fontStyle: 'italic'
-            }}>
-              "{introMessage.title}"
-            </h2>
-
-            {/* Objetivo */}
-            <div style={{ 
-              marginBottom: '25px',
-              padding: '15px',
-              background: 'rgba(51, 255, 255, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #33ffff'
-            }}>
-              <p style={{ 
+            {/* Columna izquierda en mobile landscape */}
+            <div style={{ flex: isCompact ? 1 : 'none' }}>
+              {/* Título del nivel */}
+              <h1 style={{ 
                 color: '#33ffff', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '5px'
+                textShadow: '0 0 20px #33ffff', 
+                marginBottom: isCompact ? '3px' : '10px',
+                fontSize: isCompact ? '18px' : (isMobile ? '28px' : '36px')
               }}>
-                OBJETIVO:
-              </p>
-              <p style={{ 
-                color: '#ffffff', 
-                fontSize: isMobile ? '18px' : '20px'
+                NIVEL {level}
+              </h1>
+              <h2 style={{ 
+                color: '#ff00ff', 
+                textShadow: '0 0 15px #ff00ff', 
+                marginBottom: isCompact ? '8px' : '30px',
+                fontSize: isCompact ? '12px' : (isMobile ? '20px' : '24px'),
+                fontStyle: 'italic'
               }}>
-                Recolecta {introMessage.objective} estrellas ⭐
-              </p>
-            </div>
+                "{introMessage.title}"
+              </h2>
 
-            {/* Peligros */}
-            <div style={{ 
-              marginBottom: '25px',
-              padding: '15px',
-              background: 'rgba(255, 0, 0, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #ff3366'
-            }}>
-              <p style={{ 
-                color: '#ff3366', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '10px'
-              }}>
-                PELIGROS:
-              </p>
-              {introMessage.dangers.map((danger, idx) => (
-                <p key={idx} style={{ 
-                  color: '#ffaaaa', 
-                  fontSize: isMobile ? '14px' : '16px',
-                  marginBottom: '5px',
-                  textAlign: 'left'
-                }}>
-                  • {danger}
-                </p>
-              ))}
-            </div>
-
-            {/* Consejo */}
-            <div style={{ 
-              marginBottom: '30px',
-              padding: '15px',
-              background: 'rgba(255, 215, 0, 0.1)',
-              borderRadius: '5px',
-              border: '1px solid #FFD700'
-            }}>
-              <p style={{ 
-                color: '#FFD700', 
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: 'bold',
-                marginBottom: '10px'
-              }}>
-                CONSEJO:
-              </p>
-              <p style={{ 
-                color: '#ffffaa', 
-                fontSize: isMobile ? '14px' : '16px',
-                lineHeight: '1.5',
-                textAlign: 'left'
-              }}>
-                {introMessage.tip}
-              </p>
-            </div>
-
-            {/* Botón COMENZAR */}
-            <button 
-              onClick={beginLevel}
-              style={{
-                background: 'transparent',
-                border: '3px solid #33ffff',
-                color: '#33ffff',
-                padding: '15px 50px',
-                fontSize: isMobile ? '18px' : '22px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
+              {/* Objetivo */}
+              <div style={{ 
+                marginBottom: isCompact ? '8px' : '25px',
+                padding: isCompact ? '6px 8px' : '15px',
+                background: 'rgba(51, 255, 255, 0.1)',
                 borderRadius: '5px',
-                textShadow: '0 0 10px #33ffff',
-                boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
-                transition: 'all 0.3s',
-                width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
-                e.target.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-                e.target.style.transform = 'scale(1)';
-              }}
-            >
-              COMENZAR
-            </button>
+                border: '1px solid #33ffff'
+              }}>
+                <p style={{ 
+                  color: '#33ffff', 
+                  fontSize: isCompact ? '10px' : (isMobile ? '16px' : '18px'),
+                  fontWeight: 'bold',
+                  marginBottom: isCompact ? '2px' : '5px'
+                }}>
+                  OBJETIVO:
+                </p>
+                <p style={{ 
+                  color: '#ffffff', 
+                  fontSize: isCompact ? '12px' : (isMobile ? '18px' : '20px')
+                }}>
+                  Recolecta {introMessage.objective} estrellas ⭐
+                </p>
+              </div>
+
+              {/* Botón COMENZAR - en mobile landscape va aquí */}
+              {isCompact && (
+                <button 
+                  onClick={beginLevel}
+                  style={{
+                    background: 'rgba(51, 255, 255, 0.2)',
+                    border: '2px solid #33ffff',
+                    color: '#33ffff',
+                    padding: '8px 20px',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    borderRadius: '5px',
+                    textShadow: '0 0 10px #33ffff',
+                    boxShadow: '0 0 20px rgba(51, 255, 255, 0.5)',
+                    transition: 'all 0.3s',
+                    width: '100%',
+                    marginTop: '5px'
+                  }}
+                >
+                  ▶ COMENZAR
+                </button>
+              )}
+            </div>
+
+            {/* Columna derecha en mobile landscape */}
+            <div style={{ flex: isCompact ? 1 : 'none' }}>
+              {/* Peligros */}
+              <div style={{ 
+                marginBottom: isCompact ? '8px' : '25px',
+                padding: isCompact ? '6px 8px' : '15px',
+                background: 'rgba(255, 0, 0, 0.1)',
+                borderRadius: '5px',
+                border: '1px solid #ff3366'
+              }}>
+                <p style={{ 
+                  color: '#ff3366', 
+                  fontSize: isCompact ? '10px' : (isMobile ? '16px' : '18px'),
+                  fontWeight: 'bold',
+                  marginBottom: isCompact ? '4px' : '10px'
+                }}>
+                  PELIGROS:
+                </p>
+                {introMessage.dangers.map((danger, idx) => (
+                  <p key={idx} style={{ 
+                    color: '#ffaaaa', 
+                    fontSize: isCompact ? '10px' : (isMobile ? '14px' : '16px'),
+                    marginBottom: isCompact ? '2px' : '5px',
+                    textAlign: 'left'
+                  }}>
+                    • {danger}
+                  </p>
+                ))}
+              </div>
+
+              {/* Consejo - oculto en mobile landscape para ahorrar espacio */}
+              {!isCompact && (
+                <div style={{ 
+                  marginBottom: '30px',
+                  padding: '15px',
+                  background: 'rgba(255, 215, 0, 0.1)',
+                  borderRadius: '5px',
+                  border: '1px solid #FFD700'
+                }}>
+                  <p style={{ 
+                    color: '#FFD700', 
+                    fontSize: isMobile ? '16px' : '18px',
+                    fontWeight: 'bold',
+                    marginBottom: '10px'
+                  }}>
+                    CONSEJO:
+                  </p>
+                  <p style={{ 
+                    color: '#ffffaa', 
+                    fontSize: isMobile ? '14px' : '16px',
+                    lineHeight: '1.5',
+                    textAlign: 'left'
+                  }}>
+                    {introMessage.tip}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Botón COMENZAR - en desktop/mobile portrait va al final */}
+            {!isCompact && (
+              <button 
+                onClick={beginLevel}
+                style={{
+                  background: 'transparent',
+                  border: '3px solid #33ffff',
+                  color: '#33ffff',
+                  padding: '15px 50px',
+                  fontSize: isMobile ? '18px' : '22px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #33ffff',
+                  boxShadow: '0 0 30px rgba(51, 255, 255, 0.5)',
+                  transition: 'all 0.3s',
+                  width: '100%'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'scale(1)';
+                }}
+              >
+                COMENZAR
+              </button>
+            )}
           </div>
         </div>
         );
