@@ -1049,7 +1049,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
 
   useEffect(() => {
     if (gameState === 'shop') {
-      trackGaEvent('Tienda/Ingreso', {
+      trackGaEvent('APP/Tienda/Ingreso', {
         tab: activeShopTab
       });
     }
@@ -1057,7 +1057,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
 
   useEffect(() => {
     if (showFloatingShop) {
-      trackGaEvent('Tienda/Ingreso/Flotante', {
+      trackGaEvent('APP/Tienda/Ingreso/Flotante', {
         tab: showFloatingShop
       });
     }
@@ -4839,8 +4839,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.currentXP = 0;
     gameRef.current.currentStars = 0;
     
-    // Formato: Nuevo/Juego/R{rebirthCount}/N{level} (también al iniciar desde el menú)
-    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+    // Formato: APP/Nuevo/Juego/R{rebirthCount}/N{level} (también al iniciar desde el menú)
+    trackGaEvent(`APP/Nuevo/Juego/R${rebirthCount}/N${level}`, {
       level,
       rebirth_count: rebirthCount,
       series: currentSeries
@@ -4884,8 +4884,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setShopOpen(false);
-    // Formato: Nuevo/Juego/R{rebirthCount}/N{level}
-    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+    // Formato: APP/Nuevo/Juego/R{rebirthCount}/N{level}
+    trackGaEvent(`APP/Nuevo/Juego/R${rebirthCount}/N${level}`, {
       level,
       rebirth_count: rebirthCount,
       series: currentSeries
@@ -4941,7 +4941,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setGameState('menu');
       setVictoryData(null);
       
-      trackGaEvent('Juego/Rebirth', {
+      trackGaEvent('APP/Juego/Rebirth', {
         rebirth_count: data.rebirthCount,
         series: data.currentSeries
       });
@@ -5006,7 +5006,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       };
       const upgradeName = upgradeNames[type] || type;
       
-      trackGaEvent(`Tienda/Compra/${upgradeName}`, {
+      trackGaEvent(`APP/Tienda/Compra/${upgradeName}`, {
         upgrade_type: type,
         level,
         xp_cost: cost.xp,
@@ -5076,7 +5076,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
       const skinName = skin.name || skinKey;
-      trackGaEvent(`Tienda/Seleccionar/Skin/${skinName}`, {
+      trackGaEvent(`APP/Tienda/Seleccionar/Skin/${skinName}`, {
         skin_key: skinKey
       });
       return;
@@ -5107,7 +5107,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       localStorage.setItem('viborita_skin', skinKey);
       // Incluir el nombre de la skin en el evento para tracking de best sellers
       const skinName = skin.name || skinKey;
-      trackGaEvent(`Tienda/Compra/Skin/${skinName}`, {
+      trackGaEvent(`APP/Tienda/Compra/Skin/${skinName}`, {
         skin_key: skinKey,
         category: skin.category || 'unknown',
         xp_cost: xpNeeded,
