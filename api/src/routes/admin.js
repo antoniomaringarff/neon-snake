@@ -62,6 +62,8 @@ export default async function adminRoutes(fastify, options) {
           u.free_shots,
           u.is_immune,
           u.created_at,
+          COALESCE(u.rebirth_count, 0) as rebirth_count,
+          COALESCE(u.current_series, 1) as current_series,
           l.best_score,
           l.highest_level,
           l.total_sessions,
@@ -100,7 +102,9 @@ export default async function adminRoutes(fastify, options) {
         currentLevel: row.current_level || 1,
         isAdmin: row.is_admin || false,
         freeShots: row.free_shots || false,
-        isImmune: row.is_immune || false
+        isImmune: row.is_immune || false,
+        rebirthCount: row.rebirth_count || 0,
+        currentSeries: row.current_series || 1
       }));
     } catch (error) {
       fastify.log.error(error);
@@ -128,7 +132,9 @@ export default async function adminRoutes(fastify, options) {
       isBanned,
       isAdmin,
       freeShots,
-      isImmune
+      isImmune,
+      rebirthCount,
+      currentSeries
     } = request.body;
 
     try {
@@ -141,9 +147,11 @@ export default async function adminRoutes(fastify, options) {
              is_admin = COALESCE($4, is_admin),
              free_shots = COALESCE($5, free_shots),
              is_immune = COALESCE($6, is_immune),
+             rebirth_count = COALESCE($7, rebirth_count),
+             current_series = COALESCE($8, current_series),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $7`,
-        [totalXp, totalStars, isBanned, isAdmin, freeShots, isImmune, id]
+         WHERE id = $9`,
+        [totalXp, totalStars, isBanned, isAdmin, freeShots, isImmune, rebirthCount, currentSeries, id]
       );
 
       // Update user_progress
