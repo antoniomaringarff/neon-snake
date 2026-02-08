@@ -843,12 +843,19 @@
     
     <!-- Tracking Events -->
     <script>
-        // Track CTA clicks
+        // Track landing page view
+        if (typeof gtag === 'function') {
+            gtag('event', 'Landing/Ingreso', {
+                'page_path': window.location.pathname
+            });
+        }
+        
+        // Track CTA clicks con sintaxis consistente
         document.querySelectorAll('.play-btn, .play-btn-header').forEach(btn => {
             btn.addEventListener('click', function() {
                 if (typeof gtag === 'function') {
-                    gtag('event', 'Landing/CTA/Click', {
-                        'cta_location': this.classList.contains('play-btn-header') ? 'header' : 'page',
+                    const location = this.classList.contains('play-btn-header') ? 'Header' : 'Page';
+                    gtag('event', `Click/Boton/Jugar/${location}`, {
                         'cta_text': this.textContent.trim()
                     });
                 }
