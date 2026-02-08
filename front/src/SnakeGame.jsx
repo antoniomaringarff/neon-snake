@@ -139,6 +139,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const [isMobile, setIsMobile] = useState(detectMobile());
   const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
   
+  const trackGaEvent = (eventName, params = {}) => {
+    if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+      window.gtag('event', eventName, params);
+    }
+  };
+
   // Calculate canvas dimensions based on screen size
   // En mobile: usar el tamaño de la pantalla para mostrar más área del mapa
   // En desktop: usar tamaño fijo 800x600
@@ -1040,6 +1046,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       }
     }
   }, [gameState, showSkinSelector]);
+
+  useEffect(() => {
+    if (gameState === 'shop') {
+      trackGaEvent('Tienda/Ingreso', {
+        tab: activeShopTab
+      });
+    }
+  }, [gameState, activeShopTab]);
+
+  useEffect(() => {
+    if (showFloatingShop) {
+      trackGaEvent('Tienda/Ingreso/Flotante', {
+        tab: showFloatingShop
+      });
+    }
+  }, [showFloatingShop]);
 
   // Load level configurations from API
   const loadLevelConfigs = async () => {
@@ -4817,6 +4839,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.currentXP = 0;
     gameRef.current.currentStars = 0;
     
+    // Formato: Nuevo/Juego/R{rebirthCount}/N{level} (también al iniciar desde el menú)
+    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+      level,
+      rebirth_count: rebirthCount,
+      series: currentSeries
+    });
+
     // Mostrar intro del nivel primero
     setGameState('levelIntro');
   };
@@ -4855,6 +4884,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setShopOpen(false);
+    // Formato: Nuevo/Juego/R{rebirthCount}/N{level}
+    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+      level,
+      rebirth_count: rebirthCount,
+      series: currentSeries
+    });
     // NO establecer gameStartTime aquí - se establecerá en initGame después de inicializar todo
     setGameState('playing');
     // initGame se ejecutará dentro del useEffect cuando gameState cambie a 'playing'
@@ -4906,6 +4941,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setGameState('menu');
       setVictoryData(null);
       
+      trackGaEvent('Juego/Rebirth', {
+        rebirth_count: data.rebirthCount,
+        series: data.currentSeries
+      });
+
       console.log(`🔄 Rebirth completado! Serie ${data.currentSeries}, Base Level: ${baseLevel}`);
     } catch (error) {
       console.error('Error en rebirth:', error);
@@ -4953,6 +4993,25 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       } else if (type === 'health') {
         setHealthLevel(level);
       }
+
+      // Nombre del upgrade en español para el evento
+      const upgradeNames = {
+        shield: 'Escudo',
+        magnet: 'Imán',
+        cannon: 'Cañón',
+        speed: 'Velocidad',
+        bullet_speed: 'Velocidad_Bala',
+        head: 'Cabeza',
+        health: 'Vida'
+      };
+      const upgradeName = upgradeNames[type] || type;
+      
+      trackGaEvent(`Tienda/Compra/${upgradeName}`, {
+        upgrade_type: type,
+        level,
+        xp_cost: cost.xp,
+        stars_cost: cost.stars
+      });
       
       // NO cerrar la tienda al comprar - el usuario puede querer seguir comprando
       // setShopOpen(false);
@@ -5016,6 +5075,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
+      const skinName = skin.name || skinKey;
+      trackGaEvent(`Tienda/Seleccionar/Skin/${skinName}`, {
+        skin_key: skinKey
+      });
       return;
     }
 
@@ -5042,6 +5105,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
+      // Incluir el nombre de la skin en el evento para tracking de best sellers
+      const skinName = skin.name || skinKey;
+      trackGaEvent(`Tienda/Compra/Skin/${skinName}`, {
+        skin_key: skinKey,
+        category: skin.category || 'unknown',
+        xp_cost: xpNeeded,
+        stars_cost: starsNeeded
+      });
       setTimeout(() => saveUserProgress(), 100);
     }
   };
@@ -5055,6 +5126,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
+      const skin = SKINS[skinKey];
+      if (skin) {
+        const skinName = skin.name || skinKey;
+        trackGaEvent(`Tienda/Seleccionar/Skin/${skinName}`, {
+          skin_key: skinKey
+        });
+      }
     } else {
       console.warn(`Intento de seleccionar skin bloqueada: ${skinKey}`);
     }

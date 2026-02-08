@@ -6,35 +6,60 @@ export default async function usersRoutes(fastify, options) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
+    const userId = parseInt(id);
     
-    // Verificar que el usuario puede hacer rebirth
-    // Debe haber completado el nivel 25 al menos una vez (highest_level >= 25)
-    const leaderboardResult = await query(
-      'SELECT highest_level FROM leaderboard WHERE user_id = $1',
-      [id]
-    );
-    
-    if (leaderboardResult.rows.length === 0 || leaderboardResult.rows[0].highest_level < 25) {
-      return reply.code(400).send({ error: 'Debes completar el nivel 25 para hacer rebirth' });
+    // Verificar que el usuario solo puede hacer rebirth de su propia cuenta
+    if (userId !== request.user.id) {
+      return reply.code(403).send({ error: 'Forbidden' });
     }
     
     try {
+      // Verificar que el usuario puede hacer rebirth
+      // Debe haber completado el nivel 25 al menos una vez (highest_level >= 25)
+      const leaderboardResult = await query(
+        'SELECT highest_level FROM leaderboard WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (leaderboardResult.rows.length === 0 || leaderboardResult.rows[0].highest_level < 25) {
+        return reply.code(400).send({ error: 'Debes completar el nivel 25 para hacer rebirth' });
+      }
+      
+      // Verificar que existe user_progress, si no existe crearlo
+      const progressCheck = await query(
+        'SELECT user_id FROM user_progress WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (progressCheck.rows.length === 0) {
+        // Crear registro de progreso si no existe
+        await query(`
+          INSERT INTO user_progress (user_id, current_level, shield_level, head_level, cannon_level, magnet_level, speed_level, bullet_speed_level, health_level)
+          VALUES ($1, 1, 0, 1, 0, 0, 0, 0, 0)
+        `, [userId]);
+      }
+      
       // Incrementar rebirth_count y series
       await query(`
         UPDATE users 
-        SET rebirth_count = rebirth_count + 1,
-            current_series = current_series + 1,
+        SET rebirth_count = COALESCE(rebirth_count, 0) + 1,
+            current_series = COALESCE(current_series, 1) + 1,
             total_xp = 0,
             total_stars = 0,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
-      `, [id]);
+      `, [userId]);
       
       // Obtener el nuevo rebirth_count
       const rebirthResult = await query(
-        'SELECT rebirth_count, current_series FROM users WHERE id = $1',
-        [id]
+        'SELECT COALESCE(rebirth_count, 0) as rebirth_count, COALESCE(current_series, 1) as current_series FROM users WHERE id = $1',
+        [userId]
       );
+      
+      if (rebirthResult.rows.length === 0) {
+        return reply.code(404).send({ error: 'Usuario no encontrado' });
+      }
+      
       const rebirthCount = rebirthResult.rows[0].rebirth_count;
       const currentSeries = rebirthResult.rows[0].current_series;
       
@@ -53,7 +78,7 @@ export default async function usersRoutes(fastify, options) {
             health_level = $2,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = $1
-      `, [id, upgradeLevel]);
+      `, [userId, upgradeLevel]);
       
       return {
         message: 'Rebirth completado',
@@ -63,7 +88,11 @@ export default async function usersRoutes(fastify, options) {
       };
     } catch (error) {
       console.error('Error en rebirth:', error);
-      return reply.code(500).send({ error: 'Error al procesar rebirth' });
+      console.error('Stack trace:', error.stack);
+      return reply.code(500).send({ 
+        error: 'Error al procesar rebirth',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
   });
 
