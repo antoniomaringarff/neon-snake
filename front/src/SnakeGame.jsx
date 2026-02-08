@@ -4839,8 +4839,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.currentXP = 0;
     gameRef.current.currentStars = 0;
     
-    trackGaEvent('Juego/Inicio', {
-      level
+    // Formato: Nuevo/Juego/R{rebirthCount}/N{level} (también al iniciar desde el menú)
+    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+      level,
+      rebirth_count: rebirthCount,
+      series: currentSeries
     });
 
     // Mostrar intro del nivel primero
@@ -4881,8 +4884,11 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     gameRef.current.bodyHits = 0; // Reset body hits counter
     setScore(0);
     setShopOpen(false);
-    trackGaEvent('Juego/Nivel/Inicio', {
-      level
+    // Formato: Nuevo/Juego/R{rebirthCount}/N{level}
+    trackGaEvent(`Nuevo/Juego/R${rebirthCount}/N${level}`, {
+      level,
+      rebirth_count: rebirthCount,
+      series: currentSeries
     });
     // NO establecer gameStartTime aquí - se establecerá en initGame después de inicializar todo
     setGameState('playing');
@@ -5069,7 +5075,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
-      trackGaEvent('Tienda/Seleccionar/Skin', {
+      const skinName = skin.name || skinKey;
+      trackGaEvent(`Tienda/Seleccionar/Skin/${skinName}`, {
         skin_key: skinKey
       });
       return;
@@ -5098,7 +5105,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
-      trackGaEvent('Tienda/Compra/Skin', {
+      // Incluir el nombre de la skin en el evento para tracking de best sellers
+      const skinName = skin.name || skinKey;
+      trackGaEvent(`Tienda/Compra/Skin/${skinName}`, {
         skin_key: skinKey,
         category: skin.category || 'unknown',
         xp_cost: xpNeeded,
@@ -5117,9 +5126,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       setSelectedSkin(skinKey);
       // Guardar inmediatamente en localStorage
       localStorage.setItem('viborita_skin', skinKey);
-      trackGaEvent('Tienda/Seleccionar/Skin', {
-        skin_key: skinKey
-      });
+      const skin = SKINS[skinKey];
+      if (skin) {
+        const skinName = skin.name || skinKey;
+        trackGaEvent(`Tienda/Seleccionar/Skin/${skinName}`, {
+          skin_key: skinKey
+        });
+      }
     } else {
       console.warn(`Intento de seleccionar skin bloqueada: ${skinKey}`);
     }
