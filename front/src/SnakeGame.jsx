@@ -220,6 +220,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const shootingIntervalRef = useRef(null);
   const startAutoFireRef = useRef(null);
   const stopAutoFireRef = useRef(null);
+  const chatScrollRef = useRef({ shouldAutoScroll: true }); // Track if user wants auto-scroll
+  const previousGameStateRef = useRef('menu'); // Track previous gameState
   const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
@@ -1408,7 +1410,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         const newMessage = await response.json();
         setChatMessages(prev => [...prev, newMessage]);
         setChatInput('');
-        // Scroll to bottom in both chat containers
+        // When user sends a message, always scroll to bottom
+        chatScrollRef.current.shouldAutoScroll = true;
         setTimeout(() => {
           const chatContainer = document.getElementById('chat-messages');
           const chatContainerLevel = document.getElementById('chat-messages-level');
@@ -1425,17 +1428,83 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     }
   };
 
-  // Auto-scroll chat when new messages arrive
+  // Helper function to check if user is near bottom of chat
+  const isNearBottom = (container) => {
+    if (!container) return false;
+    const threshold = 50; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  };
+
+  // Auto-scroll chat when new messages arrive, but only if user is near bottom
   useEffect(() => {
     const chatContainer = document.getElementById('chat-messages');
     const chatContainerLevel = document.getElementById('chat-messages-level');
-    if (chatContainer) {
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Only auto-scroll if user is near bottom (or if shouldAutoScroll is true)
+    if (chatContainer && chatScrollRef.current.shouldAutoScroll) {
+      if (isNearBottom(chatContainer)) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
     }
-    if (chatContainerLevel) {
-      chatContainerLevel.scrollTop = chatContainerLevel.scrollHeight;
+    if (chatContainerLevel && chatScrollRef.current.shouldAutoScroll) {
+      if (isNearBottom(chatContainerLevel)) {
+        chatContainerLevel.scrollTop = chatContainerLevel.scrollHeight;
+      }
     }
   }, [chatMessages]);
+
+  // Scroll to bottom when gameState changes (changing screens)
+  useEffect(() => {
+    if (previousGameStateRef.current !== gameState) {
+      // User changed screens, scroll to bottom
+      chatScrollRef.current.shouldAutoScroll = true;
+      setTimeout(() => {
+        const chatContainer = document.getElementById('chat-messages');
+        const chatContainerLevel = document.getElementById('chat-messages-level');
+        if (chatContainer) {
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        if (chatContainerLevel) {
+          chatContainerLevel.scrollTop = chatContainerLevel.scrollHeight;
+        }
+      }, 100);
+      previousGameStateRef.current = gameState;
+    }
+  }, [gameState]);
+
+  // Add scroll listeners to detect manual scrolling
+  useEffect(() => {
+    const chatContainer = document.getElementById('chat-messages');
+    const chatContainerLevel = document.getElementById('chat-messages-level');
+    
+    const handleScrollMain = () => {
+      if (!chatContainer) return;
+      // If user scrolls up, disable auto-scroll
+      // If user scrolls near bottom, enable auto-scroll
+      chatScrollRef.current.shouldAutoScroll = isNearBottom(chatContainer);
+    };
+
+    const handleScrollLevel = () => {
+      if (!chatContainerLevel) return;
+      chatScrollRef.current.shouldAutoScroll = isNearBottom(chatContainerLevel);
+    };
+
+    if (chatContainer) {
+      chatContainer.addEventListener('scroll', handleScrollMain);
+    }
+    if (chatContainerLevel) {
+      chatContainerLevel.addEventListener('scroll', handleScrollLevel);
+    }
+
+    return () => {
+      if (chatContainer) {
+        chatContainer.removeEventListener('scroll', handleScrollMain);
+      }
+      if (chatContainerLevel) {
+        chatContainerLevel.removeEventListener('scroll', handleScrollLevel);
+      }
+    };
+  }, [gameState]); // Re-run when gameState changes to attach to new containers
 
   // Load progress on mount
   useEffect(() => {
