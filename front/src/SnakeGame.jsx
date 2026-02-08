@@ -5545,6 +5545,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 Admin
               </button>
             )}
+            {gameState !== 'playing' && (
+              <button
+                onClick={startGame}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #33ffff',
+                  color: '#33ffff',
+                  padding: isLandscape ? '3px 6px' : '4px 8px',
+                  fontSize: isLandscape ? '9px' : '10px',
+                  cursor: 'pointer',
+                  borderRadius: '3px',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                Jugar
+              </button>
+            )}
             <button
               onClick={onLogout}
               style={{
@@ -5911,6 +5934,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               }}
             >
               Admin
+            </button>
+          )}
+          {gameState !== 'playing' && (
+            <button
+              onClick={startGame}
+              style={{
+                background: 'transparent',
+                border: '1px solid #33ffff',
+                color: '#33ffff',
+                padding: '5px 10px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                borderRadius: '3px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(51, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+              }}
+            >
+              Jugar
             </button>
           )}
         <button
