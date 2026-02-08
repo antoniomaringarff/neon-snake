@@ -26,6 +26,7 @@ import * as migration024 from './024_add_chat.js';
 import * as migration025 from './025_add_banned_until.js';
 import * as migration026 from './026_add_head_upgrades.js';
 import * as migration027 from './027_update_level_xp_enemies.js';
+import * as migration028 from './028_reset_progress_keep_skins.js';
 
 const migrations = [
   { name: '001_initial_schema', up: migration001.up, down: migration001.down },
@@ -54,7 +55,8 @@ const migrations = [
   { name: '024_add_chat', up: migration024.up, down: migration024.down },
   { name: '025_add_banned_until', up: migration025.up, down: migration025.down },
   { name: '026_add_head_upgrades', up: migration026.up, down: migration026.down },
-  { name: '027_update_level_xp_enemies', up: migration027.up, down: migration027.down }
+  { name: '027_update_level_xp_enemies', up: migration027.up, down: migration027.down },
+  { name: '028_reset_progress_keep_skins', up: migration028.up, down: migration028.down }
 ];
 
 export async function runMigrations() {
