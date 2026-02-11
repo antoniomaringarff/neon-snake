@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../i18n.jsx';
 
 /**
  * Pantalla de Game Over
@@ -10,6 +11,7 @@ const GameOverScreen = ({
   gameRef,
   saveUserProgress 
 }) => {
+  const { t } = useTranslation();
   const handleBackToMenu = () => {
     // Save progress before returning to menu
     saveUserProgress();
@@ -43,10 +45,10 @@ const GameOverScreen = ({
       boxShadow: '0 0 30px rgba(255, 51, 102, 0.5)'
     }}>
       <h2 style={{ color: '#ff3366', textShadow: '0 0 20px #ff3366' }}>
-        GAME OVER
+        {t('gameover.title')}
       </h2>
-      <p style={{ fontSize: '20px' }}>Nivel alcanzado: {level}</p>
-      <p style={{ fontSize: '20px' }}>XP Total: {totalXP}</p>
+      <p style={{ fontSize: '20px' }}>{t('gameover.level_reached')} {level}</p>
+      <p style={{ fontSize: '20px' }}>{t('gameover.total_xp')} {totalXP}</p>
       <button 
         onClick={handleBackToMenu}
         style={{
@@ -61,7 +63,7 @@ const GameOverScreen = ({
           marginTop: '20px'
         }}
       >
-        VOLVER AL MENÚ
+        {t('common.back_to_menu')}
       </button>
     </div>
   );

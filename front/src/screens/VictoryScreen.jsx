@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../i18n.jsx';
 
 /**
  * Pantalla de Victoria al completar los 25 niveles
@@ -10,6 +11,7 @@ const VictoryScreen = ({
   onRebirth,
   onBackToMenu
 }) => {
+  const { t } = useTranslation();
   if (!victoryData) return null;
 
   return (
@@ -51,7 +53,7 @@ const VictoryScreen = ({
           fontWeight: 'bold',
           letterSpacing: '2px'
         }}>
-          ¡FELICITACIONES!
+          {t('victory.congrats')}
         </h1>
         <h2 style={{ 
           color: '#00ff88', 
@@ -59,7 +61,7 @@ const VictoryScreen = ({
           fontSize: isMobile ? '24px' : '32px',
           marginBottom: '20px'
         }}>
-          ¡Completaste los 25 niveles!
+          {t('victory.completed_25')}
         </h2>
         
         <div style={{ 
@@ -68,7 +70,7 @@ const VictoryScreen = ({
           marginBottom: '30px',
           textShadow: '0 0 10px #ff00ff'
         }}>
-          ⚡ Serie {victoryData.series} Completada ⚡
+          {t('victory.series_prefix')} {victoryData.series} {t('victory.series_suffix')}
         </div>
         
         <div style={{
@@ -79,7 +81,7 @@ const VictoryScreen = ({
           border: '2px solid #33ffff'
         }}>
           <div style={{ fontSize: isMobile ? '18px' : '24px', color: '#888', marginBottom: '10px' }}>
-            Tu Puntuación Final
+            {t('victory.final_score')}
           </div>
           <div style={{ 
             fontSize: isMobile ? '36px' : '56px', 
@@ -99,11 +101,11 @@ const VictoryScreen = ({
               fontWeight: 'bold',
               marginTop: '15px'
             }}>
-              ✨ ¡NUEVO RÉCORD PERSONAL! ✨
+              {t('victory.new_record')}
             </div>
           ) : (
             <div style={{ fontSize: isMobile ? '14px' : '18px', color: '#888', marginTop: '10px' }}>
-              Tu récord anterior: {victoryData.previousBestScore.toLocaleString()} XP
+              {t('victory.previous_best')} {victoryData.previousBestScore.toLocaleString()} XP
             </div>
           )}
         </div>
@@ -115,7 +117,7 @@ const VictoryScreen = ({
           border: '2px solid #FFD700'
         }}>
           <div style={{ fontSize: isMobile ? '18px' : '24px', color: '#888', marginBottom: '10px' }}>
-            Ranking Mundial
+            {t('victory.world_ranking')}
           </div>
           <div style={{ 
             fontSize: isMobile ? '36px' : '48px', 
@@ -126,7 +128,7 @@ const VictoryScreen = ({
             {victoryData.position === 1 && '🥇 '}
             {victoryData.position === 2 && '🥈 '}
             {victoryData.position === 3 && '🥉 '}
-            Posición #{victoryData.position}
+            {t('victory.position_prefix')} {victoryData.position}
           </div>
         </div>
         
@@ -144,7 +146,7 @@ const VictoryScreen = ({
             marginBottom: '15px',
             textShadow: '0 0 15px #ff3366'
           }}>
-            ¿Querés mejorar tu marca?
+            {t('victory.improve_title')}
           </h3>
           <p style={{ 
             color: '#fff', 
@@ -152,7 +154,7 @@ const VictoryScreen = ({
             marginBottom: '10px',
             lineHeight: '1.6'
           }}>
-            Hacé <strong>Rebirth</strong> para volver a nivel 1
+            {t('victory.rebirth_description')}
           </p>
           <p style={{ 
             color: '#00ff88', 
@@ -160,7 +162,7 @@ const VictoryScreen = ({
             fontWeight: 'bold',
             textShadow: '0 0 10px #00ff88'
           }}>
-            ✨ Ventaja: Todos los upgrades empiezan en nivel {rebirthCount + 1} ✨
+            {t('victory.rebirth_advantage_prefix')} {rebirthCount + 1} {t('victory.rebirth_advantage_suffix')}
           </p>
         </div>
         
@@ -187,7 +189,7 @@ const VictoryScreen = ({
               fontWeight: 'bold'
             }}
           >
-            ♻️ REBIRTH
+            {t('victory.rebirth_button')}
           </button>
           
           <button 
@@ -206,7 +208,7 @@ const VictoryScreen = ({
               fontWeight: 'bold'
             }}
           >
-            VOLVER AL MENÚ
+            {t('common.back_to_menu')}
           </button>
         </div>
       </div>

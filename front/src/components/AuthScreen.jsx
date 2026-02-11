@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from '../i18n.jsx';
 
 export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
   // Si hay cuenta existente en este navegador, mostrar login por defecto
@@ -9,6 +10,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t, lang, setLang } = useTranslation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -72,13 +74,45 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
       fontFamily: 'monospace',
       padding: '20px'
     }}>
+      <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+        <button
+          type="button"
+          onClick={() => setLang('es')}
+          style={{
+            padding: '6px 12px',
+            background: lang === 'es' ? 'rgba(51, 255, 255, 0.3)' : 'transparent',
+            border: '1px solid #33ffff',
+            borderRadius: '4px',
+            color: '#33ffff',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          ES
+        </button>
+        <button
+          type="button"
+          onClick={() => setLang('en')}
+          style={{
+            padding: '6px 12px',
+            background: lang === 'en' ? 'rgba(51, 255, 255, 0.3)' : 'transparent',
+            border: '1px solid #33ffff',
+            borderRadius: '4px',
+            color: '#33ffff',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          EN
+        </button>
+      </div>
       <h1 style={{
         fontSize: '48px',
         marginBottom: '40px',
         textShadow: '0 0 20px #33ffff',
         letterSpacing: '4px'
       }}>
-        NEON SNAKE
+        {t('auth.title')}
       </h1>
 
       <div style={{
@@ -94,7 +128,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
           marginBottom: '30px',
           fontSize: '24px'
         }}>
-          {isLogin ? 'INICIAR SESIÓN' : 'CREAR CUENTA'}
+          {isLogin ? t('auth.login_title') : t('auth.register_title')}
         </h2>
 
         {!isLogin && (
@@ -105,7 +139,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
             color: '#aaa',
             lineHeight: '1.5'
           }}>
-            ¡Bienvenido! Crea tu cuenta para empezar a jugar.
+            {t('auth.welcome')}
           </p>
         )}
 
@@ -129,14 +163,14 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
               marginBottom: '8px',
               color: '#33ffff'
             }}>
-              Usuario <span style={{ color: '#ff3366' }}>*</span>
+              {t('auth.field.username')} <span style={{ color: '#ff3366' }}>*</span>
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder="Elegí tu nombre de usuario"
+              placeholder={t('auth.field.username_placeholder')}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -157,7 +191,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
                 marginBottom: '8px',
                 color: '#33ffff'
               }}>
-                Email <span style={{ color: '#888', fontWeight: 'normal', fontSize: '12px' }}>(opcional)</span>
+                {t('auth.field.email')} <span style={{ color: '#888', fontWeight: 'normal', fontSize: '12px' }}>(opcional)</span>
               </label>
               <input
                 type="email"
@@ -181,7 +215,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
                 color: '#666',
                 fontStyle: 'italic'
               }}>
-                📧 Si perdés acceso a tu cuenta, el email te permite recuperarla.
+                📧 {t('auth.field.email_optional_note')}
               </p>
             </div>
           )}
@@ -192,7 +226,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
               marginBottom: '8px',
               color: '#33ffff'
             }}>
-              Contraseña <span style={{ color: '#ff3366' }}>*</span>
+                {t('auth.field.password')} <span style={{ color: '#ff3366' }}>*</span>
             </label>
             <input
               type="password"
@@ -200,7 +234,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              placeholder="Mínimo 6 caracteres"
+              placeholder={t('auth.field.password_placeholder')}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -232,7 +266,9 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
               transition: 'all 0.2s ease'
             }}
           >
-            {loading ? 'CARGANDO...' : (isLogin ? 'ENTRAR' : '¡CREAR CUENTA Y JUGAR!')}
+            {loading
+              ? t('auth.submit.loading')
+              : (isLogin ? t('auth.submit.login') : t('auth.submit.register'))}
           </button>
         </form>
 
@@ -254,7 +290,7 @@ export default function AuthScreen({ onLogin, hasExistingAccount = false }) {
               fontSize: '14px'
             }}
           >
-            {isLogin ? '¿Primera vez? Creá tu cuenta' : '¿Ya tenés cuenta? Iniciá sesión'}
+            {isLogin ? t('auth.toggle.to_register') : t('auth.toggle.to_login')}
           </button>
         </div>
       </div>

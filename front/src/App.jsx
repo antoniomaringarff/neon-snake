@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import SnakeGame from './SnakeGame';
 import AuthScreen from './components/AuthScreen';
+import { useTranslation } from './i18n.jsx';
 
 function App() {
+  const { t } = useTranslation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -84,7 +86,7 @@ function App() {
         fontSize: '24px',
         fontFamily: 'monospace'
       }}>
-        Cargando...
+        {t('common.loading')}
       </div>
     );
   }
