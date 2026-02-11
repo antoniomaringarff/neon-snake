@@ -222,9 +222,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   // Al salir: desbloquear y salir de fullscreen
   useEffect(() => {
     if (gameState === 'playing') {
+      // Scroll al top para minimizar barra de Safari en iPhone
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
+      // Safari iOS: scroll al top tras un delay para forzar que la barra se minimice
+      setTimeout(() => { window.scrollTo(0, 1); }, 50);
+      setTimeout(() => { window.scrollTo(0, 0); }, 100);
+      
       const prevOverflow = document.body.style.overflow;
       const prevDocOverflow = document.documentElement.style.overflow;
       const prevPosition = document.body.style.position;
@@ -232,6 +237,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       const prevLeft = document.body.style.left;
       const prevRight = document.body.style.right;
       const prevWidth = document.body.style.width;
+      const prevHeight = document.body.style.height;
       document.body.style.overflow = 'hidden';
       document.documentElement.style.overflow = 'hidden';
       if (isMobile) {
@@ -240,6 +246,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         document.body.style.left = '0';
         document.body.style.right = '0';
         document.body.style.width = '100%';
+        document.body.style.height = '100%';
       }
       return () => {
         document.body.style.overflow = prevOverflow;
@@ -249,13 +256,16 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         document.body.style.left = prevLeft;
         document.body.style.right = prevRight;
         document.body.style.width = prevWidth;
-        if (document.fullscreenElement) {
-          document.exitFullscreen?.();
+        document.body.style.height = prevHeight;
+        const exitFS = document.exitFullscreen || document.webkitExitFullscreen;
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          exitFS?.call(document);
         }
       };
     } else {
-      if (document.fullscreenElement) {
-        document.exitFullscreen?.();
+      const exitFS = document.exitFullscreen || document.webkitExitFullscreen;
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        exitFS?.call(document);
       }
     }
   }, [gameState, isMobile]);
@@ -5000,8 +5010,12 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       series: currentSeries
     });
     // En móvil: pantalla completa para que se vean los controles (evita que el header del navegador los tape)
-      if (isMobile && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+      if (isMobile) {
+        const el = document.documentElement;
+        const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (rfs) {
+          rfs.call(el).catch(() => {});
+        }
       }
     // NO establecer gameStartTime aquí - se establecerá en initGame después de inicializar todo
     setGameState('playing');
@@ -6175,19 +6189,29 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     );
   }
 
-  // En móvil al jugar: altura visible para que los controles no queden tapados por la barra del navegador
-  const playingHeight = gameState === 'playing'
-    ? (isMobile && mobileViewportHeight ? `${mobileViewportHeight}px` : (isMobile ? '100dvh' : '100vh'))
-    : 'auto';
-  const playingMinHeight = gameState === 'playing' && isMobile && mobileViewportHeight ? `${mobileViewportHeight}px` : (gameState === 'playing' ? '100vh' : '100vh');
+  // En móvil al jugar: usar position fixed para cubrir toda la pantalla (funciona en Safari iOS)
+  const isMobilePlaying = gameState === 'playing' && isMobile;
+  const playingHeight = isMobilePlaying
+    ? (mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh')
+    : (gameState === 'playing' ? '100vh' : 'auto');
 
   return (
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column',
-      height: playingHeight,
-      minHeight: gameState === 'playing' ? playingMinHeight : '100vh',
-      maxHeight: gameState === 'playing' && isMobile ? (mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh') : undefined,
+      ...(isMobilePlaying ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: mobileViewportHeight ? `${mobileViewportHeight}px` : '100%',
+        zIndex: 9999,
+      } : {
+        height: playingHeight,
+        minHeight: gameState === 'playing' ? '100vh' : '100vh',
+      }),
       background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
       color: '#33ffff',
       fontFamily: 'monospace',
@@ -8996,6 +9020,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               {cannonLevel > 0 && (
                 <button
                   onTouchStart={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     if (!isShootingRef.current && shootBulletRef.current) {
                       isShootingRef.current = true;
@@ -9004,12 +9029,22 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     }
                   }}
                   onTouchEnd={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     if (stopAutoFireRef.current) stopAutoFireRef.current();
                   }}
                   onTouchCancel={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     if (stopAutoFireRef.current) stopAutoFireRef.current();
+                  }}
+                  onClick={(e) => {
+                    // Fallback para Safari iOS que a veces ignora onTouchStart
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (shootBulletRef.current) {
+                      shootBulletRef.current();
+                    }
                   }}
                   style={{
                     position: 'absolute',
@@ -9028,7 +9063,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     alignItems: 'center',
                     justifyContent: 'center',
                     touchAction: 'none',
+                    WebkitTouchCallout: 'none',
                     WebkitTapHighlightColor: 'transparent',
+                    WebkitUserSelect: 'none',
                     userSelect: 'none',
                     transition: 'all 0.1s ease',
                     fontSize: '24px',
