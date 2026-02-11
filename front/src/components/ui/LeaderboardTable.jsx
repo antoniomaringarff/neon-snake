@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../../i18n.jsx';
 
 /**
  * Componente reutilizable para mostrar tablas de ranking
@@ -15,6 +16,7 @@ const LeaderboardTable = ({
 }) => {
   // Limitar la cantidad de items mostrados
   const displayData = data.slice(0, maxItems);
+  const { t } = useTranslation();
   return (
     <div style={{ 
       background: 'rgba(0, 0, 0, 0.7)',
@@ -40,7 +42,7 @@ const LeaderboardTable = ({
       <div style={{ maxHeight: isMobile ? '90px' : '100px', overflowY: 'auto' }}>
         {displayData.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>
-            Cargando...
+            {t('leaderboard.loading')}
           </p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>

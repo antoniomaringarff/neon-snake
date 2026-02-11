@@ -1,5 +1,6 @@
 import React from 'react';
 import LeaderboardTable from './ui/LeaderboardTable';
+import { useTranslation } from '../i18n.jsx';
 
 /**
  * Componente que muestra todos los rankings del juego
@@ -14,6 +15,7 @@ const Leaderboards = ({
   currentUsername,
   isMobile = false 
 }) => {
+  const { t } = useTranslation();
   // Combinar datos de rebirth y nivel
   const getCombinedData = () => {
     const userMap = new Map();
@@ -78,16 +80,16 @@ const Leaderboards = ({
       }}>
         {/* Ranking por XP */}
         <LeaderboardTable
-          title="RANKING XP"
+          title={t('leaderboard.xp_title')}
           icon="🏆"
           color="#FFD700"
           data={leaderboard}
           currentUsername={currentUsername}
           isMobile={isMobile}
           columns={[
-            { header: 'Usuario', key: 'username' },
+            { header: t('leaderboard.username'), key: 'username' },
             { 
-              header: 'XP', 
+              header: t('leaderboard.xp'), 
               align: 'right',
               valueColor: '#33ffff',
               render: (entry) => entry.totalXp?.toLocaleString() || 0
@@ -115,20 +117,30 @@ const Leaderboards = ({
             marginBottom: isMobile ? '4px' : '6px',
             fontSize: isMobile ? '10px' : '11px'
           }}>
-            🔄⭐ REBIRTH & NIVEL
+            {t('leaderboard.rebirth_and_level_title')}
           </h2>
           <div style={{ maxHeight: isMobile ? '90px' : '100px', overflowY: 'auto' }}>
             {combinedData.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>Cargando...</p>
+              <p style={{ textAlign: 'center', color: '#888', fontSize: isMobile ? '10px' : '12px' }}>
+                {t('leaderboard.loading')}
+              </p>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #33ffff' }}>
                     <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>#</th>
-                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>Usuario</th>
-                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff3366', fontSize: isMobile ? '9px' : '11px' }}>Rebirth</th>
-                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>Nivel</th>
-                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>Totales</th>
+                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'left', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>
+                      {t('leaderboard.username')}
+                    </th>
+                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#ff3366', fontSize: isMobile ? '9px' : '11px' }}>
+                      {t('leaderboard.rebirth')}
+                    </th>
+                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#33ffff', fontSize: isMobile ? '9px' : '11px' }}>
+                      {t('leaderboard.level')}
+                    </th>
+                    <th style={{ padding: isMobile ? '4px' : '6px', textAlign: 'right', color: '#FFD700', fontSize: isMobile ? '9px' : '11px' }}>
+                      {t('leaderboard.total')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -178,16 +190,16 @@ const Leaderboards = ({
       }}>
         {/* XP Total */}
         <LeaderboardTable
-          title="XP TOTAL"
+          title={t('leaderboard.total_xp_title')}
           icon="💎"
           color="#00ff88"
           data={leaderboardByTotalXP}
           currentUsername={currentUsername}
           isMobile={isMobile}
           columns={[
-            { header: 'Usuario', key: 'username' },
+            { header: t('leaderboard.username'), key: 'username' },
             { 
-              header: 'XP', 
+              header: t('leaderboard.xp'), 
               align: 'right',
               valueColor: '#33ffff',
               render: (entry) => entry.totalXp?.toLocaleString() || 0
@@ -197,16 +209,16 @@ const Leaderboards = ({
 
         {/* Estrellas Totales */}
         <LeaderboardTable
-          title="ESTRELLAS TOTALES"
+          title={t('leaderboard.total_stars_title')}
           icon="⭐"
           color="#FFD700"
           data={leaderboardByTotalStars}
           currentUsername={currentUsername}
           isMobile={isMobile}
           columns={[
-            { header: 'Usuario', key: 'username' },
+            { header: t('leaderboard.username'), key: 'username' },
             { 
-              header: 'Estrellas', 
+              header: t('leaderboard.stars'), 
               align: 'right',
               valueColor: '#ffff00',
               render: (entry) => entry.totalStars?.toLocaleString() || 0
@@ -216,16 +228,16 @@ const Leaderboards = ({
 
         {/* Serie */}
         <LeaderboardTable
-          title="SERIE"
+          title={t('leaderboard.series_title')}
           icon="🔢"
           color="#ff00ff"
           data={leaderboardBySeries}
           currentUsername={currentUsername}
           isMobile={isMobile}
           columns={[
-            { header: 'Usuario', key: 'username' },
+            { header: t('leaderboard.username'), key: 'username' },
             { 
-              header: 'Serie', 
+              header: t('leaderboard.series'), 
               align: 'right',
               valueColor: '#ff88ff',
               render: (entry) => entry.currentSeries || 1

@@ -657,28 +657,29 @@
             <img src="/logo.png" alt="Neon Snake Logo" width="40" height="40">
             <span>NEON SNAKE</span>
         </a>
-        <a href="/" class="play-btn-header">JUGAR AHORA</a>
+        <div id="lang-switcher" style="display:flex;gap:8px;align-items:center;margin-right:12px;"></div>
+        <a href="/" class="play-btn-header" data-i18n="landing_play_now">JUGAR AHORA</a>
     </header>
     
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-content">
             <h1>NEON SNAKE</h1>
-            <p class="hero-subtitle">El juego de serpiente <span>más adictivo</span> de Internet</p>
+            <p class="hero-subtitle" data-i18n-html="landing_hero_subtitle">El juego de serpiente <span>más adictivo</span> de Internet</p>
             
             <div class="hero-tags">
-                <span class="tag free">100% GRATIS</span>
-                <span class="tag">Sin descargas</span>
-                <span class="tag">Multijugador</span>
-                <span class="tag">25 Niveles</span>
+                <span class="tag free" data-i18n="landing_tag_free">100% GRATIS</span>
+                <span class="tag" data-i18n="landing_tag_no_download">Sin descargas</span>
+                <span class="tag" data-i18n="landing_tag_multiplayer">Multijugador</span>
+                <span class="tag" data-i18n="landing_tag_levels">25 Niveles</span>
             </div>
             
             <div class="cta-container">
                 <a href="/" class="play-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                    JUGAR GRATIS
+                    <span data-i18n="landing_play_free">JUGAR GRATIS</span>
                 </a>
-                <p class="no-download">No necesitas descargar nada. Juega directo en tu navegador.</p>
+                <p class="no-download" data-i18n="landing_no_download">No necesitas descargar nada. Juega directo en tu navegador.</p>
             </div>
             
             <!-- Animated Snake Demo -->
@@ -698,64 +699,64 @@
     
     <!-- Features -->
     <section class="features" id="features">
-        <h2>¿Por qué Neon Snake?</h2>
+        <h2 data-i18n="landing_why_title">¿Por qué Neon Snake?</h2>
         <div class="features-grid">
             <article class="feature-card">
                 <div class="feature-icon">🎮</div>
-                <h3>Controles Intuitivos</h3>
-                <p>Flechas del teclado o joystick táctil en celular. Fácil de aprender, difícil de dominar.</p>
+                <h3 data-i18n="landing_f1_title">Controles Intuitivos</h3>
+                <p data-i18n="landing_f1_text">Flechas del teclado o joystick táctil en celular. Fácil de aprender, difícil de dominar.</p>
             </article>
             <article class="feature-card">
                 <div class="feature-icon">⚡</div>
-                <h3>Power-Ups Épicos</h3>
-                <p>Escudos, disparos, imanes, velocidad y más. Mejora tu serpiente y domina el juego.</p>
+                <h3 data-i18n="landing_f2_title">Power-Ups Épicos</h3>
+                <p data-i18n="landing_f2_text">Escudos, disparos, imanes, velocidad y más. Mejora tu serpiente y domina el juego.</p>
             </article>
             <article class="feature-card">
                 <div class="feature-icon">🏆</div>
-                <h3>Rankings Mundiales</h3>
-                <p>Compite con jugadores de todo el mundo. ¿Puedes llegar al top del leaderboard?</p>
+                <h3 data-i18n="landing_f3_title">Rankings Mundiales</h3>
+                <p data-i18n="landing_f3_text">Compite con jugadores de todo el mundo. ¿Puedes llegar al top del leaderboard?</p>
             </article>
             <article class="feature-card">
                 <div class="feature-icon">🎨</div>
-                <h3>Skins Únicas</h3>
-                <p>Desbloquea skins legendarias, míticas y épicas. Personaliza tu serpiente neón.</p>
+                <h3 data-i18n="landing_f4_title">Skins Únicas</h3>
+                <p data-i18n="landing_f4_text">Desbloquea skins legendarias, míticas y épicas. Personaliza tu serpiente neón.</p>
             </article>
             <article class="feature-card">
                 <div class="feature-icon">📱</div>
-                <h3>Juega Donde Quieras</h3>
-                <p>Funciona en PC, tablet y celular. Mismo progreso en todos tus dispositivos.</p>
+                <h3 data-i18n="landing_f5_title">Juega Donde Quieras</h3>
+                <p data-i18n="landing_f5_text">Funciona en PC, tablet y celular. Mismo progreso en todos tus dispositivos.</p>
             </article>
             <article class="feature-card">
                 <div class="feature-icon">🔄</div>
-                <h3>Sistema Rebirth</h3>
-                <p>Completa el juego y renace con bonuses especiales. ¡Infinitas horas de diversión!</p>
+                <h3 data-i18n="landing_f6_title">Sistema Rebirth</h3>
+                <p data-i18n="landing_f6_text">Completa el juego y renace con bonuses especiales. ¡Infinitas horas de diversión!</p>
             </article>
         </div>
     </section>
     
     <!-- How to Play -->
     <section class="how-to-play" id="how-to-play">
-        <h2>¿Cómo se juega?</h2>
+        <h2 data-i18n="landing_how_title">¿Cómo se juega?</h2>
         <div class="steps">
             <div class="step">
                 <div class="step-number">1</div>
-                <h3>Mueve la Serpiente</h3>
-                <p>Usa las flechas o el joystick táctil para dirigir tu serpiente neón.</p>
+                <h3 data-i18n="landing_step1_title">Mueve la Serpiente</h3>
+                <p data-i18n="landing_step1_text">Usa las flechas o el joystick táctil para dirigir tu serpiente neón.</p>
             </div>
             <div class="step">
                 <div class="step-number">2</div>
-                <h3>Recolecta Estrellas</h3>
-                <p>Junta las estrellas doradas para completar cada nivel y ganar XP.</p>
+                <h3 data-i18n="landing_step2_title">Recolecta Estrellas</h3>
+                <p data-i18n="landing_step2_text">Junta las estrellas doradas para completar cada nivel y ganar XP.</p>
             </div>
             <div class="step">
                 <div class="step-number">3</div>
-                <h3>Evita Enemigos</h3>
-                <p>Esquiva las víboras enemigas rojas o dispárales con tu cañón.</p>
+                <h3 data-i18n="landing_step3_title">Evita Enemigos</h3>
+                <p data-i18n="landing_step3_text">Esquiva las víboras enemigas rojas o dispárales con tu cañón.</p>
             </div>
             <div class="step">
                 <div class="step-number">4</div>
-                <h3>Mejora y Compite</h3>
-                <p>Usa tu XP en la tienda y escala en el ranking mundial.</p>
+                <h3 data-i18n="landing_step4_title">Mejora y Compite</h3>
+                <p data-i18n="landing_step4_text">Usa tu XP en la tienda y escala en el ranking mundial.</p>
             </div>
         </div>
     </section>
@@ -765,82 +766,226 @@
         <div class="stats-grid">
             <div class="stat">
                 <div class="stat-number">25</div>
-                <div class="stat-label">Niveles</div>
+                <div class="stat-label" data-i18n="landing_stat_levels">Niveles</div>
             </div>
             <div class="stat">
                 <div class="stat-number">50+</div>
-                <div class="stat-label">Skins</div>
+                <div class="stat-label" data-i18n="landing_stat_skins">Skins</div>
             </div>
             <div class="stat">
                 <div class="stat-number">8</div>
-                <div class="stat-label">Power-Ups</div>
+                <div class="stat-label" data-i18n="landing_stat_powerups">Power-Ups</div>
             </div>
             <div class="stat">
                 <div class="stat-number">∞</div>
-                <div class="stat-label">Diversión</div>
+                <div class="stat-label" data-i18n="landing_stat_fun">Diversión</div>
             </div>
         </div>
     </section>
     
     <!-- FAQ -->
     <section class="faq" id="faq">
-        <h2>Preguntas Frecuentes</h2>
+        <h2 data-i18n="landing_faq_title">Preguntas Frecuentes</h2>
         <div class="faq-list">
             <div class="faq-item">
                 <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
-                    <span>¿Neon Snake es gratis?</span>
+                    <span data-i18n="landing_faq1_q">¿Neon Snake es gratis?</span>
                     <span class="faq-toggle">+</span>
                 </div>
-                <div class="faq-answer">
-                    ¡Sí! Neon Snake es 100% gratuito. Puedes jugar todos los niveles, desbloquear skins y competir en los rankings sin pagar nada.
-                </div>
+                <div class="faq-answer" data-i18n="landing_faq1_a">¡Sí! Neon Snake es 100% gratuito. Puedes jugar todos los niveles, desbloquear skins y competir en los rankings sin pagar nada.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
-                    <span>¿Puedo jugar en mi celular?</span>
+                    <span data-i18n="landing_faq2_q">¿Puedo jugar en mi celular?</span>
                     <span class="faq-toggle">+</span>
                 </div>
-                <div class="faq-answer">
-                    ¡Claro! Neon Snake está optimizado para dispositivos móviles. Solo gira tu teléfono en horizontal y disfruta de controles táctiles intuitivos con joystick virtual.
-                </div>
+                <div class="faq-answer" data-i18n="landing_faq2_a">¡Claro! Neon Snake está optimizado para dispositivos móviles. Solo gira tu teléfono en horizontal y disfruta de controles táctiles intuitivos con joystick virtual.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
-                    <span>¿Necesito crear una cuenta?</span>
+                    <span data-i18n="landing_faq3_q">¿Necesito crear una cuenta?</span>
                     <span class="faq-toggle">+</span>
                 </div>
-                <div class="faq-answer">
-                    Sí, necesitas registrarte para guardar tu progreso y aparecer en los rankings. ¡Es rápido y solo necesitas un nombre de usuario y contraseña!
-                </div>
+                <div class="faq-answer" data-i18n="landing_faq3_a">Sí, necesitas registrarte para guardar tu progreso y aparecer en los rankings. ¡Es rápido y solo necesitas un nombre de usuario y contraseña!</div>
             </div>
             <div class="faq-item">
                 <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
-                    <span>¿Qué son los Rebirths?</span>
+                    <span data-i18n="landing_faq4_q">¿Qué son los Rebirths?</span>
                     <span class="faq-toggle">+</span>
                 </div>
-                <div class="faq-answer">
-                    Cuando completas los 25 niveles, puedes hacer un "Rebirth" que reinicia tu progreso pero desbloquea skins exclusivas y te da bonus especiales. ¡Es para los verdaderos campeones!
-                </div>
+                <div class="faq-answer" data-i18n="landing_faq4_a">Cuando completas los 25 niveles, puedes hacer un "Rebirth" que reinicia tu progreso pero desbloquea skins exclusivas y te da bonus especiales. ¡Es para los verdaderos campeones!</div>
             </div>
         </div>
     </section>
     
     <!-- Final CTA -->
     <section class="final-cta">
-        <h2>¿LISTO PARA JUGAR?</h2>
-        <p>Únete a miles de jugadores y demuestra que eres el mejor</p>
+        <h2 data-i18n="landing_ready_title">¿LISTO PARA JUGAR?</h2>
+        <p data-i18n="landing_ready_text">Únete a miles de jugadores y demuestra que eres el mejor</p>
         <a href="/" class="play-btn">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            COMENZAR AHORA
+            <span data-i18n="landing_start_now">COMENZAR AHORA</span>
         </a>
     </section>
     
     <!-- Footer -->
     <footer>
-        <p>&copy; 2024 Neon Snake. Juego de serpiente online gratis.</p>
-        <p style="margin-top: 10px;"><a href="/">Jugar</a> · <a href="#features">Características</a> · <a href="#how-to-play">Cómo jugar</a> · <a href="#faq">FAQ</a></p>
+        <p data-i18n="landing_footer_copy">© 2024 Neon Snake. Juego de serpiente online gratis.</p>
+        <p style="margin-top: 10px;"><a href="/" data-i18n="landing_footer_play">Jugar</a> · <a href="#features" data-i18n="landing_footer_features">Características</a> · <a href="#how-to-play" data-i18n="landing_footer_how">Cómo jugar</a> · <a href="#faq">FAQ</a></p>
     </footer>
     
+    <!-- Landing i18n: detect language and apply translations -->
+    <script>
+        (function() {
+            var LANG_KEY = 'viborita_lang';
+            function detectLang() {
+                var stored = localStorage.getItem(LANG_KEY);
+                if (stored === 'es' || stored === 'en') return stored;
+                var raw = (navigator.languages && navigator.languages[0]) || navigator.language || navigator.userLanguage || 'en';
+                var code = String(raw).toLowerCase().split(/[-_]/)[0];
+                return code === 'es' ? 'es' : 'en';
+            }
+            var T = {
+                es: {
+                    landing_play_now: 'JUGAR AHORA',
+                    landing_hero_subtitle: 'El juego de serpiente <span>más adictivo</span> de Internet',
+                    landing_tag_free: '100% GRATIS',
+                    landing_tag_no_download: 'Sin descargas',
+                    landing_tag_multiplayer: 'Multijugador',
+                    landing_tag_levels: '25 Niveles',
+                    landing_play_free: 'JUGAR GRATIS',
+                    landing_no_download: 'No necesitas descargar nada. Juega directo en tu navegador.',
+                    landing_why_title: '¿Por qué Neon Snake?',
+                    landing_f1_title: 'Controles Intuitivos',
+                    landing_f1_text: 'Flechas del teclado o joystick táctil en celular. Fácil de aprender, difícil de dominar.',
+                    landing_f2_title: 'Power-Ups Épicos',
+                    landing_f2_text: 'Escudos, disparos, imanes, velocidad y más. Mejora tu serpiente y domina el juego.',
+                    landing_f3_title: 'Rankings Mundiales',
+                    landing_f3_text: 'Compite con jugadores de todo el mundo. ¿Puedes llegar al top del leaderboard?',
+                    landing_f4_title: 'Skins Únicas',
+                    landing_f4_text: 'Desbloquea skins legendarias, míticas y épicas. Personaliza tu serpiente neón.',
+                    landing_f5_title: 'Juega Donde Quieras',
+                    landing_f5_text: 'Funciona en PC, tablet y celular. Mismo progreso en todos tus dispositivos.',
+                    landing_f6_title: 'Sistema Rebirth',
+                    landing_f6_text: 'Completa el juego y renace con bonuses especiales. ¡Infinitas horas de diversión!',
+                    landing_how_title: '¿Cómo se juega?',
+                    landing_step1_title: 'Mueve la Serpiente',
+                    landing_step1_text: 'Usa las flechas o el joystick táctil para dirigir tu serpiente neón.',
+                    landing_step2_title: 'Recolecta Estrellas',
+                    landing_step2_text: 'Junta las estrellas doradas para completar cada nivel y ganar XP.',
+                    landing_step3_title: 'Evita Enemigos',
+                    landing_step3_text: 'Esquiva las víboras enemigas rojas o dispárales con tu cañón.',
+                    landing_step4_title: 'Mejora y Compite',
+                    landing_step4_text: 'Usa tu XP en la tienda y escala en el ranking mundial.',
+                    landing_stat_levels: 'Niveles',
+                    landing_stat_skins: 'Skins',
+                    landing_stat_powerups: 'Power-Ups',
+                    landing_stat_fun: 'Diversión',
+                    landing_faq_title: 'Preguntas Frecuentes',
+                    landing_faq1_q: '¿Neon Snake es gratis?',
+                    landing_faq1_a: '¡Sí! Neon Snake es 100% gratuito. Puedes jugar todos los niveles, desbloquear skins y competir en los rankings sin pagar nada.',
+                    landing_faq2_q: '¿Puedo jugar en mi celular?',
+                    landing_faq2_a: '¡Claro! Neon Snake está optimizado para dispositivos móviles. Solo gira tu teléfono en horizontal y disfruta de controles táctiles intuitivos con joystick virtual.',
+                    landing_faq3_q: '¿Necesito crear una cuenta?',
+                    landing_faq3_a: 'Sí, necesitas registrarte para guardar tu progreso y aparecer en los rankings. ¡Es rápido y solo necesitas un nombre de usuario y contraseña!',
+                    landing_faq4_q: '¿Qué son los Rebirths?',
+                    landing_faq4_a: 'Cuando completas los 25 niveles, puedes hacer un "Rebirth" que reinicia tu progreso pero desbloquea skins exclusivas y te da bonus especiales. ¡Es para los verdaderos campeones!',
+                    landing_ready_title: '¿LISTO PARA JUGAR?',
+                    landing_ready_text: 'Únete a miles de jugadores y demuestra que eres el mejor',
+                    landing_start_now: 'COMENZAR AHORA',
+                    landing_footer_copy: '© 2024 Neon Snake. Juego de serpiente online gratis.',
+                    landing_footer_play: 'Jugar',
+                    landing_footer_features: 'Características',
+                    landing_footer_how: 'Cómo jugar'
+                },
+                en: {
+                    landing_play_now: 'PLAY NOW',
+                    landing_hero_subtitle: 'The <span>most addictive</span> snake game on the internet',
+                    landing_tag_free: '100% FREE',
+                    landing_tag_no_download: 'No downloads',
+                    landing_tag_multiplayer: 'Multiplayer',
+                    landing_tag_levels: '25 Levels',
+                    landing_play_free: 'PLAY FREE',
+                    landing_no_download: 'No need to download anything. Play right in your browser.',
+                    landing_why_title: 'Why Neon Snake?',
+                    landing_f1_title: 'Intuitive Controls',
+                    landing_f1_text: 'Keyboard arrows or touch joystick on mobile. Easy to learn, hard to master.',
+                    landing_f2_title: 'Epic Power-Ups',
+                    landing_f2_text: 'Shields, shots, magnets, speed and more. Upgrade your snake and dominate the game.',
+                    landing_f3_title: 'World Rankings',
+                    landing_f3_text: 'Compete with players from around the world. Can you reach the top of the leaderboard?',
+                    landing_f4_title: 'Unique Skins',
+                    landing_f4_text: 'Unlock legendary, mythic and epic skins. Customize your neon snake.',
+                    landing_f5_title: 'Play Anywhere',
+                    landing_f5_text: 'Works on PC, tablet and phone. Same progress on all your devices.',
+                    landing_f6_title: 'Rebirth System',
+                    landing_f6_text: 'Complete the game and rebirth with special bonuses. Endless hours of fun!',
+                    landing_how_title: 'How do you play?',
+                    landing_step1_title: 'Move the Snake',
+                    landing_step1_text: 'Use the arrow keys or touch joystick to guide your neon snake.',
+                    landing_step2_title: 'Collect Stars',
+                    landing_step2_text: 'Gather golden stars to complete each level and earn XP.',
+                    landing_step3_title: 'Avoid Enemies',
+                    landing_step3_text: 'Dodge the red enemy snakes or shoot them with your cannon.',
+                    landing_step4_title: 'Upgrade & Compete',
+                    landing_step4_text: 'Spend your XP in the shop and climb the world ranking.',
+                    landing_stat_levels: 'Levels',
+                    landing_stat_skins: 'Skins',
+                    landing_stat_powerups: 'Power-Ups',
+                    landing_stat_fun: 'Fun',
+                    landing_faq_title: 'Frequently Asked Questions',
+                    landing_faq1_q: 'Is Neon Snake free?',
+                    landing_faq1_a: 'Yes! Neon Snake is 100% free. You can play all levels, unlock skins and compete on the rankings without paying anything.',
+                    landing_faq2_q: 'Can I play on my phone?',
+                    landing_faq2_a: 'Sure! Neon Snake is optimized for mobile. Just turn your phone sideways and enjoy intuitive touch controls with a virtual joystick.',
+                    landing_faq3_q: 'Do I need to create an account?',
+                    landing_faq3_a: 'Yes, you need to sign up to save your progress and appear on the rankings. It\'s quick and you only need a username and password!',
+                    landing_faq4_q: 'What are Rebirths?',
+                    landing_faq4_a: 'When you complete all 25 levels, you can do a "Rebirth" which resets your progress but unlocks exclusive skins and gives you special bonuses. For true champions!',
+                    landing_ready_title: 'READY TO PLAY?',
+                    landing_ready_text: 'Join thousands of players and prove you\'re the best',
+                    landing_start_now: 'START NOW',
+                    landing_footer_copy: '© 2024 Neon Snake. Free online snake game.',
+                    landing_footer_play: 'Play',
+                    landing_footer_features: 'Features',
+                    landing_footer_how: 'How to play'
+                }
+            };
+            function apply() {
+                var lang = detectLang();
+                document.documentElement.lang = lang;
+                var tr = T[lang] || T.en;
+                document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                    var key = el.getAttribute('data-i18n');
+                    if (tr[key] != null) el.textContent = tr[key];
+                });
+                document.querySelectorAll('[data-i18n-html]').forEach(function(el) {
+                    var key = el.getAttribute('data-i18n-html');
+                    if (tr[key] != null) el.innerHTML = tr[key];
+                });
+                var wrap = document.getElementById('lang-switcher');
+                if (wrap) {
+                    wrap.innerHTML = '';
+                    ['es','en'].forEach(function(l) {
+                        var btn = document.createElement('button');
+                        btn.textContent = l.toUpperCase();
+                        btn.type = 'button';
+                        btn.style.cssText = 'padding:6px 12px;background:' + (lang === l ? 'rgba(51,255,255,0.3)' : 'transparent') + ';border:1px solid #33ffff;border-radius:4px;color:#33ffff;cursor:pointer;font-size:14px;font-family:inherit';
+                        btn.addEventListener('click', function() {
+                            localStorage.setItem(LANG_KEY, l);
+                            apply();
+                        });
+                        wrap.appendChild(btn);
+                    });
+                }
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', apply);
+            } else {
+                apply();
+            }
+        })();
+    </script>
     <!-- Tracking Events -->
     <script>
         // Track landing page view

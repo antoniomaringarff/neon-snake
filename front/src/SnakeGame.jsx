@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Shield, Zap, Magnet, Gauge, Heart, Palette, Rocket } from 'lucide-react';
 import AdminPanel from './components/AdminPanel';
+import { useTranslation } from './i18n.jsx';
 
 // Configuración de niveles - cada nivel tiene características particulares
 // Esta función ahora usa los niveles cargados desde la DB si están disponibles
@@ -48,7 +49,7 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
     killerSawCount: 0,
     floatingCannonCount: 0,
     resentfulSnakeCount: 0,
-    healthBoxCount: 0,
+    healthBoxCount: level >= 5 ? Math.min(5, 1 + Math.floor((level - 5) / 2)) : 0,
     enemyUpgradeLevel: Math.floor((level - 1) * 10 / 24), // 0-10 basado en nivel
     hasCentralCell: level >= 2,
     centralCellOpeningSpeed: 0.002, // Velocidad fija igual para todos los niveles
@@ -127,7 +128,8 @@ const getLevelConfig = (level, levelConfigsFromDB = {}) => {
 
 const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUntil = null, freeShots = false, isImmune = false }) => {
   const canvasRef = useRef(null);
-  
+  const { t, lang } = useTranslation();
+
   // Detectar mobile: pantalla pequeña O dispositivo táctil con pantalla no muy grande
   const detectMobile = () => {
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -192,6 +194,71 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       window.removeEventListener('orientationchange', handleOrientationChange);
     };
   }, []);
+
+  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
+  const [mobileViewportHeight, setMobileViewportHeight] = useState(null); // Altura visible en móvil (para que los controles no queden ocultos)
+
+  // En móvil al jugar: usar altura visible (visualViewport) para que los controles no queden ocultos por la barra del navegador
+  useEffect(() => {
+    if (!isMobile || gameState !== 'playing') {
+      setMobileViewportHeight(null);
+      return;
+    }
+    const updateHeight = () => {
+      if (window.visualViewport) {
+        setMobileViewportHeight(window.visualViewport.height);
+      }
+    };
+    updateHeight();
+    window.visualViewport?.addEventListener('resize', updateHeight);
+    window.visualViewport?.addEventListener('scroll', updateHeight);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateHeight);
+      window.visualViewport?.removeEventListener('scroll', updateHeight);
+    };
+  }, [isMobile, gameState]);
+
+  // Al entrar al juego: bloquear scroll y resetear posición (evita pantalla "movida" tras hacer scroll en menú)
+  // Al salir: desbloquear y salir de fullscreen
+  useEffect(() => {
+    if (gameState === 'playing') {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      const prevOverflow = document.body.style.overflow;
+      const prevDocOverflow = document.documentElement.style.overflow;
+      const prevPosition = document.body.style.position;
+      const prevTop = document.body.style.top;
+      const prevLeft = document.body.style.left;
+      const prevRight = document.body.style.right;
+      const prevWidth = document.body.style.width;
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      if (isMobile) {
+        document.body.style.position = 'fixed';
+        document.body.style.top = '0';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+      }
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.documentElement.style.overflow = prevDocOverflow;
+        document.body.style.position = prevPosition;
+        document.body.style.top = prevTop;
+        document.body.style.left = prevLeft;
+        document.body.style.right = prevRight;
+        document.body.style.width = prevWidth;
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.();
+        }
+      };
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.();
+      }
+    }
+  }, [gameState, isMobile]);
   
   // Dynamic canvas dimensions
   const CANVAS_WIDTH = canvasDimensions.width;
@@ -222,7 +289,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const stopAutoFireRef = useRef(null);
   const chatScrollRef = useRef({ shouldAutoScroll: true }); // Track if user wants auto-scroll
   const previousGameStateRef = useRef('menu'); // Track previous gameState
-  const [gameState, setGameState] = useState('menu'); // menu, playing, levelComplete, gameComplete, gameOver, shop
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [totalXP, setTotalXP] = useState(0);
@@ -254,7 +320,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const [rebirthCount, setRebirthCount] = useState(0); // Contador de rebirths
   const [currentSeries, setCurrentSeries] = useState(1); // Serie actual
   const [timeLeft, setTimeLeft] = useState(null); // Tiempo restante del baneo
-  
+
   // Definición de skins disponibles (debe estar antes de las funciones que lo usan)
   // Categorías: COMÚN, RARO, ÉPICO, MÍTICO, LEGENDARIO, FARMING AURA
   // Se desbloquean por rebirths:
@@ -799,153 +865,61 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     return `Unos ${num}`;
   };
   
-  // Función para generar mensajes de intro dinámicamente desde la DB
-  const getLevelIntroMessage = (levelNum, levelConfigsFromDB) => {
+  // Función para generar mensajes de intro dinámicamente desde la DB (usa t y lang para i18n)
+  const getLevelIntroMessage = (levelNum, levelConfigsFromDB, t, lang) => {
     const levelConfig = getLevelConfig(levelNum, levelConfigsFromDB);
-    
-    // Si no hay configuración, retornar null (no mostrar intro)
-    if (!levelConfig || !levelConfig.enemyCount) {
-      return null;
-    }
-    
-    // Títulos y tips hardcodeados (texto descriptivo)
-    const titles = {
-      1: "Primeros Pasos", 2: "Calentando", 3: "Nuevos Obstáculos", 4: "Territorio Hostil",
-      5: "Zona de Guerra", 6: "Sin Tregua", 7: "Supervivencia", 8: "Último Respiro",
-      9: "Sierras Asesinas", 10: "La Resentida", 11: "Infierno", 12: "Sin Escape",
-      13: "Velocidad Mortal", 14: "Emboscada", 15: "Campo Abierto", 16: "Fuego Cruzado",
-      17: "Tormenta", 18: "Jugador Rápido", 19: "Resistencia", 20: "Elite",
-      21: "Veterano", 22: "Enemigos Veloces", 23: "Penúltimo", 24: "La Antesala",
-      25: "EL FINAL"
-    };
-    
-    const tips = {
-      1: "Mata enemigos chocando tu cuerpo contra sus cabezas. Cada enemigo muerto deja una estrella dorada.",
-      2: "TIP: Compra el CANON en la tienda! Disparar facilita mucho conseguir estrellas",
-      3: "Cuidado! Algunos enemigos ahora disparan",
-      4: "Los enemigos con escudo brillan azul",
-      5: "Busca las cajas verdes con vida extra",
-      6: "Tu escudo te da chance de esquivar balas",
-      7: "Mejora tu velocidad de bala en la tienda",
-      8: "El imán atrae XP y estrellas hacia ti",
-      9: "Las sierras rebotan por el mapa. Evítalas!",
-      10: "La víbora arcoíris te persigue. Es un duelo!",
-      11: "Los cañones flotantes disparan doble",
-      12: "Las sierras grandes hacen más daño",
-      13: "Los enemigos ahora son más rápidos",
-      14: "Tocar a la resentida la mata y reaparece",
-      15: "Sin estructuras donde esconderte",
-      16: "Las resentidas dejan caja de vida al morir",
-      17: "Dispara con click izquierdo o ESPACIO",
-      18: "Aprovecha tu mayor velocidad",
-      19: "Cada estrella del mismo enemigo cura 1 vez",
-      20: "Las resentidas disparan doble y rápido",
-      21: "Mira el minimapa para ubicar enemigos",
-      22: "Los enemigos ahora corren a tu velocidad",
-      23: "Ya casi! Un nivel más!",
-      24: "Prepara todo para el nivel final",
-      25: "100 estrellas. Esto es todo. Buena suerte!"
-    };
-    
-    // Generar peligros dinámicamente desde la DB
+    if (!levelConfig || !levelConfig.enemyCount) return null;
+    const numStr = (n) => (lang === 'es' ? numberToSpanish(n) : String(n));
     const dangers = [];
-    
-    // Víboras enemigas (siempre presente)
-    dangers.push(`${levelConfig.enemyCount} víboras enemigas`);
-    
-    // Estructuras
+    dangers.push(`${levelConfig.enemyCount} ${t('level_intro.danger_enemy_snakes')}`);
     if (levelConfig.structuresCount > 0) {
-      if (levelNum === 3) {
-        dangers.push("Si buscas XP, encuentra las estructuras");
-      } else if (levelNum === 4) {
-        dangers.push("Las estructuras esconden tesoros de XP");
-      } else {
-        dangers.push(`${levelConfig.structuresCount} estructuras`);
-      }
+      if (levelNum === 3) dangers.push(t('level_intro.danger_find_structures'));
+      else if (levelNum === 4) dangers.push(t('level_intro.danger_structures_xp'));
+      else dangers.push(`${levelConfig.structuresCount} ${t('level_intro.danger_structures')}`);
     } else if (levelNum === 15) {
-      dangers.push("Sin estructuras");
+      dangers.push(t('level_intro.danger_no_structures'));
     }
-    
-    // Sierras asesinas
     if (levelConfig.killerSawCount > 0) {
-      dangers.push(`${levelConfig.killerSawCount} sierras asesinas`);
+      dangers.push(`${levelConfig.killerSawCount} ${t('level_intro.danger_killer_saws')}`);
     } else if (levelConfig.killerSawCount === 0 && levelNum >= 9) {
-      dangers.push("Sierras");
+      dangers.push(t('level_intro.danger_saws'));
     }
-    
-    // Cañones flotantes
     if (levelConfig.floatingCannonCount > 0) {
-      dangers.push(`${levelConfig.floatingCannonCount} cañones flotantes`);
+      dangers.push(`${levelConfig.floatingCannonCount} ${t('level_intro.danger_floating_cannons')}`);
     } else if (levelConfig.floatingCannonCount === 0 && levelNum >= 9) {
-      dangers.push("Cañones");
+      dangers.push(t('level_intro.danger_cannons'));
     }
-    
-    // Víboras resentidas
     if (levelConfig.resentfulSnakeCount > 0) {
-      if (levelConfig.resentfulSnakeCount === 1) {
-        dangers.push("1 víbora resentida");
-      } else {
-        dangers.push(`${levelConfig.resentfulSnakeCount} víboras resentidas`);
-      }
+      if (levelConfig.resentfulSnakeCount === 1) dangers.push(t('level_intro.danger_resentful_one'));
+      else dangers.push(`${levelConfig.resentfulSnakeCount} ${t('level_intro.danger_resentful_many')}`);
     } else if (levelConfig.resentfulSnakeCount === 0 && levelNum >= 10) {
-      dangers.push("VIBORA RESENTIDA");
+      dangers.push(t('level_intro.danger_resentful_label'));
     }
-    
-    // Enemigos que disparan (calcular desde porcentaje)
     const shootPercentage = levelConfig.enemyShootPercentage || 0;
     if (shootPercentage > 0) {
-      const enemiesThatShoot = Math.round((levelConfig.enemyCount * shootPercentage) / 100);
-      const spanishNum = numberToSpanish(enemiesThatShoot);
-      if (enemiesThatShoot === 1) {
-        dangers.push(`${spanishNum} dispara`);
-      } else {
-        dangers.push(`${spanishNum} disparan`);
-      }
+      const n = Math.round((levelConfig.enemyCount * shootPercentage) / 100);
+      dangers.push(n === 1 ? `${numStr(n)} ${t('level_intro.danger_shoots_one')}` : `${numStr(n)} ${t('level_intro.danger_shoots_many')}`);
     }
-    
-    // Enemigos con escudo (calcular desde porcentaje)
     const shieldPercentage = levelConfig.enemyShieldPercentage || 0;
     if (shieldPercentage > 0) {
-      const enemiesWithShield = Math.round((levelConfig.enemyCount * shieldPercentage) / 100);
-      // Caso especial: si es 2 o 3, decir "Dos o tres"
-      if (enemiesWithShield === 2 || enemiesWithShield === 3) {
-        dangers.push("Dos o tres tienen escudo");
-      } else {
-        const spanishNum = numberToSpanish(enemiesWithShield);
-        if (enemiesWithShield === 1) {
-          dangers.push(`${spanishNum} tiene escudo`);
-        } else {
-          dangers.push(`${spanishNum} tienen escudo`);
-        }
-      }
+      const n = Math.round((levelConfig.enemyCount * shieldPercentage) / 100);
+      if (n === 2 || n === 3) dangers.push(t('level_intro.danger_shield_2_3'));
+      else dangers.push(n === 1 ? `${numStr(n)} ${t('level_intro.danger_shield_one')}` : `${numStr(n)} ${t('level_intro.danger_shield_many')}`);
     }
-    
-    // Velocidad de enemigos (solo para algunos niveles)
-    if (levelNum === 13 || levelNum === 22) {
-      dangers.push("Enemigos MÁS RÁPIDOS");
-    }
-    
-    // Velocidad del jugador
-    if (levelNum === 18) {
-      dangers.push("TU velocidad aumenta");
-    }
-    
-    // Mapa gigante y todo
+    if (levelNum === 13 || levelNum === 22) dangers.push(t('level_intro.danger_faster'));
+    if (levelNum === 18) dangers.push(t('level_intro.danger_your_speed'));
     if (levelNum === 25) {
-      dangers.push("Mapa GIGANTE");
-      dangers.push("TODO");
+      dangers.push(t('level_intro.danger_giant_map'));
+      dangers.push(t('level_intro.danger_everything'));
     }
-    
-    // Bordes del mapa (solo niveles iniciales)
-    if (levelNum <= 2) {
-      dangers.push("Bordes del mapa");
-    }
-    
+    if (levelNum <= 2) dangers.push(t('level_intro.danger_map_borders'));
+    const titleKey = `level_intro.title_${levelNum}`;
+    const tipKey = `level_intro.tip_${levelNum}`;
     return {
-      title: titles[levelNum] || `Nivel ${levelNum}`,
+      title: t(titleKey) !== titleKey ? t(titleKey) : `${t('level_intro.title_fallback')} ${levelNum}`,
       objective: levelConfig.starsNeeded,
-      dangers: dangers,
-      tip: tips[levelNum] || "Buena suerte!"
+      dangers,
+      tip: t(tipKey) !== tipKey ? t(tipKey) : t('level_intro.tip_fallback')
     };
   };
   
@@ -2246,16 +2220,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         return;
       }
       
-      // Calcular cuántas balas se disparan (costo en XP)
-      // Level 1: 1 bala, Level 2: 2 balas, Level 3: 3 balas, Level 4-5: 4 balas
+      // Calcular cuántas balas se disparan (costo en XP: mínimo 10 XP por bala desde total XP)
       let bulletCount = 1;
-      if (cannonLevel >= 2) bulletCount = 2; // Doble cañón cabeza
-      if (cannonLevel >= 3) bulletCount = 3; // + 1 cola
-      if (cannonLevel >= 4) bulletCount = 4; // + 2 cola
+      if (cannonLevel >= 2) bulletCount = 2;
+      if (cannonLevel >= 3) bulletCount = 3;
+      if (cannonLevel >= 4) bulletCount = 4;
+      const xpCostPerBullet = 10;
+      const totalXpCost = xpCostPerBullet * bulletCount;
       
-      // Verificar que hay suficiente XP para disparar (excepto si tiene freeShots)
-      if (!freeShots && game.sessionXP < bulletCount) {
-        return; // No hay suficiente XP
+      if (!freeShots) {
+        if (totalXP < totalXpCost) return;
+        setTotalXP(prev => Math.max(0, prev - totalXpCost));
       }
       
       // Initialize lastPlayerShot if not exists
@@ -2275,12 +2250,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       
       if (currentTime - game.lastPlayerShot < cooldown) {
         return; // Still on cooldown
-      }
-      
-      // Consumir XP por disparo (excepto si tiene freeShots)
-      if (!freeShots) {
-        game.sessionXP -= bulletCount;
-        setScore(game.sessionXP); // Actualizar el score visual
       }
       
       game.lastPlayerShot = currentTime;
@@ -2431,9 +2400,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       const starGroupId = Date.now() + Math.random(); // ID único para este grupo de estrellas
       
       for (let i = 0; i < starsToCreate; i++) {
-        // Distribuir las estrellas en un pequeño radio si son varias
-        const starAngle = starsToCreate > 1 ? (Math.PI * 2 * i) / starsToCreate : 0;
-        const starRadius = starsToCreate > 1 ? 30 : 0;
+        // Distribuir como pequeña explosión: siempre un radio mínimo para no tapar la caja de vida
+        const starAngle = (Math.PI * 2 * i) / starsToCreate + (Math.random() - 0.5) * 0.4;
+        const starRadius = starsToCreate > 1 ? 28 + Math.random() * 15 : 22 + Math.random() * 18;
         
       gameRef.current.stars.push({
           x: x + Math.cos(starAngle) * starRadius,
@@ -2804,6 +2773,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               const starsToCreate = 1 + (enemy.starsEaten || 0);
               createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
               createParticle(deathX, deathY, '#ff3366', 15);
+              // Caja de vida (1 punto) - explosión: alejada del centro
+              const boxAngle = Math.random() * Math.PI * 2;
+              const boxDist = 40 + Math.random() * 25;
+              game.healthBoxes.push({
+                x: deathX + Math.cos(boxAngle) * boxDist,
+                y: deathY + Math.sin(boxAngle) * boxDist,
+                healthPoints: 1,
+                size: 18,
+                pulse: 0,
+                pulseSpeed: 0.05
+              });
               enemiesToRemove.push(enemyIndex);
             }
             break;
@@ -2827,6 +2807,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 const starsToCreate = 1 + (otherEnemy.starsEaten || 0);
                 createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
                 createParticle(deathX, deathY, '#ff3366', 15);
+                // Caja de vida (1 punto) - explosión: alejada del centro
+                const boxAngle = Math.random() * Math.PI * 2;
+                const boxDist = 40 + Math.random() * 25;
+                game.healthBoxes.push({
+                  x: deathX + Math.cos(boxAngle) * boxDist,
+                  y: deathY + Math.sin(boxAngle) * boxDist,
+                  healthPoints: 1,
+                  size: 18,
+                  pulse: 0,
+                  pulseSpeed: 0.05
+                });
                 enemiesToRemove.push(otherIndex);
               }
               break;
@@ -2893,6 +2884,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   const starsToCreate = 1 + (enemy.starsEaten || 0);
                   createFoodFromEnemy(deathX, deathY, enemyXP, starsToCreate);
                   createParticle(deathX, deathY, '#ff3366', 15);
+                  // Caja de vida (1 punto) - explosión: alejada del centro
+                  const boxAngle = Math.random() * Math.PI * 2;
+                  const boxDist = 40 + Math.random() * 25;
+                  game.healthBoxes.push({
+                    x: deathX + Math.cos(boxAngle) * boxDist,
+                    y: deathY + Math.sin(boxAngle) * boxDist,
+                    healthPoints: 1,
+                    size: 18,
+                    pulse: 0,
+                    pulseSpeed: 0.05
+                  });
                   enemiesToKill.push(enemyIndex);
                 }
                 return;
@@ -2943,12 +2945,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   // Crear estrella y XP como recompensa
                   createFoodFromEnemy(snakeHead.x, snakeHead.y, 100, 3); // 3 estrellas por matar a la resentful
                   
-                  // Dejar caja de vida de 5 puntos
+                  // Dejar caja de vida de 5 puntos - explosión: alejada del centro
+                  const boxAngleR = Math.random() * Math.PI * 2;
+                  const boxDistR = 45 + Math.random() * 30;
                   game.healthBoxes.push({
-                    x: snakeHead.x,
-                    y: snakeHead.y,
+                    x: snakeHead.x + Math.cos(boxAngleR) * boxDistR,
+                    y: snakeHead.y + Math.sin(boxAngleR) * boxDistR,
                     healthPoints: 5,
-                    size: 25, // Tamaño grande
+                    size: 25,
                     pulse: 0,
                     pulseSpeed: 0.05
                   });
@@ -3522,25 +3526,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           setCurrentLevelStars(prev => prev + 1);
           // NO sumar a totalStars durante el juego - solo cuando ganas el nivel
           
-          // Recuperar vida SOLO si este grupo de estrellas no ha curado todavía
-          // (máximo 1 vida por víbora muerta, sin importar cuántas estrellas tenía)
-          if (star.groupId) {
-            // Estrella de víbora muerta - verificar si el grupo ya curó
-            const groupAlreadyHealed = game.stars.some(s => s.groupId === star.groupId && s.healedAlready);
-            
-            if (!groupAlreadyHealed) {
-              // Primera estrella del grupo - curar 1 vida y marcar el grupo
-              applyHeal(1, star.x, star.y);
-              // Marcar todas las estrellas del mismo grupo como que ya curaron
-              game.stars.forEach(s => {
-                if (s.groupId === star.groupId) {
-                  s.healedAlready = true;
-                }
-              });
-            }
-            // Si el grupo ya curó, no cura pero sí cuenta la estrella
-          } else {
-            // Estrella sin grupo (del mapa o spawn inicial) - cura normalmente
+          // La vida por matar una víbora se recibe al recoger la CAJA DE VIDA, no al recoger la estrella.
+          // Estrellas con groupId (de víbora muerta): no curan al recogerlas.
+          // Estrellas sin grupo (del mapa/spawn): siguen curando 1 vida al recogerlas.
+          if (!star.groupId) {
             applyHeal(1, star.x, star.y);
           }
           
@@ -3835,12 +3824,14 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               createParticle(snakeHead.x, snakeHead.y, '#00ffff', 15);
               createParticle(snakeHead.x, snakeHead.y, '#ffffff', 12);
               
-              // Dejar caja de vida de 5 puntos
+              // Dejar caja de vida de 5 puntos - explosión: alejada del centro
+              const boxAngleT = Math.random() * Math.PI * 2;
+              const boxDistT = 45 + Math.random() * 30;
               game.healthBoxes.push({
-                x: snakeHead.x,
-                y: snakeHead.y,
+                x: snakeHead.x + Math.cos(boxAngleT) * boxDistT,
+                y: snakeHead.y + Math.sin(boxAngleT) * boxDistT,
                 healthPoints: 5,
-                size: 25, // Tamaño grande
+                size: 25,
                 pulse: 0,
                 pulseSpeed: 0.05
               });
@@ -4824,6 +4815,55 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           }
         });
       }
+
+      // Draw health boxes ON TOP (cajita de primeros auxilios) - blanco y rojo
+      if (game.healthBoxes && game.healthBoxes.length > 0) {
+        game.healthBoxes.forEach(box => {
+          const screenX = box.x - camX;
+          const screenY = box.y - camY;
+          if (screenX > -80 && screenX < CANVAS_WIDTH + 80 && screenY > -80 && screenY < CANVAS_HEIGHT + 80) {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            const pulseScale = 1 + (Math.sin(box.pulse || 0) * 0.5 + 0.5) * 0.08;
+            ctx.scale(pulseScale, pulseScale);
+            const w = Math.max(box.size || 20, 24);
+            const h = w * 1.1;
+            const corner = w * 0.2;
+            // Sombra suave
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = 'rgba(200, 0, 0, 0.6)';
+            ctx.shadowOffsetY = 2;
+            // Cajita: fondo blanco con bordes redondeados
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(-w / 2, -h / 2, w, h, corner);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+            // Borde rojo de la cajita
+            ctx.strokeStyle = '#c41e3a';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            // Cruz roja (primeros auxilios): barra vertical y horizontal
+            const crossW = w * 0.25;
+            const crossPad = w * 0.15;
+            ctx.fillStyle = '#c41e3a';
+            ctx.beginPath();
+            ctx.roundRect(-crossW / 2, -h / 2 + crossPad, crossW, h - crossPad * 2, crossW / 4);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.roundRect(-w / 2 + crossPad, -crossW / 2, w - crossPad * 2, crossW, crossW / 4);
+            ctx.fill();
+            // Número de vida en el centro (blanco para leer sobre la cruz)
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(box.healthPoints || 0), 0, 0);
+            ctx.restore();
+          }
+        });
+      }
       
     };
 
@@ -4888,7 +4928,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, showFloatingShop, selectedSkin, isImmune, isMobile]);
+  }, [gameState, level, shieldLevel, cannonLevel, bulletSpeedLevel, shopOpen, showFloatingShop, selectedSkin, isImmune, isMobile, totalXP]);
 
   const startGame = () => {
     // Resetear completamente el estado del juego antes de iniciar
@@ -4959,6 +4999,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       rebirth_count: rebirthCount,
       series: currentSeries
     });
+    // En móvil: pantalla completa para que se vean los controles (evita que el header del navegador los tape)
+      if (isMobile && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
     // NO establecer gameStartTime aquí - se establecerá en initGame después de inicializar todo
     setGameState('playing');
     // initGame se ejecutará dentro del useEffect cuando gameState cambie a 'playing'
@@ -5550,38 +5594,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             overflow: 'hidden'
           }}>
             <div>
-              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Usuario</div>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('game.username')}</div>
               <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-                {user?.username || 'Usuario'}
+                {user?.username || t('game.username')}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>XP Total</div>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('game.xp_total')}</div>
               <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {totalXP}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>⭐ Total</div>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('game.stars_total')}</div>
               <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
                 {totalStars}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Nivel</div>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('game.level')}</div>
               <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
                 {level}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Serie</div>
+              <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('game.series')}</div>
               <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
                 {currentSeries}
               </div>
             </div>
             {rebirthCount > 0 && (
               <div>
-                <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>Rebirth</div>
+                <div style={{ fontSize: isLandscape ? '7px' : labelFontSize, color: '#888' }}>{t('leaderboard.rebirth')}</div>
                 <div style={{ fontSize: isLandscape ? '10px' : valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '2px' }}>
                   <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: isLandscape ? '12px' : '16px', height: isLandscape ? '12px' : '16px' }} /> {rebirthCount}
                 </div>
@@ -5634,7 +5678,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   e.target.style.background = 'transparent';
                 }}
               >
-                Jugar
+                {t('game.play')}
               </button>
             )}
             <button
@@ -5656,7 +5700,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 e.target.style.background = 'transparent';
               }}
             >
-              Salir
+              {t('game.logout')}
             </button>
           </div>
         </div>
@@ -5683,38 +5727,38 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           flex: 1
         }}>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Usuario</div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('game.username')}</div>
             <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
-              {user?.username || 'Usuario'}
+              {user?.username || t('game.username')}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>XP Total</div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('game.xp_total')}</div>
             <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {totalXP}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>⭐ Total</div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('game.stars_total')}</div>
             <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#FFD700' }}>
               {totalStars}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Nivel Global</div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('game.level_global')}</div>
             <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#33ffff' }}>
               {level}
             </div>
           </div>
           <div>
-            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Serie</div>
+            <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('game.series')}</div>
             <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff00ff' }}>
               {currentSeries}
             </div>
           </div>
           {rebirthCount > 0 && (
             <div>
-              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>Rebirth</div>
+              <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '2px' }}>{t('leaderboard.rebirth')}</div>
               <div style={{ fontSize: valueFontSize, fontWeight: 'bold', color: '#ff3366', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <img src="/assets/rebirth.webp" alt="Rebirth" style={{ width: '16px', height: '16px' }} /> {rebirthCount}
               </div>
@@ -5723,7 +5767,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           {gameState === 'playing' && (
             <div style={{ flex: 1, maxWidth: '300px', marginLeft: '20px' }}>
               <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px' }}>
-                Progreso Nivel: ⭐ {game.currentStars} / {game.starsNeeded}
+                {t('game.level_progress')}: ⭐ {game.currentStars} / {game.starsNeeded}
               </div>
               <div style={{
                 width: '100%',
@@ -5741,7 +5785,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 }} />
               </div>
               <div style={{ fontSize: labelFontSize, color: '#888', marginBottom: '4px', marginTop: '8px' }}>
-                Vida: ❤️ {game.currentHealth} / {game.maxHealth}
+                {t('game.health')}: ❤️ {game.currentHealth} / {game.maxHealth}
               </div>
               <div style={{
                 width: '100%',
@@ -6025,7 +6069,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 e.target.style.background = 'transparent';
               }}
             >
-              Jugar
+              {t('game.play')}
             </button>
           )}
         <button
@@ -6047,7 +6091,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             e.target.style.background = 'transparent';
           }}
         >
-                Salir
+                {t('game.logout')}
         </button>
         </div>
       </div>
@@ -6131,12 +6175,19 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     );
   }
 
+  // En móvil al jugar: altura visible para que los controles no queden tapados por la barra del navegador
+  const playingHeight = gameState === 'playing'
+    ? (isMobile && mobileViewportHeight ? `${mobileViewportHeight}px` : (isMobile ? '100dvh' : '100vh'))
+    : 'auto';
+  const playingMinHeight = gameState === 'playing' && isMobile && mobileViewportHeight ? `${mobileViewportHeight}px` : (gameState === 'playing' ? '100vh' : '100vh');
+
   return (
     <div style={{ 
       display: 'flex', 
       flexDirection: 'column',
-      height: gameState === 'playing' ? '100vh' : 'auto',
-      minHeight: '100vh',
+      height: playingHeight,
+      minHeight: gameState === 'playing' ? playingMinHeight : '100vh',
+      maxHeight: gameState === 'playing' && isMobile ? (mobileViewportHeight ? `${mobileViewportHeight}px` : '100dvh') : undefined,
       background: 'linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%)',
       color: '#33ffff',
       fontFamily: 'monospace',
@@ -6215,7 +6266,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   fontWeight: showFloatingShop === 'shop' ? 'bold' : 'normal'
                 }}
               >
-                🛒 TIENDA
+                {t('game.shop_cart')}
               </button>
               <button
                 onClick={() => setShowFloatingShop('skins')}
@@ -6230,7 +6281,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   fontWeight: showFloatingShop === 'skins' ? 'bold' : 'normal'
                 }}
               >
-                🎨 SKINS
+                🎨 {t('game.skins')}
               </button>
             </div>
             
@@ -6249,17 +6300,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #6495ed', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(100, 149, 237, 0.1)' : 'transparent' }}>
                       <Shield size={28} style={{ color: '#6495ed', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#6495ed', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>ESCUDO {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#6495ed', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_shield')} {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('shield', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #6495ed', color: '#6495ed', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('shield', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #6495ed', color: '#6495ed', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6271,17 +6322,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #00ff88', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(0, 255, 136, 0.1)' : 'transparent' }}>
                       <Magnet size={28} style={{ color: '#00ff88', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#00ff88', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>IMÁN {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#00ff88', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_magnet')} {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('magnet', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00ff88', color: '#00ff88', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('magnet', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00ff88', color: '#00ff88', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6293,17 +6344,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #ffff00', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(255, 255, 0, 0.1)' : 'transparent' }}>
                       <Sparkles size={28} style={{ color: '#ffff00', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#ffff00', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>CAÑÓN {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#ffff00', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_cannon')} {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('cannon', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ffff00', color: '#ffff00', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('cannon', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ffff00', color: '#ffff00', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6315,17 +6366,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #00aaff', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(0, 170, 255, 0.1)' : 'transparent' }}>
                       <Gauge size={28} style={{ color: '#00aaff', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#00aaff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>VELOCIDAD {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#00aaff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_speed')} {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('speed', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00aaff', color: '#00aaff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('speed', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #00aaff', color: '#00aaff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6337,17 +6388,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #ff6464', padding: '12px', borderRadius: '8px', background: currentLevel > 0 ? 'rgba(255, 100, 100, 0.1)' : 'transparent' }}>
                       <Heart size={28} style={{ color: '#ff6464', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#ff6464', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>VIDA {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#ff6464', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_health')} {currentLevel > 0 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('health', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff6464', color: '#ff6464', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('health', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff6464', color: '#ff6464', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6359,17 +6410,17 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   return (
                     <div style={{ border: '2px solid #ff00ff', padding: '12px', borderRadius: '8px', background: currentLevel > 1 ? 'rgba(255, 0, 255, 0.1)' : 'transparent' }}>
                       <Zap size={28} style={{ color: '#ff00ff', display: 'block', margin: '0 auto' }} />
-                      <h4 style={{ color: '#ff00ff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>CABEZA {currentLevel > 1 ? `Lv.${currentLevel}` : ''}</h4>
+                      <h4 style={{ color: '#ff00ff', textAlign: 'center', fontSize: '13px', margin: '8px 0 4px' }}>{t('game.upgrade_head')} {currentLevel > 1 ? `Lv.${currentLevel}` : ''}</h4>
                       {next ? (
                         <>
                           <p style={{ textAlign: 'center', fontSize: '10px', margin: '4px 0', color: '#aaa' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
-                          <button onClick={() => buyUpgrade('head', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff00ff', color: '#ff00ff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>COMPRAR</button>
+                          <button onClick={() => buyUpgrade('head', next.level)} disabled={(next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)} style={{ width: '100%', background: 'transparent', border: '1px solid #ff00ff', color: '#ff00ff', padding: '5px', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', opacity: ((next.cost.xp > 0 && totalXP < next.cost.xp) || (next.cost.stars > 0 && totalStars < next.cost.stars)) ? 0.5 : 1 }}>{t('game.buy')}</button>
                         </>
-                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>✓ MAX</p>}
+                      ) : <p style={{ textAlign: 'center', fontSize: '11px', color: '#00ff88' }}>{t('game.max')}</p>}
                     </div>
                   );
                 })()}
@@ -6432,7 +6483,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               {xpNeeded > 0 && <span style={{ color: canAffordXP ? '#00ff88' : '#ff4444' }}>{xpNeeded} XP</span>}
                               {starsNeeded > 0 && <span style={{ color: canAffordStars ? '#FFD700' : '#ff4444' }}> ⭐{starsNeeded}</span>}
                             </p>
-                            <button onClick={() => buySkin(key)} disabled={!canBuy} style={{ width: '100%', background: 'transparent', border: '1px solid #FFD700', color: '#FFD700', padding: '4px', fontSize: '10px', cursor: canBuy ? 'pointer' : 'not-allowed', borderRadius: '4px', opacity: canBuy ? 1 : 0.5 }}>COMPRAR</button>
+                            <button onClick={() => buySkin(key)} disabled={!canBuy} style={{ width: '100%', background: 'transparent', border: '1px solid #FFD700', color: '#FFD700', padding: '4px', fontSize: '10px', cursor: canBuy ? 'pointer' : 'not-allowed', borderRadius: '4px', opacity: canBuy ? 1 : 0.5 }}>{t('game.buy')}</button>
                           </>
                         )}
                       </div>
@@ -6523,9 +6574,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 />
                 {!(isMobile && isLandscape) && (
                   <p style={{ fontSize: '16px', marginBottom: '0', lineHeight: '1.6', color: '#aaa' }}>
-                    Mueve el mouse/trackpad para controlar tu serpiente<br/>
-                    Come puntos brillantes para ganar XP<br/>
-                    ⭐ Recoge estrellas para avanzar de nivel
+                    {t('game.instruction_move')}<br/>
+                    {t('game.instruction_eat')}<br/>
+                    {t('game.instruction_stars')}
                   </p>
                 )}
               </>
@@ -6575,7 +6626,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   e.target.style.background = 'transparent';
                 }}
               >
-                TIENDA
+                {t('game.shop')}
               </button>
               <button 
                 onClick={() => {
@@ -6604,7 +6655,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   e.target.style.background = 'transparent';
                 }}
               >
-                SKINS
+                {t('game.skins')}
               </button>
             </div>
             
@@ -6632,7 +6683,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 e.target.style.background = 'transparent';
               }}
             >
-              {gameState === 'levelComplete' ? 'SIGUIENTE NIVEL' : 'JUGAR'}
+              {gameState === 'levelComplete' ? t('game.next_level') : t('game.play')}
             </button>
           </div>
         </div>
@@ -7175,7 +7226,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   }
                 }}
               >
-                TIENDA
+                {t('game.shop')}
               </button>
               <button
                 onClick={() => {
@@ -7242,10 +7293,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           {activeShopTab === 'shop' && (
             <>
               <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center', fontSize: '24px', marginBottom: '15px' }}>
-                TIENDA
+                {t('game.shop')}
               </h2>
               <p style={{ fontSize: '16px', marginBottom: '20px', textAlign: 'center' }}>
-                XP Total: {totalXP} | ⭐ Total: {totalStars}
+                {t('game.xp_total')}: {totalXP} | {t('game.stars_total')}: {totalStars}
               </p>
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px', alignItems: 'stretch' }}>
@@ -7274,7 +7325,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
@@ -7292,7 +7343,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                         }}
                       >
-                        COMPRAR NIVEL {next.level}
+                        {t('game.buy_level')} {next.level}
                       </button>
                     </>
                   ) : (
@@ -7330,7 +7381,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
@@ -7348,7 +7399,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                         }}
                       >
-                        COMPRAR NIVEL {next.level}
+                        {t('game.buy_level')} {next.level}
                       </button>
                     </>
                   ) : (
@@ -7386,7 +7437,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
@@ -7404,7 +7455,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                         }}
                       >
-                        COMPRAR NIVEL {next.level}
+                        {t('game.buy_level')} {next.level}
                       </button>
                     </>
                   ) : (
@@ -7442,7 +7493,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                         {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                        {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                        {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                       </p>
                       <button 
                         onClick={() => buyItem(next.item)}
@@ -7460,7 +7511,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                         }}
                       >
-                        COMPRAR NIVEL {next.level}
+                        {t('game.buy_level')} {next.level}
                       </button>
                     </>
                   ) : (
@@ -7498,7 +7549,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                           {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                         </p>
           <button 
                           onClick={() => buyItem(next.item)}
@@ -7516,7 +7567,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                           }}
                         >
-                          COMPRAR NIVEL {next.level}
+                          {t('game.buy_level')} {next.level}
           </button>
                       </>
                     ) : (
@@ -7554,7 +7605,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                         <p style={{ textAlign: 'center', fontSize: '12px', marginTop: '8px', flex: 1 }}>{next.desc}</p>
                         <p style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px' }}>
                           {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                          {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                          {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                         </p>
           <button 
                           onClick={() => buyItem(next.item)}
@@ -7572,7 +7623,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             marginTop: 'auto'
                           }}
                         >
-                          COMPRAR NIVEL {next.level}
+                          {t('game.buy_level')} {next.level}
           </button>
                       </>
                     ) : (
@@ -7598,7 +7649,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 fontSize: (isMobile && isLandscape) ? '16px' : '24px',
                 marginBottom: (isMobile && isLandscape) ? '8px' : '15px'
               }}>
-                🎨 TIENDA DE SKINS
+                {t('game.shop_skins_title')}
               </h2>
               <p style={{ 
                 fontSize: (isMobile && isLandscape) ? '12px' : '16px', 
@@ -7832,7 +7883,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             </span>
                           )}
                           {xpNeeded === 0 && starsNeeded === 0 && (
-                            <span style={{ color: '#00ff88' }}>GRATIS</span>
+                            <span style={{ color: '#00ff88' }}>{t('game.free')}</span>
                           )}
                         </div>
                         <button
@@ -7861,7 +7912,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                             }
                           }}
                         >
-                          COMPRAR
+                          {t('game.buy')}
                         </button>
                       </div>
                     )}
@@ -7886,7 +7937,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
       )}
 
       {gameState === 'levelIntro' && (() => {
-        const introMessage = getLevelIntroMessage(level, levelConfigs);
+        const introMessage = getLevelIntroMessage(level, levelConfigs, t, lang);
         if (!introMessage) return null;
         
         const isCompact = isMobile && isLandscape;
@@ -7924,7 +7975,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 marginBottom: isCompact ? '3px' : '10px',
                 fontSize: isCompact ? '18px' : (isMobile ? '28px' : '36px')
               }}>
-                NIVEL {level}
+                {t('level_intro.level')} {level}
               </h1>
               <h2 style={{ 
                 color: '#ff00ff', 
@@ -7950,13 +8001,13 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   fontWeight: 'bold',
                   marginBottom: isCompact ? '2px' : '5px'
                 }}>
-                  OBJETIVO:
+                  {t('level_intro.objective')}
                 </p>
                 <p style={{ 
                   color: '#ffffff', 
                   fontSize: isCompact ? '12px' : (isMobile ? '18px' : '20px')
                 }}>
-                  Recolecta {introMessage.objective} estrellas ⭐
+                  {t('level_intro.collect_prefix')}{introMessage.objective}{t('level_intro.collect_suffix')}
                 </p>
               </div>
 
@@ -7980,7 +8031,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     marginTop: '5px'
                   }}
                 >
-                  ▶ COMENZAR
+                  ▶ {t('level_intro.start')}
                 </button>
               )}
             </div>
@@ -8001,7 +8052,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   fontWeight: 'bold',
                   marginBottom: isCompact ? '4px' : '10px'
                 }}>
-                  PELIGROS:
+                  {t('level_intro.dangers')}
                 </p>
                 {introMessage.dangers.map((danger, idx) => (
                   <p key={idx} style={{ 
@@ -8030,7 +8081,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                     fontWeight: 'bold',
                     marginBottom: '10px'
                   }}>
-                    CONSEJO:
+                    {t('level_intro.tip_label')}
                   </p>
                   <p style={{ 
                     color: '#ffffaa', 
@@ -8071,7 +8122,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                   e.target.style.transform = 'scale(1)';
                 }}
               >
-                COMENZAR
+                {t('level_intro.start')}
               </button>
             )}
           </div>
@@ -8079,89 +8130,9 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
         );
       })()}
 
-      {gameState === 'levelComplete' && (
+      {/* Nivel completado: se muestra el mismo layout que el menú (arriba) con gameState === 'levelComplete', sin duplicar panel */}
+      {false && gameState === 'levelComplete' && (
         <div style={{ 
-          display: 'flex',
-          gap: '30px',
-          width: '100%',
-          maxWidth: '1200px',
-          padding: '20px',
-          alignItems: 'flex-start'
-        }}>
-          {/* Left side: Level complete info */}
-        <div style={{ 
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.9)',
-          padding: '40px',
-          borderRadius: '10px',
-          border: '2px solid #00ff88',
-          boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)',
-            zIndex: 100,
-            flex: '0 0 400px'
-        }}>
-          <Sparkles size={64} style={{ color: '#00ff88' }} />
-          <h2 style={{ color: '#00ff88', textShadow: '0 0 20px #00ff88', marginBottom: '20px' }}>
-            ¡NIVEL COMPLETADO!
-          </h2>
-          <p style={{ fontSize: '24px', marginBottom: '30px' }}>⭐ Estrellas: {gameRef.current.currentStars}</p>
-          <p style={{ fontSize: '20px', marginBottom: '30px' }}>XP Ganado: {gameRef.current.sessionXP}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <button 
-            onClick={nextLevel}
-            style={{
-              background: 'transparent',
-              border: '2px solid #00ff88',
-              color: '#00ff88',
-              padding: '15px 40px',
-                fontSize: '20px',
-              cursor: 'pointer',
-              borderRadius: '5px',
-              textShadow: '0 0 10px #00ff88',
-                boxShadow: '0 0 20px rgba(0, 255, 136, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(0, 255, 136, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-            }}
-          >
-            SIGUIENTE NIVEL
-          </button>
-            <button 
-              onClick={() => {
-                setGameState('playing');
-                setShopOpen(true);
-              }}
-              style={{
-                background: 'transparent',
-                border: '2px solid #ff00ff',
-                color: '#ff00ff',
-                padding: '15px 40px',
-                fontSize: '20px',
-                cursor: 'pointer',
-                borderRadius: '5px',
-                textShadow: '0 0 10px #ff00ff',
-                boxShadow: '0 0 20px rgba(255, 0, 255, 0.5)',
-                  transition: 'all 0.3s',
-                  width: '100%'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = 'rgba(255, 0, 255, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent';
-              }}
-            >
-              IR A LA TIENDA
-          </button>
-            </div>
-          </div>
-
-          {/* Right side: Leaderboards */}
-          <div style={{ 
             display: 'flex',
             flexDirection: 'column',
             gap: '30px',
@@ -8643,7 +8614,6 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             </div>
           </div>
-        </div>
       )}
 
       {gameState === 'gameComplete' && victoryData && (
@@ -9173,10 +9143,10 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               overflowY: 'auto'
             }}>
               <h2 style={{ color: '#ff00ff', textShadow: '0 0 20px #ff00ff', textAlign: 'center' }}>
-                TIENDA
+                {t('game.shop')}
               </h2>
               <p style={{ fontSize: '20px', marginBottom: '30px', textAlign: 'center' }}>
-                XP Total: {totalXP} | ⭐ Total: {totalStars}
+                {t('game.xp_total')}: {totalXP} | {t('game.stars_total')}: {totalStars}
               </p>
               
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
@@ -9201,7 +9171,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9219,7 +9189,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9252,7 +9222,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9270,7 +9240,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9303,7 +9273,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9321,7 +9291,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9354,7 +9324,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9372,7 +9342,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9405,7 +9375,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9423,7 +9393,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9456,7 +9426,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                   <button 
                             onClick={() => buyItem(next.item)}
@@ -9474,7 +9444,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                     }}
                   >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                   </button>
                         </>
                       ) : (
@@ -9507,7 +9477,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                           <p style={{ textAlign: 'center', fontSize: '13px', marginTop: '10px' }}>{next.desc}</p>
                           <p style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginTop: '10px' }}>
                             {next.cost.xp > 0 && `${next.cost.xp} XP`} {next.cost.stars > 0 && `${next.cost.stars}⭐`}
-                            {next.cost.xp === 0 && next.cost.stars === 0 && 'GRATIS'}
+                            {next.cost.xp === 0 && next.cost.stars === 0 && t('game.free')}
                           </p>
                           <button 
                             onClick={() => buyItem(next.item)}
@@ -9525,7 +9495,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                               marginTop: '10px'
                             }}
                           >
-                            COMPRAR NIVEL {next.level}
+                            {t('game.buy_level')} {next.level}
                           </button>
                         </>
                       ) : (
