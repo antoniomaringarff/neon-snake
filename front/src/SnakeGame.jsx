@@ -840,6 +840,7 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
   const [unlockedSkins, setUnlockedSkins] = useState(() => getInitialUnlockedSkins()); // Skins desbloqueados
   const [showSkinSelector, setShowSkinSelector] = useState(false); // Mostrar selector de skins (deprecated, usar activeShopTab)
   const [activeShopTab, setActiveShopTab] = useState('shop'); // 'shop' o 'skins' - pestaña activa en la tienda
+  const [lastBoxResult, setLastBoxResult] = useState(null); // Resultado de la última caja abierta
   
   // Función helper para convertir números a texto en español
   const numberToSpanish = (num) => {
@@ -5189,6 +5190,109 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     };
   };
 
+  // Configuración de cajas de botín
+  const LOOT_BOXES = [
+    {
+      id: 'common',
+      name: 'Caja Común',
+      rarity: 'comun',
+      color: '#b0bec5',
+      borderColor: '#90a4ae',
+      xpCost: 200,
+      starsCost: 0,
+      xpRange: [50, 150],
+      starsRange: [0, 1],
+      skinChance: 0.12,
+      skinCategories: ['common']
+    },
+    {
+      id: 'uncommon',
+      name: 'Caja Poco Común',
+      rarity: 'poco_comun',
+      color: '#8bc34a',
+      borderColor: '#7cb342',
+      xpCost: 400,
+      starsCost: 1,
+      xpRange: [120, 260],
+      starsRange: [0, 2],
+      skinChance: 0.18,
+      skinCategories: ['common', 'rare']
+    },
+    {
+      id: 'rare',
+      name: 'Caja Rara',
+      rarity: 'rara',
+      color: '#00bcd4',
+      borderColor: '#00acc1',
+      xpCost: 800,
+      starsCost: 3,
+      xpRange: [250, 500],
+      starsRange: [1, 4],
+      skinChance: 0.25,
+      skinCategories: ['rare']
+    },
+    {
+      id: 'epic',
+      name: 'Caja Épica',
+      rarity: 'epica',
+      color: '#ab47bc',
+      borderColor: '#9c27b0',
+      xpCost: 1500,
+      starsCost: 6,
+      xpRange: [500, 1000],
+      starsRange: [3, 8],
+      skinChance: 0.35,
+      skinCategories: ['epic']
+    },
+    {
+      id: 'mythic',
+      name: 'Caja Mítica',
+      rarity: 'mitica',
+      color: '#ff7043',
+      borderColor: '#ff5722',
+      xpCost: 2600,
+      starsCost: 10,
+      xpRange: [900, 1800],
+      starsRange: [6, 14],
+      skinChance: 0.45,
+      skinCategories: ['epic', 'mythic']
+    },
+    {
+      id: 'legendary',
+      name: 'Caja Legendaria',
+      rarity: 'legendaria',
+      color: '#ffa000',
+      borderColor: '#ff8f00',
+      xpCost: 4000,
+      starsCost: 18,
+      xpRange: [1500, 3000],
+      starsRange: [10, 24],
+      skinChance: 0.6,
+      skinCategories: ['legendary']
+    },
+    {
+      id: 'ultra_legendary',
+      name: 'Caja Ultra Legendaria',
+      rarity: 'ultra_legendaria',
+      color: '#ffd600',
+      borderColor: '#ffc400',
+      xpCost: 6000,
+      starsCost: 30,
+      xpRange: [2500, 5000],
+      starsRange: [18, 40],
+      skinChance: 0.8,
+      skinCategories: ['legendary', 'farming_aura']
+    }
+  ];
+
+  // Para cajas con legendary + farming_aura: probabilidad por categoría (por apertura de caja)
+  const FARMING_AURA_SKIN_CHANCE = 0.0001; // 0,01%
+  const LEGENDARY_SKIN_CHANCE = 0.02;       // 2%
+
+  const getRandomInt = (min, max) => {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  };
+
   // Skin shop functions
   const buySkin = (skinKey) => {
     const skin = SKINS[skinKey];
@@ -5265,6 +5369,136 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
     }
   };
 
+  // Abrir caja de botín (cajas de la tienda)
+  const openLootBox = (boxId) => {
+    const config = LOOT_BOXES.find(b => b.id === boxId);
+    if (!config) return;
+
+    // Verificar recursos suficientes
+    if (totalXP < config.xpCost || totalStars < config.starsCost) {
+      console.warn('No hay suficientes recursos para abrir esta caja');
+      return;
+    }
+
+    // Cobrar costo
+    setTotalXP(prev => prev - config.xpCost);
+    setTotalStars(prev => prev - config.starsCost);
+
+    // Recompensas básicas
+    const xpReward = getRandomInt(config.xpRange[0], config.xpRange[1]);
+    const starsReward = getRandomInt(config.starsRange[0], config.starsRange[1]);
+
+    setTotalXP(prev => prev + xpReward);
+    setTotalStars(prev => prev + starsReward);
+
+    // Posible skin
+    let rewardedSkinKey = null;
+    let rewardedSkinName = null;
+
+    const hasLegendaryAndFarmingAura = config.skinCategories &&
+      config.skinCategories.includes('legendary') &&
+      config.skinCategories.includes('farming_aura');
+
+    if (hasLegendaryAndFarmingAura) {
+      // Caja Ultra Legendaria: 0,01% farming_aura, 2% legendary (por apertura)
+      const roll = Math.random();
+      let poolCandidates = [];
+      if (roll < FARMING_AURA_SKIN_CHANCE) {
+        poolCandidates = Object.entries(SKINS).filter(([key, skin]) => {
+          if (skin.category !== 'farming_aura') return false;
+          const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+          return rebirthCount >= requiredRebirth;
+        });
+      } else if (roll < FARMING_AURA_SKIN_CHANCE + LEGENDARY_SKIN_CHANCE) {
+        poolCandidates = Object.entries(SKINS).filter(([key, skin]) => {
+          if (skin.category !== 'legendary') return false;
+          const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+          return rebirthCount >= requiredRebirth;
+        });
+      }
+      if (poolCandidates.length > 0) {
+        const lockedCandidates = poolCandidates.filter(([key]) => !unlockedSkins.includes(key));
+        const pool = lockedCandidates.length > 0 ? lockedCandidates : poolCandidates;
+        const [skinKey, skin] = pool[Math.floor(Math.random() * pool.length)];
+        rewardedSkinKey = skinKey;
+        rewardedSkinName = skin.name || skinKey;
+        setUnlockedSkins(prev => {
+          const newUnlocked = Array.from(new Set([...prev, skinKey]));
+          try {
+            localStorage.setItem('viborita_unlocked_skins', JSON.stringify(newUnlocked));
+          } catch (e) {
+            console.error('Error guardando skins desbloqueadas desde caja:', e);
+          }
+          return newUnlocked;
+        });
+      }
+    } else if (Math.random() < config.skinChance) {
+      const allCandidates = Object.entries(SKINS).filter(([key, skin]) => {
+        if (!config.skinCategories || !config.skinCategories.length) return true;
+        if (!skin.category) return false;
+        if (!config.skinCategories.includes(skin.category)) return false;
+        const requiredRebirth = CATEGORY_REBIRTH_REQUIREMENTS[skin.category] || 0;
+        return rebirthCount >= requiredRebirth;
+      });
+
+      let poolCandidates = allCandidates;
+      if (config.skinCategories && config.skinCategories.includes('farming_aura')) {
+        const farmingCandidates = allCandidates.filter(([, skin]) => skin.category === 'farming_aura');
+        const otherCandidates = allCandidates.filter(([, skin]) => skin.category !== 'farming_aura');
+        if (Math.random() < 0.01 && farmingCandidates.length > 0) {
+          poolCandidates = farmingCandidates;
+        } else if (otherCandidates.length > 0) {
+          poolCandidates = otherCandidates;
+        }
+      }
+
+      const lockedCandidates = poolCandidates.filter(([key]) => !unlockedSkins.includes(key));
+      const pool = lockedCandidates.length > 0 ? lockedCandidates : poolCandidates;
+
+      if (pool.length > 0) {
+        const [skinKey, skin] = pool[Math.floor(Math.random() * pool.length)];
+        rewardedSkinKey = skinKey;
+        rewardedSkinName = skin.name || skinKey;
+
+        setUnlockedSkins(prev => {
+          const newUnlocked = Array.from(new Set([...prev, skinKey]));
+          try {
+            localStorage.setItem('viborita_unlocked_skins', JSON.stringify(newUnlocked));
+          } catch (e) {
+            console.error('Error guardando skins desbloqueadas desde caja:', e);
+          }
+          return newUnlocked;
+        });
+      }
+    }
+
+    const result = {
+      boxId,
+      boxName: config.name,
+      rarity: config.rarity,
+      xpReward,
+      starsReward,
+      skinKey: rewardedSkinKey,
+      skinName: rewardedSkinName
+    };
+
+    setLastBoxResult(result);
+
+    try {
+      trackGaEvent('APP/Tienda/Caja/Abrir', {
+        box_id: boxId,
+        rarity: config.rarity,
+        xp_cost: config.xpCost,
+        stars_cost: config.starsCost,
+        xp_reward: xpReward,
+        stars_reward: starsReward,
+        skin_key: rewardedSkinKey || 'none'
+      });
+    } catch (e) {
+      console.error('Error tracking loot box event:', e);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -5336,6 +5570,31 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             gap: '8px', 
             alignItems: 'center'
           }}>
+              {/* Cajas - arriba de Skins */}
+              <div 
+                onClick={() => setShowFloatingShop('boxes')}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '3px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 200, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 200, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#00c8ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 200, 255, 0.3)';
+                }}
+                title="Abrir Cajas"
+              >
+                <span style={{ fontSize: iconTextSize, color: '#00c8ff' }}>📦</span>
+              </div>
               {/* Skin actual - abre skins */}
               <div 
                 onClick={() => setShowFloatingShop('skins')}
@@ -5827,6 +6086,33 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               alignItems: 'center',
               flexWrap: 'wrap'
             }}>
+              {/* Cajas - arriba de Skin */}
+              <div 
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('boxes');
+                }}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  transition: 'all 0.3s',
+                  border: '1px solid rgba(0, 200, 255, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 200, 255, 0.1)';
+                  e.currentTarget.style.borderColor = '#00c8ff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(0, 200, 255, 0.3)';
+                }}
+              >
+                <span style={{ fontSize: iconTextSize, color: '#00c8ff' }}>📦 Cajas</span>
+              </div>
               {/* Skin seleccionada */}
               <div 
                 onClick={() => {
@@ -6293,6 +6579,21 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 {t('game.shop_cart')}
               </button>
               <button
+                onClick={() => setShowFloatingShop('boxes')}
+                style={{
+                  background: showFloatingShop === 'boxes' ? 'rgba(0, 200, 255, 0.2)' : 'transparent',
+                  border: '2px solid #00c8ff',
+                  color: '#00c8ff',
+                  padding: '8px 20px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  fontWeight: showFloatingShop === 'boxes' ? 'bold' : 'normal'
+                }}
+              >
+                📦 Cajas
+              </button>
+              <button
                 onClick={() => setShowFloatingShop('skins')}
                 style={{
                   background: showFloatingShop === 'skins' ? 'rgba(255, 215, 0, 0.2)' : 'transparent',
@@ -6451,6 +6752,119 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
               </div>
             )}
             
+            {/* Contenido CAJAS */}
+            {showFloatingShop === 'boxes' && (
+              <div>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+                  gap: '12px',
+                  marginBottom: '20px'
+                }}>
+                  {LOOT_BOXES.map(box => {
+                    const canAfford = totalXP >= box.xpCost && totalStars >= box.starsCost;
+                    return (
+                      <div
+                        key={box.id}
+                        style={{
+                          border: `2px solid ${box.borderColor}`,
+                          padding: '12px',
+                          borderRadius: '8px',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          boxShadow: `0 0 12px rgba(0, 0, 0, 0.6)`
+                        }}
+                      >
+                        <h4 style={{ 
+                          color: box.color, 
+                          textAlign: 'center', 
+                          fontSize: '13px', 
+                          margin: '0 0 6px' 
+                        }}>
+                          {box.name}
+                        </h4>
+                        <p style={{ 
+                          textAlign: 'center', 
+                          fontSize: '10px', 
+                          margin: '2px 0', 
+                          color: '#aaa' 
+                        }}>
+                          XP: {box.xpRange[0]} - {box.xpRange[1]}
+                        </p>
+                        <p style={{ 
+                          textAlign: 'center', 
+                          fontSize: '10px', 
+                          margin: '2px 0', 
+                          color: '#aaa' 
+                        }}>
+                          ⭐: {box.starsRange[0]} - {box.starsRange[1]}
+                        </p>
+                        <p style={{ 
+                          textAlign: 'center', 
+                          fontSize: '10px', 
+                          margin: '2px 0 6px', 
+                          color: '#aaa' 
+                        }}>
+                          Skins: {Math.round(box.skinChance * 100)}% prob.
+                        </p>
+                        <p style={{ 
+                          textAlign: 'center', 
+                          fontSize: '11px', 
+                          fontWeight: 'bold', 
+                          margin: '4px 0',
+                          color: '#fff'
+                        }}>
+                          Costo: {box.xpCost} XP{box.starsCost > 0 && ` + ${box.starsCost} ⭐`}
+                        </p>
+                        <button
+                          onClick={() => openLootBox(box.id)}
+                          disabled={!canAfford}
+                          style={{
+                            width: '100%',
+                            background: canAfford ? box.color : 'transparent',
+                            border: `1px solid ${box.borderColor}`,
+                            color: canAfford ? '#000' : box.color,
+                            padding: '6px',
+                            fontSize: '11px',
+                            cursor: canAfford ? 'pointer' : 'default',
+                            borderRadius: '4px',
+                            opacity: canAfford ? 1 : 0.5,
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          Abrir caja
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {lastBoxResult && (
+                  <div style={{ 
+                    marginTop: '10px', 
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'rgba(0,0,0,0.4)',
+                    fontSize: '12px',
+                    color: '#fff'
+                  }}>
+                    <div style={{ marginBottom: '4px' }}>
+                      Última caja: <strong>{lastBoxResult.boxName}</strong>
+                    </div>
+                    <div style={{ marginBottom: '2px' }}>
+                      Ganaste <strong style={{ color: '#00ff88' }}>{lastBoxResult.xpReward} XP</strong> y{' '}
+                      <strong style={{ color: '#FFD700' }}>{lastBoxResult.starsReward} ⭐</strong>
+                    </div>
+                    {lastBoxResult.skinKey && (
+                      <div style={{ marginTop: '2px', color: '#FFD700' }}>
+                        🎁 Nueva skin: <strong>{lastBoxResult.skinName}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Contenido SKINS */}
             {showFloatingShop === 'skins' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
@@ -6651,6 +7065,34 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 }}
               >
                 {t('game.shop')}
+              </button>
+              <button 
+                onClick={() => {
+                  setGameState('shop');
+                  setActiveShopTab('boxes');
+                }}
+                style={{
+                  background: 'transparent',
+                  border: '2px solid #00c8ff',
+                  color: '#00c8ff',
+                  padding: (isMobile && isLandscape) ? '6px 12px' : '10px 20px',
+                  fontSize: (isMobile && isLandscape) ? '12px' : '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  textShadow: '0 0 10px #00c8ff',
+                  boxShadow: '0 0 20px rgba(0, 200, 255, 0.5)',
+                  flex: (isMobile && isLandscape) ? 'none' : (isMobile ? 'none' : 1),
+                  minWidth: (isMobile && !isLandscape) ? '100%' : 'auto',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(0, 200, 255, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                }}
+              >
+                📦 Cajas
               </button>
               <button 
                 onClick={() => {
@@ -7202,8 +7644,8 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
           background: 'rgba(0, 0, 0, 0.95)',
           padding: (isMobile && isLandscape) ? '10px 15px' : '30px',
           borderRadius: (isMobile && isLandscape) ? '5px' : '10px',
-          border: activeShopTab === 'shop' ? '3px solid #ff00ff' : '3px solid #FFD700',
-          boxShadow: activeShopTab === 'shop' ? '0 0 40px rgba(255, 0, 255, 0.5)' : '0 0 40px rgba(255, 215, 0, 0.5)',
+          border: activeShopTab === 'shop' ? '3px solid #ff00ff' : activeShopTab === 'boxes' ? '3px solid #00c8ff' : '3px solid #FFD700',
+          boxShadow: activeShopTab === 'shop' ? '0 0 40px rgba(255, 0, 255, 0.5)' : activeShopTab === 'boxes' ? '0 0 40px rgba(0, 200, 255, 0.5)' : '0 0 40px rgba(255, 215, 0, 0.5)',
           maxWidth: '1400px',
           width: (isMobile && isLandscape) ? 'calc(100% - 20px)' : '100%',
           margin: (isMobile && isLandscape) ? '5px auto' : '20px auto',
@@ -7251,6 +7693,36 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
                 }}
               >
                 {t('game.shop')}
+              </button>
+              <button
+                onClick={() => {
+                  setActiveShopTab('boxes');
+                  setShowSkinSelector(false);
+                }}
+                style={{
+                  background: activeShopTab === 'boxes' ? 'rgba(0, 200, 255, 0.2)' : 'transparent',
+                  border: '2px solid #00c8ff',
+                  color: '#00c8ff',
+                  padding: (isMobile && isLandscape) ? '5px 12px' : '8px 20px',
+                  fontSize: (isMobile && isLandscape) ? '11px' : '14px',
+                  cursor: 'pointer',
+                  borderRadius: '5px',
+                  transition: 'all 0.3s',
+                  fontWeight: activeShopTab === 'boxes' ? 'bold' : 'normal',
+                  boxShadow: activeShopTab === 'boxes' ? '0 0 15px rgba(0, 200, 255, 0.5)' : 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeShopTab !== 'boxes') {
+                    e.target.style.background = 'rgba(0, 200, 255, 0.1)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeShopTab !== 'boxes') {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                📦 Cajas
               </button>
               <button
                 onClick={() => {
@@ -7661,6 +8133,68 @@ const SnakeGame = ({ user, onLogout, isAdmin = false, isBanned = false, bannedUn
             })()}
           </div>
             </>
+          )}
+          
+          {/* Contenido de CAJAS */}
+          {activeShopTab === 'boxes' && (
+            <div>
+              <p style={{ textAlign: 'center', color: '#aaa', marginBottom: '15px' }}>
+                XP: <span style={{ color: '#00ff88' }}>{totalXP}</span> | ⭐: <span style={{ color: '#FFD700' }}>{totalStars}</span>
+              </p>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+                gap: '12px',
+                marginBottom: '20px'
+              }}>
+                {LOOT_BOXES.map(box => {
+                  const canAfford = totalXP >= box.xpCost && totalStars >= box.starsCost;
+                  return (
+                    <div
+                      key={box.id}
+                      style={{
+                        border: `2px solid ${box.borderColor}`,
+                        padding: '12px',
+                        borderRadius: '8px',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        boxShadow: `0 0 12px rgba(0, 0, 0, 0.6)`
+                      }}
+                    >
+                      <h4 style={{ color: box.color, textAlign: 'center', fontSize: '13px', margin: '0 0 6px' }}>{box.name}</h4>
+                      <p style={{ textAlign: 'center', fontSize: '10px', margin: '2px 0', color: '#aaa' }}>XP: {box.xpRange[0]} - {box.xpRange[1]}</p>
+                      <p style={{ textAlign: 'center', fontSize: '10px', margin: '2px 0', color: '#aaa' }}>⭐: {box.starsRange[0]} - {box.starsRange[1]}</p>
+                      <p style={{ textAlign: 'center', fontSize: '10px', margin: '2px 0 6px', color: '#aaa' }}>Skins: {Math.round((box.skinChance || 0) * 100)}% prob.</p>
+                      <p style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', margin: '4px 0', color: '#fff' }}>Costo: {box.xpCost} XP{box.starsCost > 0 && ` + ${box.starsCost} ⭐`}</p>
+                      <button
+                        onClick={() => openLootBox(box.id)}
+                        disabled={!canAfford}
+                        style={{
+                          width: '100%',
+                          background: canAfford ? box.color : 'transparent',
+                          border: `1px solid ${box.borderColor}`,
+                          color: canAfford ? '#000' : box.color,
+                          padding: '6px',
+                          fontSize: '11px',
+                          cursor: canAfford ? 'pointer' : 'default',
+                          borderRadius: '4px',
+                          opacity: canAfford ? 1 : 0.5,
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Abrir caja
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {lastBoxResult && (
+                <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.4)', fontSize: '12px', color: '#fff' }}>
+                  <div style={{ marginBottom: '4px' }}>Última caja: <strong>{lastBoxResult.boxName}</strong></div>
+                  <div style={{ marginBottom: '2px' }}>Ganaste <strong style={{ color: '#00ff88' }}>{lastBoxResult.xpReward} XP</strong> y <strong style={{ color: '#FFD700' }}>{lastBoxResult.starsReward} ⭐</strong></div>
+                  {lastBoxResult.skinKey && <div style={{ marginTop: '2px', color: '#FFD700' }}>🎁 Nueva skin: <strong>{lastBoxResult.skinName}</strong></div>}
+                </div>
+              )}
+            </div>
           )}
           
           {/* Contenido de SKINS */}
